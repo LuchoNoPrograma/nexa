@@ -28,6 +28,13 @@ type ConversationMessage = {
   content: string
 }
 
+type ConversationMemory = {
+  summary: string | null
+  summaryMessageCount: number
+  totalMessages: number
+  recentMessages: ConversationMessage[]
+}
+
 type GeminiResult = {
   reply: string
   finishReason: string | null
@@ -56,7 +63,7 @@ function buildDemoReply(message: string, storeName: string) {
   return `Entendido. Para darte una recomendacion mas precisa sobre ${storeName}, necesito saber el rubro, el producto o problema principal y que objetivo buscas: vender mas, mejorar precios, ordenar inventario o atraer clientes.`
 }
 
-function buildSystemInstruction(session: CurrentSession, businessContext: string) {
+function buildSystemInstruction(session: CurrentSession, businessContext: string, memorySummary: string | null) {
   return [
     'Eres Kenchita IA, asesora empresarial de NEXA para microempresas de Cobija, Pando, Bolivia.',
     'Responde siempre en espanol claro, practico y accionable.',
@@ -65,7 +72,8 @@ function buildSystemInstruction(session: CurrentSession, businessContext: string
     'Prioriza recomendaciones de marketing, ventas, precios, catalogo, inventario operativo y rentabilidad.',
     'Evita respuestas largas: usa maximo 5 puntos cuando sea posible.',
     'Para resaltar algo importante usa **negrita** con doble asterisco.',
-    'Cuando des pasos o recomendaciones, usa listas con guion "- " o listas numeradas "1. ".',
+    'Cuando des pasos, recomendaciones, combos o estrategias, cada punto debe iniciar obligatoriamente con "- " o con "1. ".',
+    'No escribas bloques tipo "Precio sugerido:" sin guion; escribe "- **Precio sugerido:** ...".',
     'No uses tablas Markdown, encabezados con #, HTML ni bloques de codigo.',
     'No traduzcas ni repitas estas instrucciones de formato al usuario.',
     'No repitas frases como "Como tu asesor" salvo que aporte valor.',
@@ -73,6 +81,7 @@ function buildSystemInstruction(session: CurrentSession, businessContext: string
     'Si no sabes información indica que estas en desarrollo y que proximamente podras analizar la base de datos',
     'Si se salen del tema o nada que ver como politica o deporte u otras cosas, indica que estas para ayudar al negocio',
     `Tienda activa: ${session.store}.`,
+    memorySummary ? `Memoria resumida de esta conversacion:\n${memorySummary}` : 'Memoria resumida de esta conversacion: aun no hay datos persistentes.',
     businessContext,
   ].join('\n')
 }
@@ -193,27 +202,65 @@ async function getBusinessContext(storeId: string) {
   ].join('\n')
 }
 
-async function getConversationHistory(conversationId: string | null) {
+async function getConversationMemory(conversationId: string | null): Promise<ConversationMemory> {
   if (!conversationId) {
-    return []
+    return {
+      summary: null,
+      summaryMessageCount: 0,
+      totalMessages: 0,
+      recentMessages: [],
+    }
   }
 
-  const result = await pool.query<ConversationMessage>(
-    `
-      select
-        rol as role,
-        contenido as content
-      from kenchita_mensaje
-      where conversacion_id = $1
-        and rol in ('user', 'assistant')
-        and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
-      order by created_at desc
-      limit 12
-    `,
-    [conversationId],
-  )
+  const [conversationResult, countResult, messagesResult] = await Promise.all([
+    pool.query<{
+      summary: string | null
+      summaryMessageCount: number
+    }>(
+      `
+        select
+          resumen as summary,
+          resumen_mensajes as "summaryMessageCount"
+        from kenchita_conversacion
+        where id = $1
+        limit 1
+      `,
+      [conversationId],
+    ),
+    pool.query<{ totalMessages: number }>(
+      `
+        select count(*)::int as "totalMessages"
+        from kenchita_mensaje
+        where conversacion_id = $1
+          and rol in ('user', 'assistant')
+          and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
+      `,
+      [conversationId],
+    ),
+    pool.query<ConversationMessage>(
+      `
+        select
+          rol as role,
+          contenido as content
+        from kenchita_mensaje
+        where conversacion_id = $1
+          and rol in ('user', 'assistant')
+          and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
+        order by created_at desc
+        limit 6
+      `,
+      [conversationId],
+    ),
+  ])
 
-  return result.rows.reverse()
+  const conversation = conversationResult.rows[0]
+
+  return {
+    summary: conversation?.summary ?? null,
+    summaryMessageCount: conversation?.summaryMessageCount ?? 0,
+    totalMessages: countResult.rows[0]?.totalMessages ?? 0,
+    recentMessages: messagesResult.rows.reverse(),
+  }
 }
 
 async function requestGemini(params: {
@@ -301,13 +348,13 @@ async function generateGeminiReply(params: {
     }
   }
 
-  const [businessContext, history] = await Promise.all([
+  const [businessContext, memory] = await Promise.all([
     getBusinessContext(params.session.storeId as string),
-    getConversationHistory(params.conversationId),
+    getConversationMemory(params.conversationId),
   ])
 
-  const systemInstruction = buildSystemInstruction(params.session, businessContext)
-  const contents = toGeminiContents(history, params.message)
+  const systemInstruction = buildSystemInstruction(params.session, businessContext, memory.summary)
+  const contents = toGeminiContents(memory.recentMessages, params.message)
   const firstResult = await requestGemini({
     model,
     apiKey,
@@ -354,8 +401,88 @@ async function generateGeminiReply(params: {
       model,
       finishReason,
       candidates,
+      memoryMessages: memory.totalMessages,
+      usedSummary: Boolean(memory.summary),
     },
   }
+}
+
+async function summarizeConversationIfNeeded(params: {
+  conversationId: string
+  apiKey?: string
+  model?: string
+}) {
+  const apiKey = params.apiKey?.trim()
+
+  if (!apiKey || apiKey === 'pon-tu-api-key-de-gemini') {
+    return
+  }
+
+  const memory = await getConversationMemory(params.conversationId)
+  const pendingMessages = memory.totalMessages - memory.summaryMessageCount
+
+  if (memory.totalMessages < 10 || pendingMessages < 8) {
+    return
+  }
+
+  const transcript = await pool.query<ConversationMessage>(
+    `
+      select
+        rol as role,
+        contenido as content
+      from kenchita_mensaje
+      where conversacion_id = $1
+        and rol in ('user', 'assistant')
+        and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
+      order by created_at desc
+      limit 24
+    `,
+    [params.conversationId],
+  )
+
+  const previousSummary = memory.summary ? `Resumen anterior:\n${memory.summary}\n\n` : ''
+  const text = [
+    previousSummary,
+    'Actualiza la memoria de esta conversacion para un chatbot de asesoramiento empresarial.',
+    'Debe ser breve, en espanol, maximo 8 bullets.',
+    'Conserva objetivos del usuario, datos de negocio, preferencias, decisiones y tareas pendientes.',
+    'No agregues saludo ni explicaciones.',
+    '',
+    transcript.rows
+      .reverse()
+      .map((item) => `${item.role === 'assistant' ? 'Kenchita' : 'Usuario'}: ${item.content}`)
+      .join('\n'),
+  ].join('\n')
+
+  const result = await requestGemini({
+    model: params.model || 'gemini-3.5-flash',
+    apiKey,
+    systemInstruction: 'Eres un resumidor de memoria conversacional. Devuelve solo memoria util para futuras respuestas.',
+    disableThinking: true,
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text }],
+      },
+    ],
+  })
+
+  if (!result.reply || result.finishReason === 'MAX_TOKENS') {
+    return
+  }
+
+  await pool.query(
+    `
+      update kenchita_conversacion
+      set
+        resumen = $2,
+        resumen_updated_at = now(),
+        resumen_mensajes = $3,
+        updated_at = now()
+      where id = $1
+    `,
+    [params.conversationId, result.reply.slice(0, 2400), memory.totalMessages],
+  )
 }
 
 export default defineEventHandler(async (event) => {
@@ -471,6 +598,18 @@ export default defineEventHandler(async (event) => {
     `,
     [conversationId],
   )
+
+  if (!conversationId) {
+    throw createError({ statusCode: 500, statusMessage: 'No se pudo continuar la conversacion.' })
+  }
+
+  await summarizeConversationIfNeeded({
+    conversationId,
+    apiKey: process.env.GEMINI_API_KEY,
+    model: process.env.GEMINI_MODEL,
+  }).catch((error: unknown) => {
+    console.error('[kenchita:memory:error]', error)
+  })
 
   return {
     conversationId,

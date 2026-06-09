@@ -185,8 +185,9 @@ function parseMessageBlocks(value: string): MessageBlock[] {
   for (const line of lines) {
     const unorderedMatch = line.match(/^[-*]\s+(.+)$/)
     const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/)
+    const labeledPointMatch = line.match(/^([^:]{3,48}):\s+(.+)$/)
 
-    if (unorderedMatch || orderedMatch) {
+    if (unorderedMatch || orderedMatch || labeledPointMatch) {
       flushParagraph()
 
       const ordered = Boolean(orderedMatch)
@@ -195,7 +196,10 @@ function parseMessageBlocks(value: string): MessageBlock[] {
       }
 
       listOrdered = ordered
-      listItems.push(parseInlineFormatting((orderedMatch?.[1] ?? unorderedMatch?.[1] ?? '').trim()))
+      const itemText = labeledPointMatch
+        ? `**${labeledPointMatch[1].trim()}:** ${labeledPointMatch[2].trim()}`
+        : (orderedMatch?.[1] ?? unorderedMatch?.[1] ?? '').trim()
+      listItems.push(parseInlineFormatting(itemText))
       continue
     }
 
@@ -801,11 +805,13 @@ function onComposerKeydown(event: KeyboardEvent) {
   display: grid;
   gap: 6px;
   margin: 8px 0 0;
-  padding: 0 0 0 18px;
+  padding: 0 0 0 1.25rem;
+  list-style-position: outside;
 }
 
 .kenchita-chat__bubble-content li {
   padding-left: 2px;
+  line-height: 1.45;
 }
 
 .kenchita-chat__bubble-content li::marker {
