@@ -1,0 +1,84 @@
+.admin-workspace {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.admin-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.admin-heading__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.admin-heading__meta span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-heading h2 {
+  margin: 0;
+  color: #071327;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.admin-metrics article {
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.admin-metrics span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-metrics strong {
+  color: #008060;
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+/* Alinea la tabla con la escala compacta del resto del POS (~0.85rem) */
+.admin-workspace :deep(.p-datatable) {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 760px) {
+  .admin-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-metrics {
+    grid-template-columns: 1fr;
+  }
+}

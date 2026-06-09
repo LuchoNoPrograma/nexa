@@ -1,530 +1,740 @@
 <script setup lang="ts">
 const menuItems = [
   { label: 'Inicio', href: '#inicio' },
-  { label: 'Nosotros', href: '#nosotros' },
   { label: 'Herramientas', href: '#herramientas' },
-  { label: 'Cómo funciona', href: '#como-funciona' },
+  { label: 'Conoce a Kenchita', href: '#como-funciona' },
   { label: 'Contacto', href: '#contacto' },
 ]
 
+const socials = [
+  { icon: 'pi pi-facebook', label: 'Facebook', href: '#' },
+  { icon: 'pi pi-instagram', label: 'Instagram', href: '#' },
+  { icon: 'pi pi-tiktok', label: 'TikTok', href: '#' },
+  { icon: 'pi pi-whatsapp', label: 'WhatsApp', href: '#' },
+]
+
+// Tarjetas "Herramientas para crecer" (las imágenes las provee el equipo)
 const tools = [
-  { icon: 'pi pi-calculator', title: 'Calculadora de precios', text: 'Define precios justos y rentables con un desglose claro de costos y ganancia.' },
-  { icon: 'pi pi-megaphone', title: 'Marketing y ventas', text: 'Ideas listas para atraer clientes y vender más en TikTok, WhatsApp y Facebook — con la ayuda de PAM AI.' },
-  { icon: 'pi pi-palette', title: 'Branding y diseño', text: 'Recomendaciones de nombre, colores e identidad visual para tu negocio — con la ayuda de PAM AI.' },
-  { icon: 'pi pi-box', title: 'Gestión de inventario', text: 'Controla productos y existencias de forma simple, sin planillas complicadas.' }
+  {
+    title: 'Kenchita · Asesor 24/7',
+    src: '/tools/kenchita-asesor.jpg',
+    alt: 'Kenchita, el jaguar asesor de NEXA, trabajando frente a la computadora en una oficina',
+  },
+  {
+    title: 'Finanzas',
+    src: '/tools/finanzas.jpg',
+    alt: 'Billetes, monedas y un cuaderno de cuentas de un pequeño negocio',
+  },
+  {
+    title: 'Marketing y ventas',
+    src: '/tools/marketing.jpg',
+    alt: 'Teléfono mostrando íconos de redes sociales para promocionar un negocio',
+    pos: '50% 18%',
+  },
+  {
+    title: 'Inventario',
+    src: '/tools/inventario.jpg',
+    alt: 'Estantería de tienda con productos ordenados para control de inventario',
+  },
 ]
 
-const audiences = [
-  { emoji: '🛍️', title: 'Tiendas y abarrotes', tone: 'background:#e6f6e8;color:#0f8520' },
-  { emoji: '🍔', title: 'Comida y restaurantes', tone: 'background:#fff0df;color:#d87414' },
-  { emoji: '👗', title: 'Ropa y boutiques', tone: 'background:#efe8ff;color:#7a4ee5' },
-  { emoji: '💄', title: 'Belleza y estética', tone: 'background:#ffe8ef;color:#d94e76' },
-]
-
-const products = [
-  { name: 'Café tostado 500g', value: 'Bs. 205', color: '#b45309' },
-  { name: 'Miel de abeja 250g', value: 'Bs. 160', color: '#eab308' },
-  { name: 'Pulpa de asaí 1kg', value: 'Bs. 120', color: '#7c2d12' },
-]
-
-const steps = [
-  { number: '1', icon: 'pi pi-user-plus', title: 'Registra tu negocio', text: 'Crea tu cuenta gratis y cuéntanos a qué te dedicas. Toma menos de 2 minutos.' },
-  { number: '2', icon: 'pi pi-sparkles', title: 'Usa las herramientas y PAM AI', text: 'Pregunta, calcula precios y recibe ideas hechas a la medida de tu negocio.' },
-  { number: '3', icon: 'pi pi-chart-line', title: 'Crece y vende más', text: 'Aplica las recomendaciones, mide resultados y haz crecer tus ventas.' },
-]
-
-const testimonials = [
-  { name: 'María Quispe', role: 'Dueña · Sabores del Acre', initials: 'MQ', text: 'Con NEXA aprendí a poner precios sin perder plata. PAM me dio ideas para WhatsApp y mis ventas subieron en dos semanas.' },
-  { name: 'Carlos Vargas', role: 'Boutique Amazonía', initials: 'CV', text: 'Lo mejor es que está pensado para negocios como el mío. Todo en simple, sin tecnicismos. Lo uso todos los días.' },
-  { name: 'Lucía Mamani', role: 'Belleza Pando', initials: 'LM', text: 'El asesor responde al instante y entiende el mercado local. Es como tener un consultor disponible 24/7.' },
-]
-
-const stats = [
-  { to: 384, suffix: '', label: 'Negocios de Cobija estudiados' },
-  { to: 85, suffix: '%', label: 'Estaría dispuesto a usar una herramienta así' },
-  { to: 92, suffix: '%', label: 'Quiere ayuda para calcular bien sus precios' },
-  { to: 52, suffix: '%', label: 'No sabe si gana o pierde con sus precios actuales' },
-]
-
-// Header transparente sobre el hero, sólido al hacer scroll
+// Header sólido al hacer scroll
 const scrolled = ref(false)
 function onScroll() {
-  scrolled.value = window.scrollY > 40
+  scrolled.value = window.scrollY > 20
 }
-
 onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 })
-onBeforeUnmount(() => {
-  window.removeEventListener('scroll', onScroll)
-})
+onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 </script>
 
 <template>
-  <main class="min-h-screen bg-white text-[#0c1f12]" id="inicio">
-    <!-- Header (transparente sobre el hero, sólido al hacer scroll) -->
-    <header class="site-header" :class="scrolled ? 'is-solid' : 'is-ghost'">
-      <div class="mx-auto flex h-[74px] w-[min(1280px,calc(100%-32px))] items-center justify-between gap-4">
+  <main class="page-boot min-h-screen bg-white text-[#0c1f12]" id="inicio">
+    <!-- Header -->
+    <header class="site-bar" :class="{ 'is-solid': scrolled }">
+      <div class="site-bar__inner">
         <a href="#inicio" class="flex items-center gap-2.5" aria-label="NEXA inicio">
-          <span class="nexa-mark"><i class="pi pi-bolt" /></span>
-          <span class="font-display text-[1.55rem] font-extrabold tracking-tight">NEXA</span>
+          <img src="/nexa-logo.png" alt="" class="site-logo" aria-hidden="true" />
+          <span class="leading-none">
+            <span class="font-display block text-[1.5rem] font-extrabold tracking-tight">NEXA</span>
+            <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8a7e]">IA para tu negocio</span>
+          </span>
         </a>
 
-        <nav class="hidden items-center gap-7 text-sm font-semibold lg:flex">
-          <a
-            v-for="item in menuItems"
-            :key="item.label"
-            :href="item.href"
-            class="nav-link inline-flex items-center gap-1"
-            :class="{ 'is-active': item.label === 'Inicio' }"
-          >
-            {{ item.label }}
-            <i v-if="['Nosotros', 'Herramientas'].includes(item.label)" class="pi pi-angle-down text-xs opacity-70" />
-          </a>
+        <nav class="hidden items-center gap-8 text-sm font-semibold lg:flex">
+          <a v-for="item in menuItems" :key="item.label" :href="item.href" class="nav-link">{{ item.label }}</a>
         </nav>
 
-        <div class="hidden items-center gap-3 md:flex">
-          <button class="header-ghost-btn inline-flex items-center gap-2 text-sm font-semibold">
-            <i class="pi pi-globe" />Traducir <i class="pi pi-angle-down text-xs opacity-70" />
-          </button>
-          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !rounded-full !border-0 !bg-[#0f9e2e] !px-5 !py-2.5 !font-bold !text-white" />
+        <div class="flex items-center gap-3">
+          <NuxtLink to="/login" class="hidden text-sm font-semibold text-[#1f2d23] hover:text-primary-600 sm:inline-flex sm:items-center sm:gap-2">
+            <i class="pi pi-sign-in" />Iniciar sesión
+          </NuxtLink>
+          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !rounded-full !border-0 !bg-primary-500 !px-5 !py-2.5 !font-bold !text-white" />
+          <Button icon="pi pi-bars" text rounded class="!text-primary-700 lg:!hidden" aria-label="Abrir menú" />
         </div>
-
-        <Button icon="pi pi-bars" text rounded class="header-burger lg:!hidden" aria-label="Abrir menú" />
       </div>
     </header>
 
-    <!-- Hero full-bleed (estilo FORAMA): la imagen de la Amazonía es el fondo -->
-    <section class="hero-full">
-      <div class="hero-bg" />
-      <div class="hero-scrim" />
+    <!-- Hero -->
+    <section class="mx-auto w-[min(1240px,calc(100%-32px))] pt-6">
+      <div class="hero2">
+        <img
+          :src="'/hero-emprendedora.jpg'"
+          alt="Emprendedora con delantal usando una tablet en su tienda junto al río amazónico"
+          class="hero2__bg"
+          loading="eager"
+        />
+        <div class="hero2__scrim" />
 
-      <div class="hero-content">
-        <span class="hero-pill"><span class="hero-pill-dot" />COBIJA, PANDO · BOLIVIA</span>
-
-        <div class="hero-slide">
-          <h1 class="hero-title font-display">
-            Vende más, atrae clientes y pon <span class="text-gradient-warm">precios con cabeza</span>
+        <div class="hero2__copy">
+          <span class="hero2__pill"><span class="hero2__dot" />Cobija, Pando · Bolivia</span>
+          <h1 class="hero2__title font-display">
+            Vende más y pon <span class="text-gradient-warm">precios con cabeza</span>
           </h1>
-          <p class="hero-sub font-display">NEXA es tu asesor inteligente, hecho en Cobija para los emprendedores de la Amazonía boliviana.</p>
-        </div>
-
-        <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine hero-cta !mt-6 !rounded-full !border-0 !px-6 !py-3 !text-sm !font-bold" />
-      </div>
-
-      <div class="hero-foot">
-        <h4>Vende más, atrae clientes y pon precios justos.</h4>
-        <a href="#panel" class="hero-chevron" aria-label="Desplázate hacia abajo"><i class="pi pi-chevron-down text-xl" /></a>
-      </div>
-    </section>
-
-    <!-- Conoce a PAM (chat) — la estrella, primero -->
-    <section class="mx-auto w-[min(1180px,calc(100%-28px))] py-16">
-      <div class="grid items-center gap-10 lg:grid-cols-[0.85fr_1.15fr]">
-        <div v-reveal>
-          <span class="section-eyebrow"><i class="pi pi-comments" />Asesor con IA</span>
-          <h2 class="section-title mt-4">Conoce a PAM, tu asesor de negocios</h2>
-          <p class="section-lead">Pregúntale lo que quieras sobre tu negocio. PAM entiende el mercado local y te da respuestas claras y accionables, al instante.</p>
-          <ul class="mt-6 space-y-3">
-            <li v-for="t in ['Respuestas hechas a la medida de tu rubro', 'Ideas de marketing listas para usar', 'Disponible las 24 horas, todos los días']" :key="t" class="flex items-center gap-3 text-sm font-semibold text-[#1f2d23]">
-              <span class="grid h-6 w-6 place-items-center rounded-full bg-[#edf9ef] text-[#0f9e2e]"><i class="pi pi-check text-xs" /></span>{{ t }}
-            </li>
-          </ul>
-        </div>
-
-        <div class="rounded-3xl border border-[#e5eee4] bg-white p-5 shadow-[0_24px_60px_rgba(12,31,18,0.1)] sm:p-7" v-reveal="{ delay: 120 }">
-          <div class="mb-5 flex items-center gap-3 border-b border-[#eef1ee] pb-4">
-            <span class="h-12 w-12 overflow-hidden rounded-full bg-[#f3faf2] ring-2 ring-[#e7efe7]"><MascotJaguar variant="head" /></span>
-            <div>
-              <strong class="block">PAM AI</strong>
-              <span class="flex items-center gap-1.5 text-xs font-semibold text-[#0f8520]"><span class="h-2 w-2 rounded-full bg-[#0f9e2e]" />En línea</span>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div class="chat-bubble-user">¿Cómo atraigo más clientes a mi tienda de comida?</div>
-            <div class="chat-bubble-ai">
-              <p class="mb-3 text-sm font-semibold text-[#1f2d23]">¡Buena pregunta! Aquí tienes 3 ideas que pueden ayudarte:</p>
-              <ol class="space-y-3 text-sm font-medium text-[#344054]">
-                <li class="flex"><span class="tip-dot">1</span>Actualiza tu estado de WhatsApp cada día con ofertas y fotos apetitosas.</li>
-                <li class="flex"><span class="tip-dot">2</span>Publica promociones cortas y creativas en TikTok y Facebook.</li>
-                <li class="flex"><span class="tip-dot">3</span>Ofrece combos especiales y premios por recomendar a un amigo.</li>
-              </ol>
-            </div>
-            <div class="chat-bubble-ai !inline-flex w-max items-center gap-1 typing">
-              <span /><span /><span />
-            </div>
-          </div>
+          <p class="hero2__sub">Tu asesor inteligente con IA, hecho en Cobija para los emprendedores de la Amazonía boliviana.</p>
+          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !mt-2 !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
+          <span class="hero2__badge"><i class="pi pi-chart-bar" />Basado en un estudio a 384 negocios de Cobija</span>
         </div>
       </div>
     </section>
 
-    <!-- Qué ofrecemos (bento) -->
-    <section id="herramientas" class="mx-auto w-[min(1180px,calc(100%-28px))] pb-16">
-      <div class="mx-auto max-w-2xl text-center" v-reveal>
-        <span class="section-eyebrow"><i class="pi pi-wrench" />Herramientas</span>
-        <h2 class="section-title mt-4">Qué ofrecemos</h2>
-        <p class="section-lead">Herramientas digitales simples y poderosas para ayudarte a emprender y crecer, sin complicaciones.</p>
-      </div>
+    <!-- Herramientas para crecer -->
+    <section id="herramientas" class="mx-auto w-[min(1240px,calc(100%-32px))] py-20">
+      <h2 class="section-title text-center" v-reveal>Herramientas para crecer</h2>
 
-      <div class="mt-12 grid gap-5 lg:grid-cols-3">
-        <!-- featured PAM card -->
-        <article class="pam-feature lg:row-span-2" v-reveal>
-          <div class="relative z-10 flex h-full flex-col p-7">
-            <span class="chip-soft w-max bg-[#2fe04a]/20 text-[#bfffca]"><i class="pi pi-bolt" />Estrella</span>
-            <div class="mx-auto my-4 h-56 w-48"><MascotJaguar variant="full" /></div>
-            <h3 class="font-display text-2xl font-extrabold">PAM AI · Tu asesor 24/7</h3>
-            <p class="mt-3 text-sm font-medium leading-7 text-[#d9f5df]">
-              Un asistente inteligente que conoce tu negocio y responde al instante: marketing, ventas, branding y precios. Como tener un consultor siempre disponible.
-            </p>
-            <div class="mt-5 flex flex-wrap gap-2">
-              <span class="chip-soft bg-white/10 text-white"><i class="pi pi-whatsapp" />WhatsApp</span>
-              <span class="chip-soft bg-white/10 text-white"><i class="pi pi-comments" />Chat</span>
-              <span class="chip-soft bg-white/10 text-white"><i class="pi pi-clock" />24/7</span>
+      <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div v-for="(tool, i) in tools" :key="tool.title" v-reveal="{ variant: 'scale', delay: i * 120, blur: true }">
+          <article class="grow-card">
+            <img :src="tool.src" :alt="tool.alt" class="grow-card__img" :style="tool.pos ? { objectPosition: tool.pos } : null" loading="lazy" />
+            <div class="grow-card__scrim" />
+            <div class="grow-card__body">
+              <h3 class="grow-card__title font-display">{{ tool.title }}</h3>
+              <a href="#" class="grow-card__link">Explorar<i class="pi pi-arrow-right text-xs" /></a>
             </div>
-            <Button label="Hablar con PAM" icon="pi pi-arrow-right" iconPos="right" class="btn-shine mt-auto !mt-7 !w-max !rounded-full !border-0 !bg-white !px-5 !py-2.5 !font-bold !text-[#053d17]" />
-          </div>
-        </article>
-
-        <article v-for="(tool, i) in tools" :key="tool.title" class="tool-card" v-reveal="{ delay: i * 80 }">
-          <span class="tool-arrow"><i class="pi pi-arrow-up-right" /></span>
-          <span class="tool-ic"><i :class="tool.icon" /></span>
-          <h3 class="font-display mt-5 text-lg font-bold">{{ tool.title }}</h3>
-          <p class="mt-2 text-sm font-medium leading-6 text-[#5a6b5f]">{{ tool.text }}</p>
-        </article>
+          </article>
+        </div>
       </div>
     </section>
 
-    <!-- Panel / vista de producto (dashboard) -->
-    <section id="panel" class="mx-auto w-[min(1180px,calc(100%-28px))] py-20">
-      <div class="mx-auto max-w-2xl text-center" v-reveal>
-        <span class="section-eyebrow"><i class="pi pi-desktop" />Tu panel</span>
-        <h2 class="section-title mt-4">Todo tu negocio en un solo lugar</h2>
-        <p class="section-lead">Ventas, ganancias, inventario y diagnósticos en un panel claro, pensado para emprendedores.</p>
-      </div>
+    <!-- Conoce a Kenchita -->
+    <section id="como-funciona" class="mx-auto w-[min(1240px,calc(100%-32px))] pb-20">
+      <div class="grid items-stretch gap-8 lg:grid-cols-2">
+        <div class="pam-photo" v-reveal="{ variant: 'left' }">
+          <img
+            :src="'/kenchita-conoce-cta.png'"
+            alt="Kenchita, el jaguar asesor de NEXA, en la selva amazónica"
+            class="pam-photo__img"
+            loading="lazy"
+          />
+        </div>
 
-      <div class="relative mx-auto mt-12 max-w-[920px]" v-reveal="{ delay: 120 }">
-        <div class="mock-window">
-          <div class="mock-bar">
-            <span class="mock-dot bg-[#ff6058]" />
-            <span class="mock-dot bg-[#ffbd2e]" />
-            <span class="mock-dot bg-[#28c840]" />
-            <span class="ml-3 text-[11px] font-semibold text-[#5a6b5f]">app.nexa.bo/panel</span>
-          </div>
+        <div class="pam-panel" v-reveal="{ variant: 'right', delay: 120 }">
+          <h2 class="section-title">Conoce a <span class="text-primary-600">Kenchita</span>,<br />tu asesor con IA</h2>
+          <p class="section-lead !mt-4 max-w-md">
+            Kenchita analiza los datos reales de tu negocio y te dice exactamente dónde actuar.
+          </p>
 
-          <div class="flex">
-            <aside class="hidden w-[150px] shrink-0 bg-[#053d17] p-4 text-white sm:block">
-              <div class="mb-6 flex items-center gap-2">
-                <span class="nexa-mark small"><i class="pi pi-bolt" /></span>
-                <strong class="font-display text-base">NEXA</strong>
+          <!-- Ventana de chat: demo con datos reales del negocio -->
+          <div class="chat-win mt-6">
+            <header class="chat-win__head">
+              <span class="chat-ava chat-ava--ai">
+                <img src="/kenchita-chat.png" alt="Kenchita, el jaguar asesor de NEXA" />
+              </span>
+              <div>
+                <strong>Kenchita</strong>
+                <small><span class="chat-win__dot" />En línea · analizando tu negocio</small>
               </div>
-              <div class="space-y-1.5 text-[11px] font-semibold">
-                <span class="flex items-center gap-2 rounded-lg bg-[#0f9e2e] px-3 py-2"><i class="pi pi-home" />Inicio</span>
-                <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-chart-line" />Diagnóstico</span>
-                <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-wrench" />Herramientas</span>
-                <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-comments" />PAM AI</span>
-              </div>
-            </aside>
+            </header>
 
-            <div class="flex-1 bg-white p-5">
-              <div class="mb-4 flex items-center justify-between">
-                <div>
-                  <strong class="block text-sm">Hola, Emprendedor 👋</strong>
-                  <span class="text-[11px] font-medium text-[#5a6b5f]">Resumen de hoy</span>
-                </div>
-                <span class="rounded-full bg-[#edf9ef] px-3 py-1.5 text-[11px] font-bold text-[#0f8520]"><i class="pi pi-map-marker mr-1" />Cobija</span>
+            <div class="chat-win__body">
+              <!-- Pregunta del usuario -->
+              <div class="flex items-end justify-end gap-2.5">
+                <div class="chat-bubble-user !ml-0 !max-w-[80%] !text-sm">¿Qué productos no se están vendiendo?</div>
+                <span class="chat-ava chat-ava--user"><i class="pi pi-user" /></span>
               </div>
 
-              <div class="grid grid-cols-3 gap-2.5">
-                <div class="metric-card">
-                  <i class="pi pi-shopping-cart text-[#9f6bff]" />
-                  <span class="label">Venta de hoy</span>
-                  <span class="value">Bs. 280</span>
-                </div>
-                <div class="metric-card">
-                  <i class="pi pi-arrow-up-right text-[#0f9e2e]" />
-                  <span class="label">Ganancia</span>
-                  <span class="value">Bs. 98</span>
-                </div>
-                <div class="metric-card">
-                  <i class="pi pi-box text-[#09a8c7]" />
-                  <span class="label">Stock</span>
-                  <span class="value">1.256</span>
-                </div>
-              </div>
+              <!-- Respuesta de Kenchita -->
+              <div class="flex items-start gap-2.5">
+                <span class="chat-ava chat-ava--ai">
+                  <img src="/kenchita-chat.png" alt="Kenchita, el jaguar asesor de NEXA" />
+                </span>
+                <div class="chat-bubble-ai !max-w-[94%] !p-3.5 sm:!p-4">
+                  <p class="mb-3 text-sm font-semibold text-[#1f2d23]">Revisé tu inventario y tus ventas de los últimos 30 días 👇</p>
 
-              <div class="mt-3 grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
-                <div class="rounded-xl border border-[#eef1ee] p-3.5">
-                  <h3 class="mb-3 text-xs font-bold">Resumen de ventas</h3>
-                  <div class="sales-chart">
-                    <span v-for="(h, i) in [32, 50, 28, 38, 60, 84]" :key="i" :style="{ height: h + '%', animationDelay: i * 90 + 'ms' }" />
+                  <div class="insight insight--alert">
+                    <span class="insight__icon"><i class="pi pi-exclamation-triangle" /></span>
+                    <div>
+                      <strong>Stock detenido — Audífonos Bluetooth A19</strong>
+                      <p>18 unidades en stock · solo 2 vendidas en 3 semanas</p>
+                      <p class="insight__figure">Capital inmovilizado: <b>Bs. 1.260</b></p>
+                    </div>
                   </div>
-                </div>
-                <div class="rounded-xl border border-[#eef1ee] p-3.5">
-                  <h3 class="mb-3 text-xs font-bold">Más vendidos</h3>
-                  <div class="space-y-2.5">
-                    <div v-for="p in products" :key="p.name" class="flex items-center justify-between gap-2">
-                      <div class="flex items-center gap-2">
-                        <span class="h-7 w-7 rounded-lg" :style="{ background: p.color }" />
-                        <span class="text-[11px] font-semibold">{{ p.name }}</span>
-                      </div>
-                      <span class="text-[11px] font-bold text-[#5a6b5f]">{{ p.value }}</span>
+
+                  <div class="insight insight--win">
+                    <span class="insight__icon"><i class="pi pi-star-fill" /></span>
+                    <div>
+                      <strong>Tu producto estrella — Cargador USB-C</strong>
+                      <p>Se agotó 2 veces este mes. Conviene reabastecer ya.</p>
+                    </div>
+                  </div>
+
+                  <div class="insight insight--action">
+                    <span class="insight__icon"><i class="pi pi-lightbulb" /></span>
+                    <div>
+                      <strong>Mi recomendación:</strong>
+                      <p>Arma un combo “Audífonos + Cargador” a <b>Bs. 95</b> para mover el stock detenido, y promociónalo en tu estado de WhatsApp este fin de semana.</p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="float-card float-a hidden sm:block">
-          <div class="flex items-center gap-2.5">
-            <span class="grid h-9 w-9 place-items-center rounded-lg bg-[#edf9ef] text-[#0f9e2e]"><i class="pi pi-arrow-up-right" /></span>
-            <div>
-              <strong class="block text-sm leading-tight">Ganancia</strong>
-              <span class="text-[10px] font-semibold text-[#5a6b5f]">calculada al instante</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="float-card float-b hidden sm:block">
-          <div class="flex items-center gap-2.5">
-            <span class="grid h-9 w-9 place-items-center rounded-lg bg-[#fff4dc] text-[#d87414]"><i class="pi pi-bolt" /></span>
-            <div>
-              <strong class="block text-sm leading-tight">Asesor PAM</strong>
-              <span class="text-[10px] font-semibold text-[#5a6b5f]">disponible 24/7</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Trust marquee -->
-    <section class="mx-auto w-[min(1240px,calc(100%-24px))] py-10">
-      <p class="mb-6 text-center text-xs font-bold uppercase tracking-[0.14em] text-[#8aa890]">Pensado para negocios de todos los rubros</p>
-      <div class="marquee">
-        <div class="marquee__track">
-          <template v-for="n in 2" :key="n">
-            <span class="flex items-center gap-2 text-lg font-bold text-[#9fb3a4]"><i class="pi pi-shop" />Tiendas</span>
-            <span class="flex items-center gap-2 text-lg font-bold text-[#9fb3a4]"><i class="pi pi-shopping-bag" />Boutiques</span>
-            <span class="flex items-center gap-2 text-lg font-bold text-[#9fb3a4]"><i class="pi pi-stop" />Restaurantes</span>
-            <span class="flex items-center gap-2 text-lg font-bold text-[#9fb3a4]"><i class="pi pi-heart" />Estética</span>
-            <span class="flex items-center gap-2 text-lg font-bold text-[#9fb3a4]"><i class="pi pi-box" />Abarrotes</span>
-            <span class="flex items-center gap-2 text-lg font-bold text-[#9fb3a4]"><i class="pi pi-truck" />Delivery</span>
-          </template>
-        </div>
-      </div>
-    </section>
-
-    <!-- Amazon roots band -->
-    <section id="nosotros" class="mx-auto w-[min(1240px,calc(100%-24px))] py-6">
-      <div class="aurora leaf-texture relative grid items-center gap-8 overflow-hidden rounded-[28px] p-7 sm:p-10 lg:grid-cols-[1.1fr_0.9fr]" v-reveal>
-        <div class="relative z-10">
-          <span class="section-eyebrow !border-white/20 !bg-white/10 !text-[#2fe04a]"><i class="pi pi-globe" />Identidad</span>
-          <h2 class="font-display mt-5 text-[2rem] font-extrabold leading-tight tracking-tight text-white sm:text-[2.6rem]">
-            Tecnología con <span class="text-gradient">raíces amazónicas</span>
-          </h2>
-          <p class="mt-5 max-w-[520px] text-base font-medium leading-8 text-[#d9f5df]">
-            NEXA nació en Cobija para destacar el talento local y el enorme potencial de nuestra Amazonía. Combinamos inteligencia artificial de punta con un profundo conocimiento del mercado boliviano.
-          </p>
-          <blockquote class="roots-quote">
-            <i class="pi pi-quote-left roots-quote__mark" />
-            <p class="font-display text-lg font-semibold leading-7 text-[#eafff0]">NEXA cree en el talento de nuestra gente y en el potencial de nuestra Amazonía.</p>
-            <div class="roots-quote__by">
-              <span class="nexa-mark small"><i class="pi pi-bolt" /></span>
-              <div class="leading-tight">
-                <strong class="block text-sm text-white">Equipo NEXA</strong>
-                <span class="text-xs font-medium text-[#9dd1a6]">Cobija, Pando · Bolivia</span>
-              </div>
-            </div>
-          </blockquote>
-        </div>
-
-        <div class="relative z-10 grid grid-cols-2 gap-4">
-          <ImagePlaceholder dark ratio="3 / 4" icon="pi pi-user" label="Emprendedora local" class="row-span-2 roots-fill" />
-          <ImagePlaceholder dark ratio="4 / 3" icon="pi pi-image" label="Jaguar · fauna" />
-          <ImagePlaceholder dark ratio="4 / 3" icon="pi pi-sun" label="Paisaje · Amazonía" />
-        </div>
-      </div>
-    </section>
-
-    <!-- Cómo funciona -->
-    <section id="como-funciona" class="bg-[#f3faf2] py-16">
-      <div class="mx-auto w-[min(1180px,calc(100%-28px))]">
-        <div class="mx-auto max-w-2xl text-center" v-reveal>
-          <span class="section-eyebrow"><i class="pi pi-compass" />Simple y rápido</span>
-          <h2 class="section-title mt-4">Cómo funciona</h2>
-          <p class="section-lead">En tres pasos sencillos empiezas a tomar mejores decisiones para tu negocio.</p>
-        </div>
-
-        <div class="relative mt-12 grid gap-6 md:grid-cols-3">
-          <div class="pointer-events-none absolute left-[8%] right-[8%] top-[48px] hidden h-[3px] -translate-y-1/2 rounded-full bg-gradient-to-r from-[#2fe04a] via-[#1aa52f] to-[#0a6f1f] opacity-80 shadow-[0_0_14px_rgba(47,224,74,0.45)] md:block" />
-          <article v-for="(step, i) in steps" :key="step.number" class="step-card" v-reveal="{ delay: i * 120 }">
-            <div class="flex items-center justify-between">
-              <span class="step-number">{{ step.number }}</span>
-              <i :class="step.icon" class="text-2xl text-[#0f9e2e]" />
-            </div>
-            <h3 class="font-display mt-5 text-lg font-bold">{{ step.title }}</h3>
-            <p class="mt-2 text-sm font-medium leading-6 text-[#5a6b5f]">{{ step.text }}</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- Stats band -->
-    <section class="mx-auto w-[min(1180px,calc(100%-28px))] py-16">
-      <div class="aurora leaf-texture relative overflow-hidden rounded-[28px] px-6 py-12" v-reveal>
-        <div class="relative z-10 grid gap-8 text-center text-white sm:grid-cols-2 lg:grid-cols-4">
-          <div v-for="s in stats" :key="s.label">
-            <div class="stat-num text-gradient">
-              <StatCounter :to="s.to" :suffix="s.suffix" />
-            </div>
-            <p class="mt-3 text-sm font-semibold text-[#d9f5df]">{{ s.label }}</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Para quién es -->
-    <section class="mx-auto w-[min(1180px,calc(100%-28px))] pb-16">
-      <div class="mx-auto max-w-2xl text-center" v-reveal>
-        <span class="section-eyebrow"><i class="pi pi-users" />Para ti</span>
-        <h2 class="section-title mt-4">¿Para quién es NEXA?</h2>
-        <p class="section-lead">Pensado para microempresas y emprendedores que quieren modernizarse sin complicarse.</p>
-      </div>
-
-      <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <article v-for="(a, i) in audiences" :key="a.title" class="audience-card" v-reveal="{ delay: i * 80 }">
-          <span class="audience-emoji" :style="a.tone">{{ a.emoji }}</span>
-          <strong class="font-display text-center text-base">{{ a.title }}</strong>
-        </article>
-      </div>
-    </section>
-
-    <!-- Testimonios -->
-    <section class="mx-auto w-[min(1180px,calc(100%-28px))] pb-16">
-      <div class="mx-auto max-w-2xl text-center" v-reveal>
-        <span class="section-eyebrow"><i class="pi pi-star-fill" />Testimonios</span>
-        <h2 class="section-title mt-4">Lo que dicen los emprendedores</h2>
-      </div>
-
-      <div class="mt-12 grid gap-5 md:grid-cols-3">
-        <article v-for="(t, i) in testimonials" :key="t.name" class="testimonial-card" v-reveal="{ delay: i * 100 }">
-          <div class="mb-4 flex items-center justify-between gap-2">
-            <div class="flex text-[#f6a623]">
-              <i v-for="n in 5" :key="n" class="pi pi-star-fill text-sm" />
-            </div>
-            <span class="inline-flex items-center gap-1 rounded-full bg-[#eef1ee] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#7a8a7e]"><i class="pi pi-info-circle text-[10px]" />Ejemplo ilustrativo</span>
-          </div>
-          <p class="text-sm font-medium leading-7 text-[#344054]">“{{ t.text }}”</p>
-          <div class="mt-6 flex items-center gap-3 border-t border-[#eef1ee] pt-5">
-            <span class="avatar-ph">{{ t.initials }}</span>
-            <div>
-              <strong class="block text-sm">{{ t.name }}</strong>
-              <span class="text-xs font-medium text-[#5a6b5f]">{{ t.role }}</span>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <!-- Misión y visión -->
-    <section class="mx-auto w-[min(1180px,calc(100%-28px))] pb-16">
-      <div class="mx-auto max-w-2xl text-center" v-reveal>
-        <span class="section-eyebrow"><i class="pi pi-leaf" />Propósito</span>
-        <h2 class="section-title mt-4">Misión y visión</h2>
-      </div>
-
-      <div class="mt-12 grid gap-6 lg:grid-cols-2">
-        <article class="vp-card" v-reveal>
-          <span class="vp-icon"><i class="pi pi-bullseye" /></span>
-          <h3 class="vp-title font-display">Misión</h3>
-          <p class="vp-text">
-            Empoderar a emprendedores, pequeños negocios y profesionales con acceso a soporte en marketing, publicidad y estrategias de venta, ofreciendo orientación clara para aumentar visibilidad, atraer clientes y crecer de forma sostenible.
-          </p>
-        </article>
-
-        <article class="vp-card" v-reveal="{ delay: 120 }">
-          <span class="vp-icon"><i class="pi pi-flag" /></span>
-          <h3 class="vp-title font-display">Visión</h3>
-          <p class="vp-text">
-            Brindar soluciones de asesoramiento empresarial digital que permitan a las microempresas fortalecer su gestión, mejorar la toma de decisiones y potenciar su crecimiento con herramientas accesibles, prácticas e innovadoras.
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <!-- CTA band (fondo con PAM ya integrado a la derecha) -->
-    <section class="mx-auto w-[min(1240px,calc(100%-24px))] pb-16">
-      <div class="cta-band relative overflow-hidden" v-reveal>
-        <div class="cta-band__scrim" />
-        <div class="relative z-10 max-w-[600px] px-7 py-12 sm:px-12 sm:py-14">
-          <h2 class="font-display text-[1.9rem] font-extrabold leading-tight tracking-tight text-white sm:text-[2.6rem]">
-            Empieza a hacer <span class="text-[#36dd4d]">crecer tu negocio</span> hoy
-          </h2>
-          <p class="mt-4 max-w-md text-base font-medium text-[#e3ffe8]">
-            Únete a la revolución inteligente de la Amazonía. Crea tu cuenta gratis y descubre todo lo que NEXA puede hacer por ti.
-          </p>
           <div class="mt-7 flex flex-wrap items-center gap-3">
-            <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !rounded-full !border-0 !bg-[#2fe04a] !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
-            <Button label="Hablar con PAM" icon="pi pi-comments" outlined class="!rounded-full !border-white/55 !px-7 !py-3.5 !text-base !font-bold !text-white hover:!bg-white/10" />
+            <Button label="Hablar con Kenchita" icon="pi pi-comments" class="btn-shine !w-max !rounded-full !border-0 !bg-primary-500 !px-6 !py-3 !font-bold !text-white" />
+            <span class="data-pill"><i class="pi pi-database" />Analizó 42 productos · 128 ventas</span>
           </div>
-          <p class="mt-5 text-xs font-semibold text-[#cdeed3]"><i class="pi pi-check-circle mr-1" />Gratis · Sin complicaciones</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA band -->
+    <section id="contacto" class="mx-auto w-[min(1240px,calc(100%-32px))] pb-20">
+      <div class="aurora leaf-texture cta2" v-reveal="{ variant: 'scale', blur: true }">
+        <div class="cta2__copy">
+          <h2 class="font-display text-[2rem] font-extrabold leading-tight tracking-tight text-white sm:text-[2.6rem]">
+            Empieza a hacer <span class="text-gradient">crecer tu negocio</span> hoy
+          </h2>
+          <p class="mt-4 max-w-md text-base font-medium text-[#d9f5df]">
+            Crea tu cuenta gratis y descubre todo lo que NEXA y Kenchita pueden hacer por tu negocio.
+          </p>
+          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !mt-7 !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
         </div>
       </div>
     </section>
 
     <!-- Footer -->
-    <footer id="contacto" class="bg-[#04200d] text-white">
-      <div class="mx-auto grid w-[min(1240px,calc(100%-28px))] gap-10 py-14 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+    <footer id="nosotros" class="bg-[#04200d] text-white">
+      <div class="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-10 py-14 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <a href="#inicio" class="flex items-center gap-3">
-            <span class="nexa-mark"><i class="pi pi-bolt" /></span>
+            <img src="/nexa-logo.png" alt="" class="site-logo site-logo--footer" aria-hidden="true" />
             <span class="leading-none">
-              <span class="font-display block text-[1.7rem] font-extrabold">NEXA</span>
+              <span class="font-display block text-[1.6rem] font-extrabold">NEXA</span>
               <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#bfeac8]">IA para tu negocio</span>
             </span>
           </a>
           <p class="mt-5 max-w-xs text-sm font-medium leading-7 text-[#bfeac8]">
-            NEXA cree en el talento de nuestra gente y en el potencial de nuestra Amazonía.
+            Hecho en Cobija, Pando · Bolivia
           </p>
           <div class="mt-6 flex gap-2.5">
-            <a v-for="ic in ['pi-facebook', 'pi-instagram', 'pi-whatsapp', 'pi-tiktok', 'pi-youtube']" :key="ic" href="#" class="social-btn" :aria-label="ic"><i :class="`pi ${ic}`" /></a>
+            <a v-for="s in socials" :key="s.label" :href="s.href" class="social-btn" :aria-label="s.label"><i :class="s.icon" /></a>
           </div>
         </div>
 
         <div>
-          <h3 class="footer-title">Navegación</h3>
+          <h3 class="footer-title">Enlaces rápidos</h3>
           <a v-for="item in menuItems" :key="item.label" class="footer-link" :href="item.href">{{ item.label }}</a>
         </div>
 
         <div>
-          <h3 class="footer-title">Herramientas</h3>
-          <a class="footer-link" href="#">PAM AI</a>
-          <a class="footer-link" href="#">Calculadora de precios</a>
-          <a class="footer-link" href="#">Marketing y ventas</a>
-          <a class="footer-link" href="#">Inventario</a>
+          <h3 class="footer-title">Legal</h3>
+          <a class="footer-link" href="#">Términos y condiciones</a>
+          <a class="footer-link" href="#">Política de privacidad</a>
         </div>
 
         <div>
           <h3 class="footer-title">Contacto</h3>
           <span class="footer-link"><i class="pi pi-map-marker mr-2" />Cobija, Pando · Bolivia</span>
-          <span class="footer-link"><i class="pi pi-envelope mr-2" />hola@nexa.bo</span>
-          <span class="footer-link"><i class="pi pi-phone mr-2" />+591 730 12345</span>
+          <span class="footer-link"><i class="pi pi-phone mr-2" />+591 1152 3216</span>
         </div>
       </div>
 
       <div class="border-t border-[#16431d]">
-        <div class="mx-auto flex w-[min(1240px,calc(100%-28px))] flex-col items-center justify-between gap-3 py-6 text-xs font-semibold text-[#bfeac8] sm:flex-row">
-          <span>© {{ new Date().getFullYear() }} NEXA · Hecho con 💚 en Cobija, Pando — Bolivia</span>
-          <div class="flex gap-5">
-            <a class="hover:text-white" href="#">Términos</a>
-            <a class="hover:text-white" href="#">Privacidad</a>
-            <a class="hover:text-white" href="#">Cookies</a>
-          </div>
+        <div class="mx-auto w-[min(1240px,calc(100%-32px))] py-6 text-center text-xs font-semibold text-[#bfeac8]">
+          © {{ new Date().getFullYear() }} NEXA · Hecho con 💚 en Cobija, Pando — Bolivia
         </div>
       </div>
     </footer>
   </main>
 </template>
+
+<style scoped>
+/* ---- Top bar ---- */
+.topbar {
+  background: var(--night);
+}
+.topbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1240px, calc(100% - 32px));
+  margin: 0 auto;
+  height: 40px;
+}
+.topbar__social {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  color: #bfeac8;
+  font-size: 0.85rem;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.topbar__social:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* ---- Header ---- */
+.site-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #fff;
+  border-bottom: 1px solid #eef1ee;
+  transition: box-shadow 0.3s ease;
+}
+.site-bar.is-solid {
+  box-shadow: 0 6px 24px rgba(12, 31, 18, 0.07);
+}
+.site-bar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(1240px, calc(100% - 32px));
+  height: 76px;
+  margin: 0 auto;
+}
+.site-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+.site-logo--footer {
+  width: 44px;
+  height: 44px;
+}
+
+/* ---- Hero (full-bleed con foto de fondo) ---- */
+.hero2 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-height: clamp(420px, 46vw, 560px);
+  border-radius: 28px;
+  background: #053d17;
+  box-shadow: 0 30px 70px rgba(4, 32, 13, 0.28);
+}
+.hero2__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+  transform: scale(1.03);
+  /* focus-pull al cargar (entra desenfocada y se enfoca), luego ken-burns */
+  animation:
+    hero-img-in 1.6s cubic-bezier(0.16, 1, 0.3, 1) both,
+    hero-zoom 22s ease-in-out 1.6s infinite alternate;
+}
+/* la imagen entra desenfocada y se aclara — “focus pull” cinematográfico */
+@keyframes hero-img-in {
+  from { opacity: 0; filter: blur(20px) saturate(1.3); }
+  to { opacity: 1; filter: blur(0) saturate(1); }
+}
+.hero2__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(3, 26, 11, 0.92) 0%, rgba(3, 26, 11, 0.74) 32%, rgba(3, 26, 11, 0.32) 58%, rgba(3, 26, 11, 0.05) 80%, transparent 100%),
+    linear-gradient(180deg, rgba(3, 26, 11, 0.35) 0%, transparent 30%, transparent 70%, rgba(3, 26, 11, 0.4) 100%);
+}
+.hero2__copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 560px;
+  padding: clamp(32px, 5vw, 64px);
+}
+/* entrada escalonada del texto: pill → título → subtítulo → CTA → badge.
+   Cada línea sube y se enfoca; delays largos para un ritmo pausado. */
+.hero2__copy > * {
+  animation: hero-line-in 0.95s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.hero2__copy > *:nth-child(1) { animation-delay: 0.5s; }
+.hero2__copy > *:nth-child(2) { animation-delay: 0.66s; }
+.hero2__copy > *:nth-child(3) { animation-delay: 0.82s; }
+.hero2__copy > *:nth-child(4) { animation-delay: 0.98s; }
+.hero2__copy > *:nth-child(5) { animation-delay: 1.14s; }
+@keyframes hero-line-in {
+  from { opacity: 0; transform: translateY(28px); filter: blur(5px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+.hero2__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eafff0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hero2__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--lime);
+  box-shadow: 0 0 10px var(--lime);
+}
+.hero2__title {
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.hero2__sub {
+  max-width: 460px;
+  font-size: clamp(1rem, 1.4vw, 1.18rem);
+  font-weight: 500;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+.hero2__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #d9f5df;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+/* ---- Tarjetas "Herramientas para crecer" ---- */
+.grow-card {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  border-radius: 20px;
+  background: linear-gradient(160deg, #0a5a20, #04270f);
+  box-shadow: 0 14px 36px rgba(12, 31, 18, 0.12);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+}
+.grow-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 26px 60px rgba(15, 158, 46, 0.22);
+}
+.grow-card__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.grow-card:hover .grow-card__img {
+  transform: scale(1.06);
+}
+.grow-card__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 35%, rgba(3, 26, 11, 0.85) 100%);
+}
+.grow-card__body {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 20px;
+  color: #fff;
+}
+.grow-card__title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.grow-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  background: transparent;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: background 0.25s ease, border-color 0.25s ease, gap 0.25s ease;
+}
+.grow-card__link:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #fff;
+  gap: 12px;
+}
+
+/* ---- Conoce a Kenchita ---- */
+.pam-photo {
+  position: relative;
+  overflow: hidden;
+  min-height: 420px;
+  border-radius: 24px;
+  background: linear-gradient(160deg, #0a5a20, #04270f);
+  box-shadow: 0 24px 60px rgba(4, 32, 13, 0.22);
+}
+.pam-photo__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pam-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(28px, 3vw, 44px);
+  border-radius: 24px;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(12, 31, 18, 0.08);
+}
+/* avatares del chat (junto a cada burbuja) */
+.chat-ava {
+  display: grid;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+}
+.chat-ava--user {
+  background: #e6ece8;
+  color: #5a6b5f;
+  font-size: 0.85rem;
+}
+.chat-ava--ai {
+  background: #f3faf2;
+  border: 1px solid var(--line);
+}
+.chat-ava--ai img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 22%;
+}
+
+/* ventana de chat (demo con datos del negocio) */
+.chat-win {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 14px 40px rgba(12, 31, 18, 0.08);
+}
+.chat-win__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f7fbf7;
+}
+.chat-win__head strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #11251a;
+  line-height: 1.2;
+}
+.chat-win__head small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #3c5a46;
+}
+.chat-win__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary-500);
+  box-shadow: 0 0 8px rgba(15, 158, 46, 0.6);
+}
+.chat-win__body {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: #fbfdfb;
+}
+
+/* tarjetas de insight dentro de la respuesta de Kenchita */
+.insight {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+}
+.insight + .insight {
+  margin-top: 10px;
+}
+.insight strong {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #16271c;
+}
+.insight p {
+  margin: 3px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #42554a;
+}
+.insight__icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 0.8rem;
+}
+.insight--alert {
+  border-left-color: #f59e0b;
+}
+.insight--alert .insight__icon {
+  background: #fef3c7;
+  color: #b45309;
+}
+.insight--alert .insight__figure b {
+  color: #b45309;
+  font-weight: 800;
+}
+.insight--win {
+  border-left-color: var(--primary-500);
+}
+.insight--win .insight__icon {
+  background: var(--primary-50);
+  color: var(--primary-600);
+}
+.insight--action {
+  border-color: transparent;
+  border-left-color: var(--lime);
+  background: linear-gradient(160deg, var(--primary-600), var(--primary-800));
+  box-shadow: 0 10px 24px rgba(15, 158, 46, 0.25);
+}
+.insight--action strong {
+  color: #fff;
+}
+.insight--action p {
+  color: #d9f5df;
+}
+.insight--action p b {
+  color: #fff;
+  font-weight: 800;
+}
+.insight--action .insight__icon {
+  background: rgba(255, 255, 255, 0.16);
+  color: #d4f56a;
+}
+
+/* indicador de datos analizados */
+.data-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--primary-100);
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.data-pill i {
+  font-size: 0.72rem;
+}
+
+/* ---- CTA band ---- */
+.cta2 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-height: 260px;
+  border-radius: 28px;
+  padding: clamp(32px, 4vw, 56px);
+  box-shadow: 0 24px 60px rgba(4, 32, 13, 0.22);
+  /* foto de fondo (pos-inicio-hero) con degradado verde para legibilidad */
+  background:
+    linear-gradient(90deg, rgba(4, 32, 13, 0.95) 0%, rgba(5, 40, 18, 0.86) 42%, rgba(5, 40, 18, 0.58) 72%, rgba(5, 40, 18, 0.42) 100%),
+    url('/pos-inicio-hero.jpg') center / cover no-repeat;
+}
+.cta2__copy {
+  position: relative;
+  z-index: 2;
+  max-width: 560px;
+}
+.cta2__mascot {
+  position: absolute;
+  z-index: 1;
+  right: clamp(8px, 3vw, 48px);
+  bottom: 0;
+  width: clamp(180px, 22vw, 280px);
+  height: clamp(200px, 26vw, 320px);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 900px) {
+  .hero2 {
+    min-height: 480px;
+  }
+  /* en móvil la foto va centrada y oscurecemos parejo para legibilidad */
+  .hero2__bg {
+    object-position: 70% center;
+  }
+  .hero2__scrim {
+    background:
+      linear-gradient(180deg, rgba(3, 26, 11, 0.62) 0%, rgba(3, 26, 11, 0.4) 36%, rgba(3, 26, 11, 0.72) 100%);
+  }
+  .hero2__copy {
+    max-width: 100%;
+  }
+  .pam-photo {
+    min-height: 280px;
+  }
+  .cta2__mascot {
+    opacity: 0.28;
+  }
+  .cta2__copy {
+    max-width: 100%;
+  }
+}
+</style>

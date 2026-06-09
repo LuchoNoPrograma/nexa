@@ -324,3 +324,5 @@ No crear tabla de descuentos al inicio: descuento manual en `ventas.descuento` b
 - Seguridad empresarial avanzada.
 - Integraciones externas complejas.
 - Inventario como producto principal.
+
+NO HACER COMPILACIONES DE PRUEBA NI EMPAQUETAR A MENOS QUE SE PIDA EXPLICITAMENTE

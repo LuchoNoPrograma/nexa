@@ -32,6 +32,11 @@ export default defineNuxtPlugin((nuxtApp) => {
         return
       }
       el.classList.add('reveal')
+      // Variante de entrada: 'up' (default) | 'left' | 'right' | 'scale'
+      const variant = binding.value?.variant
+      if (variant) el.classList.add(`reveal--${variant}`)
+      // Focus-pull: entra desenfocado y se enfoca (mismo efecto que el hero)
+      if (binding.value?.blur) el.classList.add('reveal--blur')
       const delay = binding.value?.delay
       if (delay) el.style.setProperty('--reveal-delay', `${delay}ms`)
       io?.observe(el)

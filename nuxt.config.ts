@@ -1,5 +1,24 @@
 import Aura from '@primeuix/themes/aura'
+import { definePreset } from '@primeuix/themes'
 import tailwindcss from '@tailwindcss/vite'
+
+const NexaPrimePreset = definePreset(Aura, {
+  semantic: {
+    primary: {
+      50: '#ecfdf0',
+      100: '#d5f8dc',
+      200: '#aef0bd',
+      300: '#75e592',
+      400: '#35d35c',
+      500: '#0f9e2e',
+      600: '#0c8a28',
+      700: '#0a6f1f',
+      800: '#09581b',
+      900: '#084818',
+      950: '#04270c',
+    },
+  },
+})
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -25,7 +44,7 @@ export default defineNuxtConfig({
           content:
             'NEXA es tu asistente inteligente que te ayuda a vender más, atraer clientes y poner precios justos. Hecho en la Amazonía boliviana.',
         },
-        { name: 'theme-color', content: '#04200d' },
+        { name: 'theme-color', content: '#0f9e2e' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -42,10 +61,10 @@ export default defineNuxtConfig({
       ripple: true,
       inputVariant: 'filled',
       theme: {
-        preset: Aura,
+        preset: NexaPrimePreset,
         options: {
           prefix: 'p',
-          darkModeSelector: 'system',
+          darkModeSelector: 'light',
           cssLayer: false,
         },
       },
