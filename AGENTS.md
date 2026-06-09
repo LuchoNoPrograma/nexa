@@ -19,7 +19,7 @@ Prioridad del MVP:
 
 1. Landing page profesional para explicar el proyecto y sostener la feria.
 2. Modulo soporte tipo punto de venta para crear la base operativa.
-3. Modulos core: PAM AI y calculadora de precios/rentabilidad.
+3. Modulos core: Kenchita IA y calculadora de precios/rentabilidad.
 4. Catalogo publico con pedido por WhatsApp, sin checkout ni pasarela.
 
 ## 2. Stack
@@ -35,7 +35,7 @@ Prioridad del MVP:
 
 Reglas UI:
 
-- La landing y PAM AI deben verse pulidas.
+- La landing y Kenchita IA deben verse pulidas.
 - El soporte operativo puede usar PrimeVue de forma directa para velocidad.
 - Marca base: azul oscuro `#0B1F3A`, amarillo `#F2C200`, blanco, con acentos verdes/celestes para operaciones.
 - La primera pantalla debe mostrar NEXA y una senal visual clara del producto.
@@ -49,7 +49,7 @@ Debe comunicar:
 
 - Problema de transformacion digital en microempresas de Cobija.
 - Justificacion social, economica, tecnica, tecnologica y academica de forma resumida.
-- Modulos de NEXA: soporte POS, marketing/branding, calculadora, PAM AI y catalogo WhatsApp.
+- Modulos de NEXA: soporte POS, marketing/branding, calculadora, Kenchita IA y catalogo WhatsApp.
 - Indicadores de la encuesta cuando existan: atraer clientes, branding y calculadora de precios.
 
 ### Modulo soporte
@@ -69,7 +69,7 @@ El soporte existe para generar datos de negocio. No dedicar demasiado tiempo a f
 
 ### Core
 
-- PAM AI: asesor empresarial en espanol, practico, contextualizado en Cobija y por rubro.
+- Kenchita IA: asesor empresarial en espanol, practico, contextualizado en Cobija y por rubro.
 - Calculadora: costo unitario + costos fijos prorrateados + margen deseado = precio recomendado.
 - Mostrar desglose, no solo el precio final.
 
@@ -249,16 +249,18 @@ create table calculos_precio (
   created_at timestamptz default now()
 );
 
-create table pam_conversaciones (
+create table kenchita_conversacion (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tiendas(id) on delete cascade,
   titulo text default 'Nueva conversacion',
+  estado text default 'abierta',
+  last_message_at timestamptz,
   created_at timestamptz default now()
 );
 
-create table pam_mensajes (
+create table kenchita_mensaje (
   id uuid primary key default gen_random_uuid(),
-  conversacion_id uuid not null references pam_conversaciones(id) on delete cascade,
+  conversacion_id uuid not null references kenchita_conversacion(id) on delete cascade,
   rol text not null check (rol in ('user', 'assistant')),
   contenido text not null,
   created_at timestamptz default now()
@@ -282,8 +284,8 @@ alter table compra_items enable row level security;
 alter table caja_movimientos enable row level security;
 alter table precio_historial enable row level security;
 alter table calculos_precio enable row level security;
-alter table pam_conversaciones enable row level security;
-alter table pam_mensajes enable row level security;
+alter table kenchita_conversacion enable row level security;
+alter table kenchita_mensaje enable row level security;
 
 create policy "perfil propio" on profiles for all using (id = auth.uid());
 create policy "tienda propia" on tiendas for all using (id = current_tienda_id() or owner_id = auth.uid());
@@ -295,7 +297,7 @@ create policy "tienda propia" on tiendas for all using (id = current_tienda_id()
 -- venta_items -> ventas
 -- compra_items -> compras
 -- combo_items -> productos del combo
--- pam_mensajes -> pam_conversaciones
+-- kenchita_mensaje -> kenchita_conversacion
 
 create policy "catalogo publico" on productos
   for select using (visible_catalogo = true and activo = true);
@@ -312,7 +314,7 @@ No crear tabla de descuentos al inicio: descuento manual en `ventas.descuento` b
 - Preferir componentes PrimeVue en formularios, tablas, dialogs y botones operativos.
 - Usar Tailwind para layout, landing, espaciado y composicion visual.
 - En soporte, priorizar flujo usable sobre perfeccion visual.
-- En landing y PAM AI, priorizar claridad, impacto y acabado profesional.
+- En landing y Kenchita IA, priorizar claridad, impacto y acabado profesional.
 - Antes de ampliar la BD, verificar si una columna o estado resuelve el caso de forma mas simple.
 
 ## 6. Fuera de alcance del MVP

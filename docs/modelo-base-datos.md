@@ -7,7 +7,7 @@
 - `tienda` representa cada negocio o microempresa.
 - Las tablas privadas del negocio llevan `tienda_id` para aplicar RLS.
 - El POS es soporte operativo para generar datos; no es el producto principal.
-- PAM AI, calculadora, catálogo público y análisis de rentabilidad son el núcleo del MVP.
+- Kenchita IA, calculadora, catálogo público y análisis de rentabilidad son el núcleo del MVP.
 - No se modela facturación legal, pasarela de pago, contabilidad completa ni multisucursal avanzada.
 - Se prefiere resolver casos simples con columnas/estados antes de crear tablas adicionales.
 
@@ -75,7 +75,7 @@ Restricción: `unique (tienda_id, usuario_id)`.
 El modelo separa dos alcances:
 
 - `plataforma`: roles de la startup NEXA para administrar tiendas, planes, soporte y operación interna.
-- `tienda`: roles del negocio cliente para usar POS, caja, inventario, catálogo, PAM y reportes.
+- `tienda`: roles del negocio cliente para usar POS, caja, inventario, catálogo, Kenchita y reportes.
 
 ### `rol`
 
@@ -125,7 +125,7 @@ Permisos base sugeridos:
 - Plataforma: `plataforma.tienda.ver`, `plataforma.tienda.gestionar`, `plataforma.usuario.gestionar`, `plataforma.soporte.acceder`, `plataforma.reporte.ver`.
 - Tienda/POS: `pos.vender`, `pos.descuento.aplicar`, `caja.abrir`, `caja.cerrar`, `caja.movimiento.crear`.
 - Tienda/operación: `producto.ver`, `producto.gestionar`, `compra.gestionar`, `cliente.gestionar`, `proveedor.gestionar`.
-- Tienda/core: `pam.usar`, `calculo_precio.usar`, `reporte.ver`, `configuracion.gestionar`.
+- Tienda/core: `kenchita.usar`, `calculo_precio.usar`, `reporte.ver`, `configuracion.gestionar`.
 
 ### `rol_permiso`
 
@@ -431,7 +431,7 @@ Campos:
 
 ### `diagnostico`
 
-Diagnóstico empresarial breve para alimentar recomendaciones de PAM.
+Diagnóstico empresarial breve para alimentar recomendaciones de Kenchita IA.
 
 Campos:
 
@@ -445,11 +445,11 @@ Campos:
 - `resultado jsonb default '{}'::jsonb`
 - `created_at timestamptz default now()`
 
-## PAM AI
+## Kenchita IA
 
-### `pam_conversacion`
+### `kenchita_conversacion`
 
-Agrupa conversaciones con el asesor.
+Agrupa conversaciones con Kenchita. Permite retomar una sesion de chat sin perder el historial.
 
 Campos:
 
@@ -458,12 +458,15 @@ Campos:
 - `usuario_id uuid null`
 - `titulo text default 'Nueva conversación'`
 - `contexto jsonb default '{}'::jsonb`
+- `origen text default 'burbuja_chat'`
+- `estado text default 'abierta' check ('abierta', 'cerrada', 'archivada')`
+- `last_message_at timestamptz`
 - `created_at timestamptz default now()`
 - `updated_at timestamptz default now()`
 
-### `pam_mensaje`
+### `kenchita_mensaje`
 
-Mensaje de usuario o respuesta de PAM.
+Mensaje de usuario o respuesta de Kenchita.
 
 Campos:
 
@@ -473,6 +476,22 @@ Campos:
 - `contenido text not null`
 - `metadata jsonb default '{}'::jsonb`
 - `created_at timestamptz default now()`
+
+### `kenchita_chat_config`
+
+Configuracion por tienda de la burbuja de chat.
+
+Campos:
+
+- `id uuid pk`
+- `tienda_id uuid not null`
+- `nombre_asistente text default 'Kenchita IA'`
+- `saludo text`
+- `avatar_url text default '/kenchita-chat.png'`
+- `prompts jsonb`
+- `activo boolean default true`
+- `created_at timestamptz default now()`
+- `updated_at timestamptz default now()`
 
 ## Catálogo público y tracción
 
@@ -559,9 +578,10 @@ $$;
 - `caja_sesion(tienda_id, estado, abierta_at desc)`
 - `caja_movimiento(tienda_id, fecha desc)`
 - `stock_movimiento(tienda_id, producto_id, created_at desc)`
-- `pam_conversacion(tienda_id, created_at desc)`
-- `pam_mensaje(conversacion_id, created_at)`
+- `kenchita_conversacion(tienda_id, estado, last_message_at desc, created_at desc)`
+- `kenchita_mensaje(conversacion_id, created_at)`
+- `kenchita_chat_config(tienda_id, activo)`
 
 ## Resumen técnico
 
-El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende `auth.users`, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera venta, compra, stock y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_detalle` al cobrar. La calculadora y PAM AI tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño está preparado para Supabase con RLS, UUID, auditoría temporal básica y datos históricos congelados en detalle de venta/compra para análisis posterior.
+El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera venta, compra, stock y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_detalle` al cobrar. La calculadora y Kenchita IA tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en detalle de venta/compra para análisis posterior.

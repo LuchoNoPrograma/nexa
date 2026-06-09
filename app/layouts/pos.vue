@@ -121,11 +121,11 @@ function onSidebarResizeKeydown(event: KeyboardEvent) {
 const sidebarItems = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
   { label: 'Marketing', icon: 'pi pi-megaphone' },
-  { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos' },
+  { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos' },
+  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
   { label: 'Contenido', icon: 'pi pi-file' },
-  { label: 'Finanzas', icon: 'pi pi-chart-pie' },
+  { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
-  { label: 'Clientes', icon: 'pi pi-users' },
   { label: 'Reportes', icon: 'pi pi-chart-bar' },
   { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
 ]

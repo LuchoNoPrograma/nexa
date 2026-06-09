@@ -36,11 +36,15 @@ Variables de entorno recomendadas:
 DATABASE_URL=postgresql://...
 NEXA_SUPER_ADMIN_EMAIL=admin@nexa.bo
 NEXA_SUPER_ADMIN_PASSWORD=pon-una-clave-larga
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-3.5-flash
 ```
 
 Notas:
 
-- En produccion no se ejecutan migraciones automaticas. Las tablas se crean manualmente en Supabase con los SQL locales.
+- En Vercel se ejecuta `npm run db:migrate` antes del build. La fuente de verdad son los SQL de `database/local`.
+- `GEMINI_API_KEY` no debe llevar prefijo `NUXT_PUBLIC_`; solo se usa en endpoints `server/api`.
+- Si `GEMINI_API_KEY` no existe, Kenchita responde con fallback local para no romper la demo.
 - Si configuras `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.
 - La conexion SSL y el pool pequeno para Vercel se detectan automaticamente cuando `DATABASE_URL` es de Supabase.
 - Cambia `NEXA_SUPER_ADMIN_PASSWORD` antes de compartir la demo.
