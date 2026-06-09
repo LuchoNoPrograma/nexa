@@ -123,7 +123,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
       <div class="grid items-stretch gap-8 lg:grid-cols-2">
         <div class="pam-photo" v-reveal="{ variant: 'left' }">
           <img
-            :src="'/kenchita-conoce-cta.png'"
+            :src="'/kenchita-conoce-cta.jpg'"
             alt="Kenchita, el jaguar asesor de NEXA, en la selva amazónica"
             class="pam-photo__img"
             loading="lazy"
