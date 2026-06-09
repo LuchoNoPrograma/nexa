@@ -1,5 +1,3 @@
-import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import process from 'node:process'
 import pg from 'pg'
 import { hashPassword } from './password'
@@ -7,51 +5,46 @@ import { hashPassword } from './password'
 const { Pool } = pg
 
 const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/nexa'
+const isProduction = process.env.NODE_ENV === 'production'
+const hasAdminCredentials = Boolean(process.env.NEXA_SUPER_ADMIN_EMAIL && process.env.NEXA_SUPER_ADMIN_PASSWORD)
+const seedDemo = isProduction ? hasAdminCredentials : true
+const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (isProduction ? 1 : 10))
+const useSsl =
+  process.env.DATABASE_SSL !== 'false' && (
+    process.env.DATABASE_SSL === 'true'
+  || connectionString.includes('supabase.co')
+  || connectionString.includes('pooler.supabase.com')
+  )
 
-export const pool = new Pool({ connectionString })
+export const pool = new Pool({
+  connectionString,
+  max: Number.isFinite(poolMax) ? poolMax : 3,
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+})
 
 let ready: Promise<void> | null = null
 
 export function ensureDatabase() {
-  ready ??= migrate().then(seedLocalData)
+  ready ??= prepareDatabase()
   return ready
 }
 
-async function migrate() {
-  await pool.query(`
-    create table if not exists schema_migration (
-      version text primary key,
-      applied_at timestamptz not null default now()
-    )
-  `)
-
-  const migrationDir = join(process.cwd(), 'database', 'local')
-  const files = (await readdir(migrationDir)).filter((file) => file.endsWith('.sql')).sort()
-
-  for (const file of files) {
-    const applied = await pool.query('select 1 from schema_migration where version = $1', [file])
-
-    if (applied.rowCount) {
-      continue
-    }
-
-    const sql = await readFile(join(migrationDir, file), 'utf8')
-
-    await pool.query('begin')
-    try {
-      await pool.query(sql)
-      await pool.query('insert into schema_migration (version) values ($1)', [file])
-      await pool.query('commit')
-    } catch (error) {
-      await pool.query('rollback')
-      throw error
-    }
+async function prepareDatabase() {
+  if (seedDemo) {
+    await seedLocalData()
   }
 }
 
 async function seedLocalData() {
-  const email = process.env.NEXA_SUPER_ADMIN_EMAIL ?? 'admin@nexa.bo'
-  const password = process.env.NEXA_SUPER_ADMIN_PASSWORD ?? 'NexaAdmin2026!'
+  const email = process.env.NEXA_SUPER_ADMIN_EMAIL ?? (isProduction ? undefined : 'admin@nexa.bo')
+  const password = process.env.NEXA_SUPER_ADMIN_PASSWORD ?? (isProduction ? undefined : 'NexaAdmin2026!')
+
+  if (!email || !password) {
+    throw new Error('Configura NEXA_SUPER_ADMIN_EMAIL y NEXA_SUPER_ADMIN_PASSWORD para crear la demo inicial.')
+  }
+
   const passwordHash = await hashPassword(password)
 
   const userResult = await pool.query<{ id: string }>(
