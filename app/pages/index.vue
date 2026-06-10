@@ -1,4 +1,8 @@
 <script setup lang="ts">
+definePageMeta({
+  layout: 'public',
+})
+
 const menuItems = [
   { label: 'Inicio', href: '#inicio' },
   { label: 'Herramientas', href: '#herramientas' },
@@ -37,46 +41,10 @@ const tools = [
     alt: 'Estantería de tienda con productos ordenados para control de inventario',
   },
 ]
-
-// Header sólido al hacer scroll
-const scrolled = ref(false)
-function onScroll() {
-  scrolled.value = window.scrollY > 20
-}
-onMounted(() => {
-  window.addEventListener('scroll', onScroll, { passive: true })
-  onScroll()
-})
-onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 </script>
 
 <template>
   <main class="page-boot min-h-screen bg-white text-[#0c1f12]" id="inicio">
-    <!-- Header -->
-    <header class="site-bar" :class="{ 'is-solid': scrolled }">
-      <div class="site-bar__inner">
-        <a href="#inicio" class="flex items-center gap-2.5" aria-label="NEXA inicio">
-          <img src="/nexa-logo.png" alt="" class="site-logo" aria-hidden="true" />
-          <span class="leading-none">
-            <span class="font-display block text-[1.5rem] font-extrabold tracking-tight">NEXA</span>
-            <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8a7e]">IA para tu negocio</span>
-          </span>
-        </a>
-
-        <nav class="hidden items-center gap-8 text-sm font-semibold lg:flex">
-          <a v-for="item in menuItems" :key="item.label" :href="item.href" class="nav-link">{{ item.label }}</a>
-        </nav>
-
-        <div class="flex items-center gap-3">
-          <NuxtLink to="/login" class="hidden text-sm font-semibold text-[#1f2d23] hover:text-primary-600 sm:inline-flex sm:items-center sm:gap-2">
-            <i class="pi pi-sign-in" />Iniciar sesión
-          </NuxtLink>
-          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !rounded-full !border-0 !bg-primary-500 !px-5 !py-2.5 !font-bold !text-white" />
-          <Button icon="pi pi-bars" text rounded class="!text-primary-700 lg:!hidden" aria-label="Abrir menú" />
-        </div>
-      </div>
-    </header>
-
     <!-- Hero -->
     <section class="mx-auto w-[min(1240px,calc(100%-32px))] pt-6">
       <div class="hero2">
@@ -262,54 +230,6 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 </template>
 
 <style scoped>
-/* ---- Top bar ---- */
-.topbar {
-  background: var(--night);
-}
-.topbar__inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: min(1240px, calc(100% - 32px));
-  margin: 0 auto;
-  height: 40px;
-}
-.topbar__social {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 8px;
-  color: #bfeac8;
-  font-size: 0.85rem;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-.topbar__social:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-}
-
-/* ---- Header ---- */
-.site-bar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: #fff;
-  border-bottom: 1px solid #eef1ee;
-  transition: box-shadow 0.3s ease;
-}
-.site-bar.is-solid {
-  box-shadow: 0 6px 24px rgba(12, 31, 18, 0.07);
-}
-.site-bar__inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: min(1240px, calc(100% - 32px));
-  height: 76px;
-  margin: 0 auto;
-}
 .site-logo {
   width: 42px;
   height: 42px;
