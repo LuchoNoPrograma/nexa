@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import Swal from 'sweetalert2'
-import 'sweetalert2/dist/sweetalert2.min.css'
-
 type Product = {
   id: string
   name: string
@@ -14,6 +11,14 @@ type Product = {
 
 type CartLine = Product & {
   quantity: number
+}
+type CartFlyFeedback = {
+  id: number
+  name: string
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
 }
 
 type SaleMode = 'venta' | 'cotizacion'
@@ -58,6 +63,7 @@ const includeShipping = ref(false)
 const receivedAmount = ref<number | null>(null)
 const customerSearch = ref('')
 const checkoutScroll = ref<HTMLElement | null>(null)
+const cartPanelEl = ref<HTMLElement | null>(null)
 const configuredDiscountSelected = ref(false)
 const manualDiscountEnabled = ref(false)
 const manualDiscountMode = ref<DiscountMode>('amount')
@@ -66,6 +72,15 @@ const appliedDiscountLabel = ref('')
 const lastReceipt = ref<SaleReceipt | null>(null)
 const products = ref<Product[]>([])
 const cart = ref<CartLine[]>([])
+const recentAddedProductId = ref('')
+const cartLineFeedback = ref<{ id: number, productId: string, label: string } | null>(null)
+const cartPulse = ref(false)
+const cartFlyFeedback = ref<CartFlyFeedback | null>(null)
+let cartPulseTimer: ReturnType<typeof window.setTimeout> | null = null
+let recentAddedTimer: ReturnType<typeof window.setTimeout> | null = null
+let cartFlyTimer: ReturnType<typeof window.setTimeout> | null = null
+let cartLineFeedbackId = 0
+let cartFlyId = 0
 const paymentOptions: Array<{ id: PaymentMethod, icon: string, label: string, detail: string }> = [
   { id: 'efectivo', icon: 'pi pi-money-bill', label: 'Efectivo', detail: 'Bolivianos en mano' },
   { id: 'qr', icon: 'pi pi-mobile', label: 'QR / Transferencia', detail: 'Mostrá el QR al cliente' },
@@ -147,22 +162,21 @@ const discountPreviewAmount = computed(() => {
   return 0
 })
 const discountPreviewTotal = computed(() => Math.max(subtotal.value - discountPreviewAmount.value, 0))
-const cartToast = Swal.mixin({
-  toast: true,
-  position: 'bottom-end',
-  showConfirmButton: false,
-  showCloseButton: true,
-  timer: 2600,
-  timerProgressBar: true,
-  customClass: {
-    popup: 'nexa-cart-toast',
-    htmlContainer: 'nexa-cart-toast__body',
-    closeButton: 'nexa-cart-toast__close',
-    timerProgressBar: 'nexa-cart-toast__progress',
-  },
-})
-
 onMounted(loadProducts)
+
+onBeforeUnmount(() => {
+  if (cartPulseTimer) {
+    window.clearTimeout(cartPulseTimer)
+  }
+
+  if (recentAddedTimer) {
+    window.clearTimeout(recentAddedTimer)
+  }
+
+  if (cartFlyTimer) {
+    window.clearTimeout(cartFlyTimer)
+  }
+})
 
 watch(splitPayment, (enabled) => {
   if (enabled) {
@@ -191,18 +205,18 @@ watch(secondPaymentMethod, () => {
   }
 })
 
-function addProduct(product: Product) {
+function addProduct(product: Product, event?: Event) {
   const line = cart.value.find((current) => current.id === product.id)
 
   if (line) {
     line.quantity += 1
-    showAddedToast(line)
+    showCartFeedback(line, '+1 agregado', event)
     return
   }
 
   const newLine = { ...product, quantity: 1 }
-  cart.value.push(newLine)
-  showAddedToast(newLine)
+  cart.value.unshift(newLine)
+  showCartFeedback(newLine, 'Nuevo en carrito', event)
 }
 
 function decreaseProduct(productId: string) {
@@ -391,27 +405,27 @@ function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false) {
   <style>
     @page { size: 80mm auto; margin: 4mm; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #fff; color: #020617; font-family: Arial, sans-serif; font-size: 10px; }
+    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
     .ticket { width: 72mm; margin: 0 auto; padding: 2mm 0; }
-    header { text-align: center; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; }
+    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 5px; }
     h1 { margin: 0; font-size: 14px; font-weight: 900; }
     header p { margin: 2px 0 0; font-size: 9px; }
-    .doc { margin: 6px 0; padding: 5px; border: 1px solid #cbd5e1; text-align: center; }
+    .doc { margin: 6px 0; padding: 5px; border: 1px solid #000; text-align: center; }
     .doc span { display: block; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
     .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, monospace; }
     .meta div, .summary div, .payment div, .item-main { display: flex; justify-content: space-between; gap: 8px; }
-    .section-title { display: flex; align-items: center; gap: 8px; margin: 7px 0 3px; color: #334155; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
-    .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #cbd5e1; }
-    .item { padding: 4px 0; border-bottom: 1px dashed #e2e8f0; }
+    .section-title { display: flex; align-items: center; gap: 8px; margin: 7px 0 3px; color: #000; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
+    .item { padding: 4px 0; border-bottom: 1px dashed #000; }
     .item strong, .summary strong { font-weight: 900; }
     .item b, .summary b, .payment b { font: 900 10px ui-monospace, monospace; white-space: nowrap; }
-    .item-meta, .meta, .payment, small { color: #475569; }
-    ul { margin: 2px 0 0 8px; padding-left: 8px; color: #475569; }
-    .total { margin-top: 6px; padding-top: 6px; border-top: 2px solid #020617; display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 900; }
+    .item-meta, .meta, .payment, small { color: #111; }
+    ul { margin: 2px 0 0 8px; padding-left: 8px; color: #111; }
+    .total { margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 900; }
     .total b { font: 900 13px ui-monospace, monospace; }
-    footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #cbd5e1; text-align: center; color: #334155; font-size: 9px; }
-    footer strong { display: block; margin-top: 3px; color: #2563eb; }
-    @media screen { body { background: #e5e7eb; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(15,23,42,.18); } }
+    footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 9px; }
+    footer strong { display: block; margin-top: 3px; color: #000; }
+    @media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }
   </style>
 </head>
 <body>
@@ -529,7 +543,7 @@ function handleProductCardKeydown(event: KeyboardEvent, product: Product) {
   }
 
   event.preventDefault()
-  addProduct(product)
+  addProduct(product, event)
 }
 
 function productKindLabel(product: Product) {
@@ -580,24 +594,60 @@ async function loadProducts() {
   products.value = response.products
 }
 
-function showAddedToast(line: CartLine) {
-  void cartToast.fire({
-    html: `
-      <div class="nexa-cart-toast__content">
-        <span class="nexa-cart-toast__icon">
-          <i class="pi pi-check" aria-hidden="true"></i>
-        </span>
-        <div class="nexa-cart-toast__copy">
-          <span class="nexa-cart-toast__eyebrow">
-            <i class="pi pi-shopping-cart" aria-hidden="true"></i>
-            Agregado al carrito
-          </span>
-          <strong>${escapeHtml(line.name)}</strong>
-          <span>Bs ${money(line.price)}</span>
-        </div>
-      </div>
-    `,
-  })
+function showCartFeedback(line: CartLine, label: string, event?: Event) {
+  cartLineFeedbackId += 1
+  recentAddedProductId.value = line.id
+  cartLineFeedback.value = { id: cartLineFeedbackId, productId: line.id, label }
+  cartPulse.value = true
+
+  if (recentAddedTimer) {
+    window.clearTimeout(recentAddedTimer)
+  }
+
+  if (cartPulseTimer) {
+    window.clearTimeout(cartPulseTimer)
+  }
+
+  recentAddedTimer = window.setTimeout(() => {
+    recentAddedProductId.value = ''
+    cartLineFeedback.value = null
+  }, 1200)
+
+  cartPulseTimer = window.setTimeout(() => {
+    cartPulse.value = false
+  }, 1200)
+
+  const source = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  const target = cartPanelEl.value?.querySelector('.cart-header') ?? cartPanelEl.value
+
+  if (!source || !(target instanceof HTMLElement) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return
+  }
+
+  if (cartPanelEl.value?.contains(source)) {
+    return
+  }
+
+  const sourceRect = source.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+
+  cartFlyId += 1
+  cartFlyFeedback.value = {
+    id: cartFlyId,
+    name: line.name,
+    fromX: sourceRect.left + Math.min(sourceRect.width / 2, 58),
+    fromY: sourceRect.top + Math.min(sourceRect.height / 2, 52),
+    toX: targetRect.left + 34,
+    toY: targetRect.top + targetRect.height / 2,
+  }
+
+  if (cartFlyTimer) {
+    window.clearTimeout(cartFlyTimer)
+  }
+
+  cartFlyTimer = window.setTimeout(() => {
+    cartFlyFeedback.value = null
+  }, 1200)
 }
 
 </script>
@@ -659,7 +709,8 @@ function showAddedToast(line: CartLine) {
             role="button"
             tabindex="0"
             class="product-card"
-            @click="addProduct(product)"
+            :class="{ 'is-recently-added': recentAddedProductId === product.id }"
+            @click="addProduct(product, $event)"
             @keydown="handleProductCardKeydown($event, product)"
           >
             <span class="product-card__icon" :class="{ 'is-combo': product.kind === 'combo' }">
@@ -721,7 +772,7 @@ function showAddedToast(line: CartLine) {
               icon="pi pi-plus"
               label="Agregar"
               size="small"
-              @click="addProduct(product)"
+              @click="addProduct(product, $event)"
             />
           </article>
         </section>
@@ -749,7 +800,7 @@ function showAddedToast(line: CartLine) {
       </section>
     </section>
 
-    <aside class="cart-panel">
+    <aside ref="cartPanelEl" class="cart-panel" :class="{ 'is-pulsing': cartPulse }">
       <header class="cart-header">
         <div class="flex gap-1 items-center">
           <i class="pi pi-shopping-cart" aria-hidden="true" />
@@ -759,7 +810,12 @@ function showAddedToast(line: CartLine) {
       </header>
 
       <section v-if="cart.length" class="cart-lines" aria-label="Productos en carrito">
-        <article v-for="line in cart" :key="line.id" class="cart-line" :class="{ 'is-combo': line.kind === 'combo' }">
+        <article
+          v-for="line in cart"
+          :key="line.id"
+          class="cart-line"
+          :class="{ 'is-combo': line.kind === 'combo', 'is-recently-added': recentAddedProductId === line.id }"
+        >
           <header class="cart-line__header">
             <strong>{{ line.name }}</strong>
             <span v-if="line.kind === 'combo'" class="cart-line__tag">
@@ -776,14 +832,30 @@ function showAddedToast(line: CartLine) {
           </div>
 
           <div class="cart-line__actions">
-            <div class="quantity-control">
-              <button type="button" :aria-label="`Restar ${line.name}`" @click="decreaseProduct(line.id)">
-                <i class="pi pi-minus" aria-hidden="true" />
-              </button>
-              <span># {{ line.quantity }}</span>
-              <button type="button" :aria-label="`Sumar ${line.name}`" @click="addProduct(line)">
-                <i class="pi pi-plus" aria-hidden="true" />
-              </button>
+            <div class="quantity-feedback">
+              <div class="quantity-control">
+                <button type="button" :aria-label="`Restar ${line.name}`" @click="decreaseProduct(line.id)">
+                  <i class="pi pi-minus" aria-hidden="true" />
+                </button>
+                <span
+                  :key="cartLineFeedback?.productId === line.id ? cartLineFeedback.id : `qty-${line.id}`"
+                  :class="{ 'is-updated': cartLineFeedback?.productId === line.id }"
+                >
+                  # {{ line.quantity }}
+                </span>
+                <button type="button" :aria-label="`Sumar ${line.name}`" @click="addProduct(line, $event)">
+                  <i class="pi pi-plus" aria-hidden="true" />
+                </button>
+              </div>
+
+              <em
+                v-if="cartLineFeedback?.productId === line.id"
+                :key="cartLineFeedback.id"
+                class="cart-line__feedback"
+              >
+                <i class="pi pi-check" aria-hidden="true" />
+                {{ cartLineFeedback.label }}
+              </em>
             </div>
 
             <strong class="cart-line__subtotal">Bs {{ money(line.price * line.quantity) }}</strong>
@@ -851,6 +923,26 @@ function showAddedToast(line: CartLine) {
       </footer>
     </aside>
   </div>
+
+  <Transition name="cart-fly">
+    <div
+      v-if="cartFlyFeedback"
+      :key="cartFlyFeedback.id"
+      class="cart-fly-feedback"
+      :style="{
+        '--from-x': `${cartFlyFeedback.fromX}px`,
+        '--from-y': `${cartFlyFeedback.fromY}px`,
+        '--to-x': `${cartFlyFeedback.toX}px`,
+        '--to-y': `${cartFlyFeedback.toY}px`,
+      }"
+      aria-hidden="true"
+    >
+      <span>
+        <i class="pi pi-shopping-cart" aria-hidden="true" />
+        {{ cartFlyFeedback.name }}
+      </span>
+    </div>
+  </Transition>
 
   <Dialog
     v-model:visible="discountDialogOpen"
@@ -1200,24 +1292,29 @@ function showAddedToast(line: CartLine) {
     class="receipt-dialog"
   >
     <section v-if="lastReceipt" class="receipt-panel">
-      <aside class="receipt-actions">
-        <button type="button" aria-label="Cerrar comprobante" @click="receiptOpen = false">
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+      <button type="button" class="receipt-close" aria-label="Cerrar comprobante" title="Cerrar" @click="receiptOpen = false">
+        <i class="pi pi-times" aria-hidden="true" />
+      </button>
 
-        <div>
+      <aside class="receipt-actions">
+        <header class="receipt-actions__header">
           <span>
-            <i class="pi pi-check-circle" aria-hidden="true" />
+            <i class="pi pi-check" aria-hidden="true" />
             {{ lastReceipt.mode === 'venta' ? 'Venta registrada' : 'Cotización guardada' }}
           </span>
+        </header>
+
+        <div class="receipt-actions__summary">
           <small>{{ lastReceipt.mode === 'venta' ? 'Nota de venta' : 'Cotización' }}</small>
           <strong>{{ lastReceipt.number }}</strong>
           <b>Bs {{ money(lastReceipt.total) }}</b>
           <time>{{ receiptDate(lastReceipt.date) }}</time>
         </div>
 
-        <Button type="button" label="Descargar PDF" icon="pi pi-download" @click="downloadReceiptPdf" />
-        <Button type="button" label="Imprimir ticket" icon="pi pi-print" outlined @click="printReceipt" />
+        <div class="receipt-actions__buttons">
+          <Button type="button" label="Guardar / PDF" icon="pi pi-download" @click="downloadReceiptPdf" />
+          <Button type="button" label="Imprimir ticket" icon="pi pi-print" outlined @click="printReceipt" />
+        </div>
       </aside>
 
       <article class="thermal-ticket" aria-label="Comprobante de venta">
@@ -1503,7 +1600,7 @@ function showAddedToast(line: CartLine) {
 .checkout-header button:focus-visible,
 .product-info__header button:focus-visible,
 .cart-line__remove:focus-visible {
-  outline: 3px solid rgba(3, 191, 227, 0.28);
+  outline: 3px solid rgba(15, 158, 46, 0.25);
   outline-offset: 2px;
 }
 
@@ -1542,6 +1639,12 @@ function showAddedToast(line: CartLine) {
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
 }
 
+.product-card.is-recently-added {
+  animation: product-added-pop 1200ms ease both;
+  border-color: var(--primary-400);
+  box-shadow: 0 14px 28px rgba(15, 158, 46, 0.18);
+}
+
 .product-card__icon {
   display: grid;
   width: 44px;
@@ -1549,7 +1652,7 @@ function showAddedToast(line: CartLine) {
   place-items: center;
   border-radius: 8px;
   color: #ffffff;
-  background: linear-gradient(135deg, #bff5ff, #20bed5);
+  background: linear-gradient(135deg, var(--primary-200), var(--primary-500));
 }
 
 .product-card__icon.is-combo {
@@ -1575,10 +1678,10 @@ function showAddedToast(line: CartLine) {
   width: 24px;
   height: 24px;
   place-items: center;
-  border: 1px solid #19c7e4;
+  border: 1px solid var(--primary-300);
   border-radius: 7px;
-  color: #03a9ca;
-  background: #ecfbff;
+  color: var(--primary-600);
+  background: var(--primary-50);
   padding: 0;
   cursor: pointer;
 }
@@ -1685,8 +1788,8 @@ function showAddedToast(line: CartLine) {
   height: 30px;
   place-items: center;
   border-radius: 8px;
-  color: #0098bd;
-  background: #c8f8ff;
+  color: var(--primary-700);
+  background: var(--primary-100);
 }
 
 .product-row__icon.is-combo {
@@ -1718,7 +1821,7 @@ function showAddedToast(line: CartLine) {
   width: max-content;
   border: 0;
   padding: 0;
-  color: #008fb3;
+  color: var(--primary-600);
   background: transparent;
   font-size: 0.68rem;
   font-weight: 700;
@@ -1822,6 +1925,10 @@ function showAddedToast(line: CartLine) {
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
 }
 
+.cart-panel.is-pulsing {
+  animation: cart-panel-pulse 1200ms ease both;
+}
+
 .cart-header,
 .cart-summary__subtotal,
 .cart-summary__discount > div,
@@ -1857,6 +1964,11 @@ function showAddedToast(line: CartLine) {
   border-radius: 8px;
   background: #ffffff;
   overflow: visible;
+}
+
+.cart-line.is-recently-added {
+  animation: cart-line-added 1200ms ease both;
+  border-color: var(--primary-400);
 }
 
 .cart-line.is-combo {
@@ -1909,15 +2021,17 @@ function showAddedToast(line: CartLine) {
 }
 
 .cart-line__info {
-  display: grid;
-  gap: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
   padding-bottom: 9px;
   border-bottom: 1px solid #edf1f6;
 }
 
 .cart-line__info span {
-  width: max-content;
+  flex: 0 0 auto;
   max-width: 100%;
   padding: 4px 9px;
   border: 1px solid #dfe7f0;
@@ -1930,15 +2044,49 @@ function showAddedToast(line: CartLine) {
   letter-spacing: 0;
 }
 
+.cart-line__feedback {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 116px;
+  height: 24px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  padding: 0 8px;
+  border: 1px solid var(--primary-200);
+  border-radius: 999px;
+  color: var(--primary-700);
+  background: var(--primary-50);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: cart-feedback-chip 1200ms ease both;
+}
+
+.cart-line__feedback i {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+}
+
 .cart-line__actions {
   display: grid;
-  grid-template-columns: auto 1fr 30px;
+  grid-template-columns: minmax(0, 1fr) auto 30px;
   align-items: center;
   gap: 10px;
 }
 
+.quantity-feedback {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
 .quantity-control {
   display: inline-grid;
+  flex: 0 0 auto;
   grid-template-columns: 28px minmax(34px, auto) 28px;
   align-items: center;
   overflow: hidden;
@@ -1952,12 +2100,16 @@ function showAddedToast(line: CartLine) {
   min-width: 34px;
   height: 28px;
   place-items: center;
-  color: #008fb3;
-  background: #eafaff;
+  color: var(--primary-700);
+  background: var(--primary-50);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.78rem;
   font-weight: 900;
   letter-spacing: 0;
+}
+
+.quantity-control span.is-updated {
+  animation: quantity-updated 1200ms ease both;
 }
 
 .quantity-control button {
@@ -2194,7 +2346,7 @@ function showAddedToast(line: CartLine) {
 
 :global(.receipt-dialog .p-dialog-content) {
   padding: 0 !important;
-  background: #f8fafc !important;
+  background: #f4f6f5 !important;
 }
 
 :global(.product-info-dialog .p-dialog-content) {
@@ -2243,14 +2395,22 @@ function showAddedToast(line: CartLine) {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 0;
-  color: #64748b;
-  background: transparent;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  color: #dc2626;
+  background: #fff1f2;
   cursor: pointer;
 }
 
 .discount-header button i {
-  color: #64748b;
+  color: currentColor;
+}
+
+.discount-header button:hover,
+.checkout-header button:hover,
+.product-info__header button:hover {
+  color: #ffffff;
+  background: #dc2626;
 }
 
 .discount-content {
@@ -2422,59 +2582,73 @@ function showAddedToast(line: CartLine) {
 }
 
 .receipt-panel {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  min-height: min(640px, calc(100dvh - 32px));
-}
-
-.receipt-actions {
   position: relative;
   display: grid;
-  align-content: start;
-  gap: 12px;
-  padding: 24px 20px;
-  color: #ffffff;
-  background: linear-gradient(160deg, #1d4ed8 0%, #2f5bd7 100%);
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-height: min(620px, calc(100dvh - 32px));
+  background: #f4f6f5;
 }
 
-.receipt-actions > button {
+.receipt-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid #fecaca;
   border-radius: 10px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
+  color: #dc2626;
+  background: #fff1f2;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.12);
   cursor: pointer;
 }
 
-.receipt-actions div {
-  display: grid;
-  gap: 7px;
-  padding-right: 42px;
+.receipt-close:hover {
+  color: #ffffff;
+  background: #dc2626;
 }
 
-.receipt-actions span {
+.receipt-actions {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 18px;
+  color: #0c1f12;
+  background: #ffffff;
+  border-right: 1px solid #d9e2dc;
+}
+
+.receipt-actions__header > span {
   display: inline-flex;
   width: max-content;
+  max-width: 100%;
   align-items: center;
-  gap: 6px;
-  padding: 4px 9px;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--primary-200);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 0.68rem;
+  color: var(--primary-700);
+  background: var(--primary-50);
+  font-size: 0.66rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+.receipt-actions__summary {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #d9e2dc;
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+
 .receipt-actions small {
-  margin-top: 14px;
-  color: #dbeafe;
+  color: #5a6b5f;
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2485,34 +2659,41 @@ function showAddedToast(line: CartLine) {
 .receipt-actions b,
 .receipt-actions time {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
 }
 
 .receipt-actions strong {
+  color: #0c1f12;
   font-size: 1.1rem;
-  letter-spacing: 0.03em;
 }
 
 .receipt-actions b {
+  color: var(--primary-700);
   font-size: 2.1rem;
   line-height: 1;
 }
 
 .receipt-actions time {
-  color: #dbeafe;
+  color: #5a6b5f;
   font-size: 0.78rem;
+}
+
+.receipt-actions__buttons {
+  display: grid;
+  gap: 10px;
 }
 
 .receipt-actions :deep(.p-button) {
   width: 100%;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 8px;
   font-weight: 900;
 }
 
 .receipt-actions :deep(.p-button-outlined) {
-  border-color: rgba(255, 255, 255, 0.55);
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
+  border-color: #0c1f12;
+  color: #0c1f12;
+  background: #ffffff;
 }
 
 .thermal-ticket {
@@ -2520,16 +2701,16 @@ function showAddedToast(line: CartLine) {
   min-height: 560px;
   margin: 18px auto;
   padding: 14px 16px;
-  border: 1px solid #e2e8f0;
-  background: #fffefb;
-  color: #020617;
+  border: 1px solid #111111;
+  background: #ffffff;
+  color: #000000;
   font-size: 10px;
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
 }
 
 .thermal-ticket header {
   padding-bottom: 7px;
-  border-bottom: 1px solid #cbd5e1;
+  border-bottom: 1px solid #000000;
   text-align: center;
 }
 
@@ -2541,22 +2722,22 @@ function showAddedToast(line: CartLine) {
 
 .thermal-ticket p {
   margin: 2px 0 0;
-  color: #334155;
+  color: #000000;
   font-size: 9px;
 }
 
 .thermal-ticket__doc {
   margin: 8px 0;
   padding: 6px;
-  border: 1px solid #bfdbfe;
-  border-radius: 5px;
-  background: #eff6ff;
+  border: 1px solid #000000;
+  border-radius: 0;
+  background: #ffffff;
   text-align: center;
 }
 
 .thermal-ticket__doc span,
 .thermal-ticket__title {
-  color: #334155;
+  color: #000000;
   font-size: 8px;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -2566,13 +2747,13 @@ function showAddedToast(line: CartLine) {
 .thermal-ticket__doc strong {
   display: block;
   margin-top: 2px;
-  color: #1d4ed8;
+  color: #000000;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
 }
 
 .thermal-ticket__doc small {
-  color: #64748b;
+  color: #000000;
 }
 
 .thermal-ticket__meta {
@@ -2602,12 +2783,12 @@ function showAddedToast(line: CartLine) {
   content: "";
   height: 1px;
   flex: 1;
-  background: #cbd5e1;
+  background: #000000;
 }
 
 .thermal-ticket__item {
   padding: 5px 0;
-  border-bottom: 1px dashed #e2e8f0;
+  border-bottom: 1px dashed #000000;
 }
 
 .thermal-ticket__item strong,
@@ -2629,13 +2810,13 @@ function showAddedToast(line: CartLine) {
 .thermal-ticket__payment span,
 .thermal-ticket__summary span,
 .thermal-ticket__summary small {
-  color: #475569;
+  color: #000000;
 }
 
 .thermal-ticket__item ul {
   margin: 2px 0 0 8px;
   padding-left: 8px;
-  color: #64748b;
+  color: #000000;
 }
 
 .thermal-ticket__summary,
@@ -2646,14 +2827,14 @@ function showAddedToast(line: CartLine) {
 
 .thermal-ticket__summary .is-discount,
 .thermal-ticket__summary .is-discount span {
-  color: #dc2626;
+  color: #000000;
 }
 
 .thermal-ticket__total {
   align-items: baseline;
   margin-top: 7px;
   padding-top: 7px;
-  border-top: 2px solid #020617;
+  border-top: 2px solid #000000;
   font-size: 13px;
   font-weight: 900;
   text-transform: uppercase;
@@ -2662,15 +2843,15 @@ function showAddedToast(line: CartLine) {
 .thermal-ticket footer {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid #cbd5e1;
-  color: #334155;
+  border-top: 1px solid #000000;
+  color: #000000;
   text-align: center;
 }
 
 .thermal-ticket footer strong {
   display: block;
   margin-top: 3px;
-  color: #2563eb;
+  color: #000000;
 }
 
 .checkout-panel {
@@ -2719,10 +2900,10 @@ function showAddedToast(line: CartLine) {
   height: 34px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #fecaca;
   border-radius: 10px;
-  color: #475569;
-  background: #ffffff;
+  color: #dc2626;
+  background: #fff1f2;
   cursor: pointer;
 }
 
@@ -3406,10 +3587,10 @@ function showAddedToast(line: CartLine) {
   gap: 6px;
   min-height: 21px;
   padding: 0 9px;
-  border: 1px solid #19c7e4;
+  border: 1px solid var(--primary-300);
   border-radius: 999px;
-  color: #0098bd;
-  background: #ecfbff;
+  color: var(--primary-700);
+  background: var(--primary-50);
   font-size: 0.66rem;
   font-weight: 900;
 }
@@ -3439,10 +3620,10 @@ function showAddedToast(line: CartLine) {
   height: 34px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #dbe5ef;
+  border: 1px solid #fecaca;
   border-radius: 12px;
-  color: #64748b;
-  background: #ffffff;
+  color: #dc2626;
+  background: #fff1f2;
   cursor: pointer;
 }
 
@@ -3457,10 +3638,10 @@ function showAddedToast(line: CartLine) {
   display: grid;
   min-height: 132px;
   place-items: center;
-  border: 1px solid #d7e8ee;
+  border: 1px solid var(--primary-100);
   border-radius: 12px;
-  color: #1f2937;
-  background: #f2feff;
+  color: var(--primary-700);
+  background: var(--primary-50);
   font-size: 3rem;
 }
 
@@ -3496,7 +3677,7 @@ function showAddedToast(line: CartLine) {
 }
 
 .metric-card.is-price {
-  background: #eafff6;
+  background: var(--primary-50);
 }
 
 .metric-card.is-stock {
@@ -3505,11 +3686,11 @@ function showAddedToast(line: CartLine) {
 
 .metric-card.is-mode {
   grid-column: 1 / 2;
-  background: #eaffff;
+  background: var(--primary-50);
 }
 
 .metric-card span {
-  color: #008fb3;
+  color: var(--primary-700);
   font-size: 0.68rem;
   font-weight: 900;
 }
@@ -3526,7 +3707,7 @@ function showAddedToast(line: CartLine) {
 }
 
 .metric-card.is-mode strong {
-  color: #008fb3;
+  color: var(--primary-700);
   font-size: 1rem;
 }
 
@@ -3583,95 +3764,144 @@ function showAddedToast(line: CartLine) {
   font-weight: 900;
 }
 
-:global(.swal2-popup.nexa-cart-toast) {
-  width: min(320px, calc(100vw - 32px)) !important;
-  min-height: 86px !important;
-  padding: 14px 44px 14px 14px !important;
-  border: 2px solid #03bfe3 !important;
-  border-radius: 14px !important;
-  background: #ffffff !important;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18), 6px 8px 0 rgba(12, 192, 166, 0.24) !important;
-  color: #071327 !important;
-  will-change: transform, opacity !important;
+.cart-fly-feedback {
+  position: fixed;
+  z-index: 1200;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  transform: translate3d(var(--from-x), var(--from-y), 0) translate(-50%, -50%);
 }
 
-:global(.nexa-cart-toast__body) {
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-:global(.nexa-cart-toast__content) {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-}
-
-:global(.nexa-cart-toast__icon) {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 3px solid #99f6d8;
-  border-radius: 999px;
-  color: var(--primary-500);
-  background: #eafff6;
-  font-size: 1.05rem;
-}
-
-:global(.nexa-cart-toast__copy) {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-:global(.nexa-cart-toast__eyebrow) {
+.cart-fly-feedback span {
   display: inline-flex;
+  max-width: 178px;
+  height: 34px;
   align-items: center;
   gap: 7px;
-  color: #00a7d0;
-  font-size: 0.62rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-:global(.nexa-cart-toast__copy strong) {
   overflow: hidden;
-  color: #071327;
-  font-size: 0.86rem;
+  padding: 0 11px;
+  border: 1px solid var(--primary-400);
+  border-radius: 999px;
+  color: var(--primary-900);
+  background: var(--primary-50);
+  box-shadow: 0 14px 30px rgba(15, 158, 46, 0.2);
+  font-size: 0.72rem;
   font-weight: 900;
-  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:global(.nexa-cart-toast__copy > span:last-child) {
-  color: var(--primary-500);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 0.82rem;
-  font-weight: 900;
+.cart-fly-feedback i {
+  color: var(--primary-600);
 }
 
-:global(.nexa-cart-toast__close) {
-  top: 12px !important;
-  right: 12px !important;
-  width: 28px !important;
-  height: 28px !important;
-  color: #64748b !important;
-  font-size: 1.7rem !important;
+.cart-fly-enter-active {
+  animation: fly-to-cart 1200ms cubic-bezier(0.18, 0.82, 0.22, 1) forwards;
 }
 
-:global(.nexa-cart-toast__progress) {
-  height: 4px !important;
-  border-radius: 999px !important;
-  background: #07bfe0 !important;
+.cart-fly-enter-active span {
+  animation: fly-to-cart-scale 1200ms ease forwards;
 }
 
-:global(.swal2-container.swal2-bottom-end) {
-  padding: 0 28px 22px !important;
+@keyframes fly-to-cart {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--from-x), var(--from-y), 0) translate(-50%, -50%) scale(0.76);
+  }
+
+  16% {
+    opacity: 1;
+  }
+
+  58% {
+    transform: translate3d(var(--from-x), calc(var(--from-y) - 42px), 0) translate(-50%, -50%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--to-x), var(--to-y), 0) translate(-50%, -50%) scale(0.46);
+  }
+}
+
+@keyframes fly-to-cart-scale {
+  0% {
+    filter: saturate(1);
+  }
+
+  72% {
+    filter: saturate(1.18);
+  }
+
+  100% {
+    filter: saturate(1);
+  }
+}
+
+@keyframes cart-panel-pulse {
+  0%,
+  100% {
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
+  }
+
+  38% {
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1), 0 0 0 4px rgba(0, 166, 100, 0.16);
+  }
+}
+
+@keyframes product-added-pop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  45% {
+    transform: translateY(-2px) scale(1.015);
+  }
+}
+
+@keyframes cart-line-added {
+  0% {
+    background: var(--primary-50);
+    transform: translateX(5px);
+  }
+
+  100% {
+    background: #ffffff;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cart-feedback-chip {
+  0% {
+    opacity: 0;
+    transform: translateY(3px) scale(0.96);
+  }
+
+  18%,
+  76% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.98);
+  }
+}
+
+@keyframes quantity-updated {
+  0%,
+  100% {
+    color: var(--primary-700);
+    background: var(--primary-50);
+  }
+
+  42% {
+    color: #ffffff;
+    background: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(15, 158, 46, 0.14);
+  }
 }
 
 @media (max-width: 1120px) {
@@ -3741,6 +3971,8 @@ function showAddedToast(line: CartLine) {
 
   .receipt-actions {
     min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #d9e2dc;
   }
 
   .thermal-ticket {
@@ -3773,7 +4005,7 @@ function showAddedToast(line: CartLine) {
   }
 
   .cart-line__actions {
-    grid-template-columns: 1fr 1fr 32px;
+    grid-template-columns: minmax(0, 1fr) auto 32px;
   }
 
   .product-info__metrics {
