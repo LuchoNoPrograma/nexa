@@ -19,7 +19,7 @@ Representa el perfil interno de una cuenta autenticada. La autenticación la man
 
 Campos:
 
-- `id uuid pk` referencia a `auth.users(id)`
+- `id uuid pk`
 - `email text`
 - `nombre text`
 - `telefono text`
@@ -264,15 +264,16 @@ Campos:
 El carrito que se ve en la interfaz del POS normalmente no necesita tabla propia para el MVP. Mientras el usuario está vendiendo, el carrito puede vivir como estado del frontend. Cuando se cobra, se persiste como:
 
 - `venta`: cabecera de la operación.
-- `venta_detalle`: líneas vendidas.
-- `caja_movimiento`: ingreso de dinero.
-- `stock_movimiento`: salida de inventario.
+- `venta_item`: líneas vendidas.
+- `pago`: uno o varios cobros asociados a la venta.
+- `caja_movimiento`: impacto confirmado en caja o cuenta.
+- `inventario_movimiento`: salida de inventario cuando aplica.
 
 Solo convendría una tabla `carrito` si se quisieran guardar carritos abandonados, ventas suspendidas, sincronización offline o múltiples cajas trabajando sobre borradores compartidos. Eso queda fuera del MVP.
 
 ### `venta`
 
-Venta pagada, anulada o cotización. No se crea tabla separada para cotizaciones.
+Venta comercial. No es lo mismo que ingreso: una venta puede estar pendiente, parcialmente pagada o pagada con varios pagos.
 
 Campos:
 
@@ -280,34 +281,66 @@ Campos:
 - `tienda_id uuid not null`
 - `cliente_id uuid null`
 - `numero text`
-- `estado text default 'pagada' check ('cotizacion', 'pagada', 'anulada')`
+- `caja_sesion_id uuid null`
+- `canal text default 'pos' check ('pos', 'catalogo_whatsapp', 'manual')`
+- `estado text default 'pendiente' check ('cotizacion', 'pendiente', 'parcial', 'pagada', 'anulada')`
 - `fecha timestamptz default now()`
 - `subtotal numeric(12,2) default 0`
 - `descuento numeric(12,2) default 0`
 - `total numeric(12,2) default 0`
-- `metodo_pago text check ('efectivo', 'qr', 'transferencia', 'tarjeta', 'otro')`
 - `notas text`
 - `created_at timestamptz default now()`
 - `updated_at timestamptz default now()`
 
 Restricción: `unique (tienda_id, numero)` cuando `numero is not null`.
 
-### `venta_detalle`
+### `venta_item`
 
-Línea de detalle de una venta. Reemplaza el término inglés “item”. Cada fila representa un producto, servicio o combo agregado al ticket.
+Línea de una venta. Cada fila congela el producto, servicio o combo vendido, con precio y costo del momento para que el histórico no cambie cuando se edite el catálogo.
 
 Campos:
 
 - `id uuid pk`
 - `venta_id uuid not null`
 - `producto_id uuid null`
+- `producto_variante_id uuid null`
 - `nombre_producto text not null`
+- `tipo_producto text check ('producto', 'servicio', 'combo')`
 - `cantidad numeric(12,2) not null default 1`
 - `costo_unitario numeric(12,2) default 0`
 - `precio_unitario numeric(12,2) not null default 0`
 - `descuento numeric(12,2) default 0`
 - `subtotal numeric(12,2) not null default 0`
 - `created_at timestamptz default now()`
+
+### `pago`
+
+Pago recibido o realizado. Permite cuotas, pagos mixtos y pagos pendientes. Una venta de Bs. 1.000 puede tener tres pagos: efectivo, QR y transferencia.
+
+Campos:
+
+- `id uuid pk`
+- `tienda_id uuid not null`
+- `venta_id uuid null`
+- `compra_id uuid null`
+- `caja_sesion_id uuid null`
+- `cliente_id uuid null`
+- `proveedor_id uuid null`
+- `usuario_id uuid null`
+- `tipo text check ('ingreso', 'egreso')`
+- `metodo text check ('efectivo', 'qr', 'transferencia', 'tarjeta', 'otro')`
+- `estado text default 'confirmado' check ('pendiente', 'confirmado', 'anulado')`
+- `monto numeric(12,2) default 0`
+- `referencia text`
+- `fecha timestamptz default now()`
+- `fecha_vencimiento date`
+- `notas text`
+
+Regla operativa:
+
+- Pago confirmado de venta genera `caja_movimiento` tipo `ingreso`.
+- Pago confirmado de compra o gasto genera `caja_movimiento` tipo `egreso`.
+- Pago pendiente no afecta caja hasta confirmarse.
 
 ### `caja_sesion`
 
@@ -319,15 +352,22 @@ Campos:
 - `tienda_id uuid not null`
 - `usuario_id uuid null`
 - `estado text default 'abierta' check ('abierta', 'cerrada')`
-- `monto_inicial numeric(12,2) default 0`
-- `monto_final numeric(12,2)`
-- `monto_esperado numeric(12,2)`
+- `saldo_inicial numeric(12,2) default 0`
+- `saldo_esperado numeric(12,2) default 0`
+- `saldo_contado numeric(12,2)`
 - `diferencia numeric(12,2)`
 - `abierta_at timestamptz default now()`
 - `cerrada_at timestamptz`
 - `notas text`
 - `created_at timestamptz default now()`
 - `updated_at timestamptz default now()`
+
+Fórmula:
+
+```text
+saldo_esperado = saldo_inicial + ingresos_confirmados - egresos_confirmados
+diferencia = saldo_contado - saldo_esperado
+```
 
 ### `compra`
 
@@ -338,13 +378,19 @@ Campos:
 - `id uuid pk`
 - `tienda_id uuid not null`
 - `proveedor_id uuid null`
+- `usuario_id uuid null`
+- `numero text`
+- `estado text default 'recibida' check ('borrador', 'recibida', 'anulada')`
+- `estado_pago text default 'pendiente' check ('pendiente', 'parcial', 'pagada')`
+- `subtotal numeric(12,2) default 0`
+- `descuento numeric(12,2) default 0`
 - `fecha date default current_date`
 - `total numeric(12,2) default 0`
 - `notas text`
 - `created_at timestamptz default now()`
 - `updated_at timestamptz default now()`
 
-### `compra_detalle`
+### `compra_item`
 
 Línea de detalle de una compra. Cada fila representa un producto recibido y su costo al momento de la entrada.
 
@@ -353,6 +399,8 @@ Campos:
 - `id uuid pk`
 - `compra_id uuid not null`
 - `producto_id uuid null`
+- `producto_variante_id uuid null`
+- `nombre_producto text not null`
 - `cantidad numeric(12,2) not null default 1`
 - `costo_unitario numeric(12,2) not null default 0`
 - `subtotal numeric(12,2) not null default 0`
@@ -360,24 +408,51 @@ Campos:
 
 ### `caja_movimiento`
 
-Movimiento simple de caja. No cubre contabilidad completa.
+Movimiento simple de caja. No cubre contabilidad completa; sirve para turnos, ingresos, egresos, gastos y conciliación.
 
 Campos:
 
 - `id uuid pk`
 - `tienda_id uuid not null`
 - `caja_sesion_id uuid null`
+- `pago_id uuid null`
 - `venta_id uuid null`
+- `compra_id uuid null`
+- `usuario_id uuid null`
+- `proveedor_id uuid null`
+- `cliente_id uuid null`
 - `tipo text not null check ('ingreso', 'egreso')`
+- `categoria text default 'otro'`
 - `concepto text not null`
 - `monto numeric(12,2) not null default 0`
-- `metodo_pago text check ('efectivo', 'qr', 'transferencia', 'tarjeta', 'otro')`
+- `metodo text check ('efectivo', 'qr', 'transferencia', 'tarjeta', 'otro')`
+- `estado text default 'confirmado' check ('pendiente', 'confirmado', 'anulado')`
 - `fecha timestamptz default now()`
 - `created_at timestamptz default now()`
 
-### `stock_movimiento`
+### `inventario_ajuste`
 
-Kardex simple para ventas, compras y ajustes.
+Ajuste manual compatible con la pantalla actual de stock. Sirve para recuentos, daños, devoluciones y correcciones.
+
+Campos:
+
+- `id uuid pk`
+- `tienda_id uuid not null`
+- `producto_id uuid not null`
+- `producto_variante_id uuid null`
+- `usuario_id uuid null`
+- `tipo text check ('sumar', 'restar', 'fijar')`
+- `motivo text check ('compra_recibida', 'venta', 'producto_daniado', 'devolucion', 'recuento', 'traslado', 'otro')`
+- `sucursal text default 'Matriz'`
+- `cantidad numeric(12,2) default 0`
+- `stock_anterior numeric(12,2) default 0`
+- `stock_nuevo numeric(12,2) default 0`
+- `notas text`
+- `created_at timestamptz default now()`
+
+### `inventario_movimiento`
+
+Kardex simple para ventas, compras, devoluciones y ajustes. Es el histórico analítico de inventario.
 
 Campos:
 
@@ -385,10 +460,16 @@ Campos:
 - `tienda_id uuid not null`
 - `producto_id uuid not null`
 - `tipo text not null check ('entrada', 'salida', 'ajuste')`
-- `origen text not null check ('venta', 'compra', 'manual')`
-- `referencia_id uuid`
+- `producto_variante_id uuid null`
+- `usuario_id uuid null`
+- `venta_id uuid null`
+- `compra_id uuid null`
+- `ajuste_id uuid null`
+- `origen text not null check ('venta', 'compra', 'manual', 'devolucion')`
 - `cantidad numeric(12,2) not null`
-- `stock_resultante numeric(12,2)`
+- `stock_anterior numeric(12,2)`
+- `stock_nuevo numeric(12,2)`
+- `costo_unitario numeric(12,2)`
 - `notas text`
 - `created_at timestamptz default now()`
 
@@ -504,6 +585,20 @@ El catálogo público no requiere una tabla separada al inicio. Se resuelve con:
 
 Ruta sugerida: `/tienda/[slug]`.
 
+## Reportes de ingresos y gastos
+
+Los submódulos visuales de ingresos y gastos no necesitan tablas principales propias en el MVP. Se calculan desde operaciones reales:
+
+- Ingresos confirmados: `pago.tipo = 'ingreso' and pago.estado = 'confirmado'` más `caja_movimiento.tipo = 'ingreso'` para registros manuales sin venta.
+- Cobros pendientes: `pago.tipo = 'ingreso' and pago.estado = 'pendiente'` o ventas con `estado in ('pendiente', 'parcial')`.
+- Gastos confirmados: `caja_movimiento.tipo = 'egreso' and estado = 'confirmado'`.
+- Pagos por pagar: `pago.tipo = 'egreso' and pago.estado = 'pendiente'` o compras con `estado_pago in ('pendiente', 'parcial')`.
+- Top clientes: ventas/pagos agrupados por `cliente_id`.
+- Top proveedores: compras, pagos o egresos agrupados por `proveedor_id`.
+- Categorías de gasto: `caja_movimiento.categoria`.
+
+Regla de diseño: `venta.total` documenta la operación comercial, `pago.monto` documenta el cobro o pago, y `caja_movimiento.monto` documenta el impacto en caja/cuenta. Los reportes se calculan desde esas fuentes, no desde tablas duplicadas de `ingreso` o `gasto`.
+
 ## RLS recomendado
 
 Función base para pertenencia a tienda:
@@ -577,11 +672,14 @@ $$;
 - `compra(tienda_id, fecha desc)`
 - `caja_sesion(tienda_id, estado, abierta_at desc)`
 - `caja_movimiento(tienda_id, fecha desc)`
-- `stock_movimiento(tienda_id, producto_id, created_at desc)`
+- `inventario_ajuste(tienda_id, created_at desc)`
+- `inventario_ajuste(producto_id, created_at desc)`
+- `inventario_movimiento(tienda_id, created_at desc)`
+- `inventario_movimiento(producto_id, created_at desc)`
 - `kenchita_conversacion(tienda_id, estado, last_message_at desc, created_at desc)`
 - `kenchita_mensaje(conversacion_id, created_at)`
 - `kenchita_chat_config(tienda_id, activo)`
 
 ## Resumen técnico
 
-El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera venta, compra, stock y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_detalle` al cobrar. La calculadora y Kenchita IA tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en detalle de venta/compra para análisis posterior.
+El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera ventas, pagos, compras, movimientos de inventario y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_item` al cobrar. Los mockups de ingresos y gastos son reportes calculados desde `pago` y `caja_movimiento`, no módulos contables duplicados. La calculadora y Kenchita IA tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en líneas de venta/compra para análisis posterior.
