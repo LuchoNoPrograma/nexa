@@ -6,7 +6,9 @@ const { Pool } = pg
 
 const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/impulsa'
 const isProduction = process.env.NODE_ENV === 'production'
-const hasAdminCredentials = Boolean(process.env.IMPULSA_SUPER_ADMIN_EMAIL && process.env.IMPULSA_SUPER_ADMIN_PASSWORD)
+const superAdminEmail = process.env.IMPULSA_SUPER_ADMIN_EMAIL ?? process.env.NEXA_SUPER_ADMIN_EMAIL
+const superAdminPassword = process.env.IMPULSA_SUPER_ADMIN_PASSWORD ?? process.env.NEXA_SUPER_ADMIN_PASSWORD
+const hasAdminCredentials = Boolean(superAdminEmail && superAdminPassword)
 const seedDemo = isProduction ? hasAdminCredentials : true
 const seedDemoProducts = process.env.IMPULSA_SEED_DEMO_PRODUCTS !== 'false'
 const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (isProduction ? 1 : 10))
@@ -39,11 +41,11 @@ async function prepareDatabase() {
 }
 
 async function seedLocalData() {
-  const email = process.env.IMPULSA_SUPER_ADMIN_EMAIL ?? (isProduction ? undefined : 'admin@impulsa.bo')
-  const password = process.env.IMPULSA_SUPER_ADMIN_PASSWORD ?? (isProduction ? undefined : 'ImpulsaAdmin2026!')
+  const email = superAdminEmail ?? (isProduction ? undefined : 'admin@impulsa.bo')
+  const password = superAdminPassword ?? (isProduction ? undefined : 'ImpulsaAdmin2026!')
 
   if (!email || !password) {
-    throw new Error('Configura IMPULSA_SUPER_ADMIN_EMAIL y IMPULSA_SUPER_ADMIN_PASSWORD para crear la demo inicial.')
+    throw new Error('Configura IMPULSA_SUPER_ADMIN_EMAIL/IMPULSA_SUPER_ADMIN_PASSWORD o NEXA_SUPER_ADMIN_EMAIL/NEXA_SUPER_ADMIN_PASSWORD para crear la demo inicial.')
   }
 
   const passwordHash = await hashPassword(password)

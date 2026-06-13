@@ -40,12 +40,14 @@ GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3.5-flash
 ```
 
+La app tambien acepta los alias `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD` para proyectos que ya tengan esas variables configuradas en Vercel.
+
 Notas:
 
 - En Vercel se ejecuta `npm run db:migrate` antes del build. La fuente de verdad son los SQL de `database/local`.
 - `GEMINI_API_KEY` no debe llevar prefijo `NUXT_PUBLIC_`; solo se usa en endpoints `server/api`.
 - Si `GEMINI_API_KEY` no existe, Haru responde con fallback local para no romper la demo.
-- Si configuras `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.
+- Si configuras `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD` o sus alias `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.
 - La conexion SSL y el pool pequeno para Vercel se detectan automaticamente cuando `DATABASE_URL` es de Supabase.
 - Cambia `IMPULSA_SUPER_ADMIN_PASSWORD` antes de compartir la demo.
 
@@ -61,4 +63,4 @@ Si ves error 500 en login, revisa:
 
 - Que `DATABASE_URL` sea de Supabase y tenga password correcto.
 - Que los SQL locales se ejecutaron sin errores.
-- Que `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD` existan.
+- Que `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD`, o los alias `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`, existan.

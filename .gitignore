@@ -25,3 +25,4 @@ logs
 
 # This project applies DB changes with dbmate from database/local.
 supabase/migrations/
+.vercel
