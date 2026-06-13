@@ -37,6 +37,18 @@ function nextStock(type: AdjustmentType, currentStock: number, quantity: number)
   return quantity
 }
 
+function movementType(type: AdjustmentType) {
+  if (type === 'sumar') {
+    return 'entrada'
+  }
+
+  if (type === 'restar') {
+    return 'salida'
+  }
+
+  return 'ajuste'
+}
+
 export default defineEventHandler(async (event) => {
   const session = await requireStoreSession(event)
   await ensureDatabase()
@@ -63,9 +75,9 @@ export default defineEventHandler(async (event) => {
   try {
     await client.query('begin')
 
-    const productResult = await client.query<{ id: string; kind: string }>(
+    const productResult = await client.query<{ id: string; kind: string; cost: number }>(
       `
-        select id, tipo as kind
+        select id, tipo as kind, costo_unitario::float as cost
         from producto
         where id = $1
           and tienda_id = $2
@@ -146,7 +158,7 @@ export default defineEventHandler(async (event) => {
       )
     }
 
-    await client.query(
+    const adjustmentResult = await client.query<{ id: string }>(
       `
         insert into inventario_ajuste (
           tienda_id,
@@ -162,6 +174,7 @@ export default defineEventHandler(async (event) => {
           notas
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        returning id
       `,
       [
         session.storeId,
@@ -174,6 +187,39 @@ export default defineEventHandler(async (event) => {
         quantity,
         currentStock,
         updatedStock,
+        notes,
+      ],
+    )
+
+    await client.query(
+      `
+        insert into inventario_movimiento (
+          tienda_id,
+          producto_id,
+          producto_variante_id,
+          usuario_id,
+          ajuste_id,
+          tipo,
+          origen,
+          cantidad,
+          stock_anterior,
+          stock_nuevo,
+          costo_unitario,
+          notas
+        )
+        values ($1, $2, $3, $4, $5, $6, 'manual', $7, $8, $9, $10, $11)
+      `,
+      [
+        session.storeId,
+        productId,
+        variantId,
+        session.id,
+        adjustmentResult.rows[0].id,
+        movementType(type),
+        quantity,
+        currentStock,
+        updatedStock,
+        productResult.rows[0].cost,
         notes,
       ],
     )

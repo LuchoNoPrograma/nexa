@@ -1,6 +1,6 @@
 # Deploy demo: Vercel + Supabase
 
-Esta version de NEXA usa Nuxt server API con `pg`, no es un sitio estatico. Para produccion demo usa `npm run build`, no `npm run generate`.
+Esta version de IMPULSA usa Nuxt server API con `pg`, no es un sitio estatico. Para produccion demo usa `npm run build`, no `npm run generate`.
 
 ## 1. Supabase
 
@@ -34,8 +34,8 @@ Variables de entorno recomendadas:
 
 ```env
 DATABASE_URL=postgresql://...
-NEXA_SUPER_ADMIN_EMAIL=admin@nexa.bo
-NEXA_SUPER_ADMIN_PASSWORD=pon-una-clave-larga
+IMPULSA_SUPER_ADMIN_EMAIL=admin@impulsa.bo
+IMPULSA_SUPER_ADMIN_PASSWORD=pon-una-clave-larga
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3.5-flash
 ```
@@ -44,21 +44,21 @@ Notas:
 
 - En Vercel se ejecuta `npm run db:migrate` antes del build. La fuente de verdad son los SQL de `database/local`.
 - `GEMINI_API_KEY` no debe llevar prefijo `NUXT_PUBLIC_`; solo se usa en endpoints `server/api`.
-- Si `GEMINI_API_KEY` no existe, Kenchita responde con fallback local para no romper la demo.
-- Si configuras `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.
+- Si `GEMINI_API_KEY` no existe, Haru responde con fallback local para no romper la demo.
+- Si configuras `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.
 - La conexion SSL y el pool pequeno para Vercel se detectan automaticamente cuando `DATABASE_URL` es de Supabase.
-- Cambia `NEXA_SUPER_ADMIN_PASSWORD` antes de compartir la demo.
+- Cambia `IMPULSA_SUPER_ADMIN_PASSWORD` antes de compartir la demo.
 
 ## 3. Primer acceso
 
 Despues del deploy:
 
 1. Abre `/login`.
-2. Entra con `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`.
+2. Entra con `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD`.
 3. Entra a `/pos/inicio` o `/pos`.
 
 Si ves error 500 en login, revisa:
 
 - Que `DATABASE_URL` sea de Supabase y tenga password correcto.
 - Que los SQL locales se ejecutaron sin errores.
-- Que `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD` existan.
+- Que `IMPULSA_SUPER_ADMIN_EMAIL` y `IMPULSA_SUPER_ADMIN_PASSWORD` existan.

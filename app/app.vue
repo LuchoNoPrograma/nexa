@@ -2,7 +2,7 @@
 const route = useRoute()
 const session = usePosSession()
 const pageTransition = computed(() => route.path.startsWith('/pos') ? { name: 'pos-page' } : false)
-const showKenchitaChat = computed(() => route.path.startsWith('/pos') && Boolean(session.value))
+const showHaruChat = computed(() => route.path.startsWith('/pos') && Boolean(session.value))
 </script>
 
 <template>
@@ -10,5 +10,5 @@ const showKenchitaChat = computed(() => route.path.startsWith('/pos') && Boolean
   <NuxtLayout>
     <NuxtPage :transition="pageTransition" />
   </NuxtLayout>
-  <KenchitaChatBubble v-if="showKenchitaChat" />
+  <HaruChatBubble v-if="showHaruChat" />
 </template>

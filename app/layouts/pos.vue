@@ -9,8 +9,8 @@ const sidebarCollapsed = ref(false)
 const sidebarWidth = ref(250)
 const isResizingSidebar = ref(false)
 
-const SIDEBAR_KEY = 'nexa-pos-sidebar-collapsed'
-const SIDEBAR_WIDTH_KEY = 'nexa-pos-sidebar-width'
+const SIDEBAR_KEY = 'impulsa-pos-sidebar-collapsed'
+const SIDEBAR_WIDTH_KEY = 'impulsa-pos-sidebar-width'
 const SIDEBAR_DEFAULT_WIDTH = 230
 const SIDEBAR_MIN_WIDTH = 180
 const SIDEBAR_MAX_WIDTH = 360
@@ -202,8 +202,8 @@ function selectModule(to?: string) {
     <Drawer v-model:visible="mobileMenuOpen" position="left" class="pos-drawer">
       <template #header>
         <div class="drawer-brand">
-          <img src="/nexa-logo.png" alt="" class="brand-logo" aria-hidden="true">
-          <strong>NEXA</strong>
+          <img src="/impulsa-logo-white.webp" alt="" class="brand-logo" aria-hidden="true">
+          <strong>IMPULSA</strong>
         </div>
       </template>
 
@@ -225,8 +225,8 @@ function selectModule(to?: string) {
     <aside class="app-sidebar" aria-label="Navegación principal">
       <div class="sidebar-head">
         <div class="sidebar-brand">
-          <img src="/nexa-logo.png" alt="" class="brand-logo" aria-hidden="true">
-          <strong v-show="!sidebarCollapsed">NEXA</strong>
+          <img src="/impulsa-logo-white.webp" alt="" class="brand-logo" aria-hidden="true">
+          <strong v-show="!sidebarCollapsed">IMPULSA</strong>
         </div>
         <Button
           type="button"
@@ -339,7 +339,7 @@ function selectModule(to?: string) {
   <main v-else class="pos-loading">
     <div class="pos-loading__spinner">
       <span class="pos-loading__ring" aria-hidden="true" />
-      <img src="/nexa-logo.png" alt="" class="brand-logo pos-loading__mark">
+      <img src="/impulsa-logo-white.webp" alt="" class="brand-logo pos-loading__mark">
     </div>
     <p class="pos-loading__text">
       Abriendo punto de venta<span class="pos-loading__dots"><span>.</span><span>.</span><span>.</span></span>

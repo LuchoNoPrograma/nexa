@@ -1,17 +1,17 @@
-# NEXA
+# IMPULSA
 
-NEXA es un MVP academico para una plataforma web de asesoramiento empresarial digital dirigida a emprendimientos, microempresas y negocios de Cobija, Bolivia, con proyeccion nacional.
+IMPULSA es un MVP academico para una plataforma web de asesoramiento empresarial digital dirigida a emprendimientos, microempresas y negocios de Cobija, Bolivia, con proyeccion nacional.
 
-El proyecto no busca ser solo un sistema de inventario. El inventario, el POS y la caja son modulos de soporte para generar datos del negocio. La propuesta principal es ayudar a una tienda comun a entender su operacion, mejorar precios, vender mejor, ordenar su catalogo y recibir recomendaciones practicas con Kenchita IA.
+El proyecto no busca ser solo un sistema de inventario. El inventario, el POS y la caja son modulos de soporte para generar datos del negocio. La propuesta principal es ayudar a una tienda comun a entender su operacion, mejorar precios, vender mejor, ordenar su catalogo y recibir recomendaciones practicas con Haru IA.
 
 ## Enfoque del negocio
 
-NEXA combina cuatro capas:
+IMPULSA combina cuatro capas:
 
 - Landing publica para explicar el proyecto, su valor social, economico, tecnico y academico.
 - Soporte operativo tipo POS para registrar ventas, clientes, productos, servicios, compras, pagos, caja e inventario.
 - Analisis de negocio para ver ingresos, gastos, rentabilidad, precios, clientes, proveedores y flujo de caja.
-- Kenchita IA como asesora empresarial en espanol, contextualizada en Cobija y adaptable por rubro.
+- Haru IA como asesor empresarial en espanol, contextualizado en Cobija y adaptable por rubro.
 
 El usuario objetivo es una microempresa que vende productos, servicios o ambos: abarrotes, comida, ropa, belleza, ferreteria, consultoria, servicios tecnicos, emprendimientos familiares y negocios similares.
 
@@ -24,7 +24,7 @@ Prioridades:
 3. Caja, ventas, pagos, compras, clientes, proveedores e inventario simple.
 4. Reportes de ingresos y gastos calculados desde pagos y movimientos de caja.
 5. Calculadora de precios y rentabilidad.
-6. Kenchita IA para recomendaciones practicas.
+6. Haru IA para recomendaciones practicas.
 7. Catalogo publico con pedido por WhatsApp, sin checkout ni pasarela.
 
 Fuera de alcance:

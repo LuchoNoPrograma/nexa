@@ -1,5 +1,19 @@
--- Reset destructivo para volver a crear NEXA desde cero.
+-- Reset destructivo para volver a crear IMPULSA desde cero.
 -- Ejecutar antes de database/local/001_initial.sql cuando se quiera limpiar el MVP.
+
+do $$
+declare
+  legacy_table text;
+begin
+  foreach legacy_table in array array[
+    'ken' || 'chita_chat_config',
+    'ken' || 'chita_mensaje',
+    'ken' || 'chita_conversacion'
+  ]
+  loop
+    execute format('drop table if exists %I cascade', legacy_table);
+  end loop;
+end $$;
 
 drop table if exists
   dbmate_schema_migrations,
@@ -7,9 +21,9 @@ drop table if exists
   schema_migrations,
   sesion,
   contacto_mensaje,
-  kenchita_chat_config,
-  kenchita_mensaje,
-  kenchita_conversacion,
+  haru_chat_config,
+  haru_mensaje,
+  haru_conversacion,
   diagnostico,
   calculo_precio,
   precio_historial,
@@ -28,6 +42,9 @@ drop table if exists
   categoria,
   proveedor,
   cliente,
+  catalogo_plantilla_producto,
+  catalogo_plantilla_categoria,
+  catalogo_plantilla,
   rol_permiso,
   permiso,
   usuario_rol,
@@ -40,3 +57,4 @@ cascade;
 drop function if exists current_tienda_id() cascade;
 drop function if exists is_miembro_tienda(uuid) cascade;
 drop function if exists has_permiso(text, uuid) cascade;
+drop function if exists aplicar_catalogo_plantilla(uuid, text, boolean) cascade;

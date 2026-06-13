@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Punto de venta | NEXA',
+  title: 'Punto de venta | IMPULSA',
 })
 </script>
 

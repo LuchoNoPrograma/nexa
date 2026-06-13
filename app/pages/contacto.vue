@@ -4,7 +4,7 @@ definePageMeta({
 })
 
 const numero = '59111523216'
-const mensaje = encodeURIComponent('¡Hola NEXA! 👋 Me interesa conocer más sobre cómo Kenchita puede ayudar a mi negocio.')
+const mensaje = encodeURIComponent('¡Hola IMPULSA! 👋 Me interesa conocer más sobre cómo Haru puede ayudar a mi negocio.')
 const waLink = `https://wa.me/${numero}?text=${mensaje}`
 
 const emailForm = reactive({

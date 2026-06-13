@@ -7,7 +7,7 @@ const pillars = [
   {
     icon: 'pi pi-map-marker',
     title: 'Origen local',
-    text: 'NEXA nace en Cobija para responder a negocios que necesitan vender mejor, organizarse y usar tecnología sin complejidad.',
+    text: 'IMPULSA nace en Cobija para responder a negocios que necesitan vender mejor, organizarse y usar tecnología sin complejidad.',
   },
   {
     icon: 'pi pi-briefcase',
@@ -17,11 +17,11 @@ const pillars = [
   {
     icon: 'pi pi-sparkles',
     title: 'Asesoría con IA',
-    text: 'Kenchita IA entrega recomendaciones prácticas por rubro, con lenguaje claro y contexto del mercado local.',
+    text: 'Haru IA entrega recomendaciones prácticas por rubro, con lenguaje claro y contexto del mercado local.',
   },
 ]
 
-const modules = ['Soporte POS', 'Kenchita IA', 'Calculadora de precios', 'Marketing y branding', 'Catálogo WhatsApp']
+const modules = ['Soporte POS', 'Haru IA', 'Calculadora de precios', 'Marketing y branding', 'Catálogo WhatsApp']
 </script>
 
 <template>
@@ -33,7 +33,7 @@ const modules = ['Soporte POS', 'Kenchita IA', 'Calculadora de precios', 'Market
           Tecnología empresarial para microempresas de Cobija
         </h1>
         <p class="mt-6 max-w-2xl text-lg font-medium leading-8 text-[#5a6b5f]">
-          NEXA es un MVP académico y estudio de factibilidad para una plataforma web de asesoramiento empresarial digital con proyección nacional.
+          IMPULSA es un MVP académico y estudio de factibilidad para una plataforma web de asesoramiento empresarial digital con proyección nacional.
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
           <Button label="Ver herramientas" icon="pi pi-arrow-right" icon-pos="right" class="btn-shine !rounded-full !border-0 !bg-primary-500 !px-6 !py-3 !font-bold !text-white" />
@@ -47,7 +47,7 @@ const modules = ['Soporte POS', 'Kenchita IA', 'Calculadora de precios', 'Market
         <div class="overflow-hidden rounded-3xl bg-[#04200d] p-6 text-white">
           <div class="flex items-center justify-between border-b border-white/10 pb-5">
             <div>
-              <span class="text-xs font-bold uppercase tracking-[0.16em] text-[#bfeac8]">NEXA</span>
+              <span class="text-xs font-bold uppercase tracking-[0.16em] text-[#bfeac8]">IMPULSA</span>
               <h2 class="font-display mt-1 text-2xl font-extrabold">Panel de crecimiento</h2>
             </div>
             <span class="grid h-12 w-12 place-items-center rounded-2xl bg-primary-500 text-xl"><i class="pi pi-chart-line" /></span>

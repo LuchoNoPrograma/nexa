@@ -432,7 +432,7 @@ create table if not exists diagnostico (
   created_at timestamptz not null default now()
 );
 
-create table if not exists kenchita_conversacion (
+create table if not exists haru_conversacion (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tienda(id) on delete cascade,
   usuario_id uuid references usuario(id) on delete set null,
@@ -448,21 +448,21 @@ create table if not exists kenchita_conversacion (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists kenchita_mensaje (
+create table if not exists haru_mensaje (
   id uuid primary key default gen_random_uuid(),
-  conversacion_id uuid not null references kenchita_conversacion(id) on delete cascade,
+  conversacion_id uuid not null references haru_conversacion(id) on delete cascade,
   rol text not null check (rol in ('user', 'assistant', 'system')),
   contenido text not null,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
-create table if not exists kenchita_chat_config (
+create table if not exists haru_chat_config (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tienda(id) on delete cascade,
-  nombre_asistente text not null default 'Kenchita IA',
-  saludo text not null default 'Hola, soy Kenchita. Puedo ayudarte con precios, ventas, catalogo y decisiones de tu negocio.',
-  avatar_url text not null default '/kenchita-chat.png',
+  nombre_asistente text not null default 'Haru IA',
+  saludo text not null default 'Hola, soy Haru. Puedo ayudarte con precios, ventas, catalogo y decisiones de tu negocio.',
+  avatar_url text not null default '/haru-chat.png',
   prompts jsonb not null default '["Ideas para vender mas", "Analizar mis precios", "Que productos no se venden?"]'::jsonb,
   activo boolean not null default true,
   created_at timestamptz not null default now(),
@@ -530,9 +530,9 @@ create index if not exists inventario_movimiento_producto_idx on inventario_movi
 create index if not exists precio_historial_producto_idx on precio_historial (producto_id, created_at desc);
 create index if not exists calculo_precio_tienda_idx on calculo_precio (tienda_id, created_at desc);
 create index if not exists diagnostico_tienda_idx on diagnostico (tienda_id, created_at desc);
-create index if not exists kenchita_conversacion_tienda_idx on kenchita_conversacion (tienda_id, estado, last_message_at desc, created_at desc);
-create index if not exists kenchita_mensaje_conversacion_idx on kenchita_mensaje (conversacion_id, created_at);
-create index if not exists kenchita_chat_config_tienda_idx on kenchita_chat_config (tienda_id, activo);
+create index if not exists haru_conversacion_tienda_idx on haru_conversacion (tienda_id, estado, last_message_at desc, created_at desc);
+create index if not exists haru_mensaje_conversacion_idx on haru_mensaje (conversacion_id, created_at);
+create index if not exists haru_chat_config_tienda_idx on haru_chat_config (tienda_id, activo);
 create index if not exists contacto_mensaje_estado_idx on contacto_mensaje (estado, created_at desc);
 create index if not exists contacto_mensaje_created_at_idx on contacto_mensaje (created_at desc);
 create index if not exists sesion_token_hash_idx on sesion (token_hash);
@@ -542,7 +542,7 @@ insert into rol (alcance, codigo, nombre, descripcion, sistema)
 select v.alcance, v.codigo, v.nombre, v.descripcion, true
 from (
   values
-    ('plataforma', 'super_admin', 'Super admin', 'Control total de la plataforma NEXA'),
+    ('plataforma', 'super_admin', 'Super admin', 'Control total de la plataforma IMPULSA'),
     ('plataforma', 'soporte', 'Soporte', 'Soporte operativo para tiendas'),
     ('plataforma', 'comercial', 'Comercial', 'Gestion comercial de tiendas y prospectos'),
     ('plataforma', 'investigador', 'Investigador', 'Consulta de datos para el estudio academico'),
@@ -579,7 +579,7 @@ from (
     ('compra.gestionar', 'compra', 'gestionar', 'tienda', 'Registrar compras y reposicion'),
     ('cliente.gestionar', 'cliente', 'gestionar', 'tienda', 'Gestionar clientes'),
     ('proveedor.gestionar', 'proveedor', 'gestionar', 'tienda', 'Gestionar proveedores'),
-    ('kenchita.usar', 'kenchita', 'usar', 'tienda', 'Usar Kenchita IA'),
+    ('haru.usar', 'haru', 'usar', 'tienda', 'Usar Haru IA'),
     ('calculo_precio.usar', 'calculo_precio', 'usar', 'tienda', 'Usar calculadora de precios'),
     ('reporte.ver', 'reporte', 'ver', 'tienda', 'Ver ingresos, gastos y analisis'),
     ('configuracion.gestionar', 'configuracion', 'gestionar', 'tienda', 'Gestionar configuracion de tienda')
@@ -599,10 +599,10 @@ join permiso p on (
   or (r.codigo = 'comercial' and p.codigo in ('plataforma.tienda.ver', 'plataforma.tienda.gestionar'))
   or (r.codigo = 'investigador' and p.codigo in ('plataforma.reporte.ver'))
   or (r.codigo = 'propietario' and p.alcance = 'tienda')
-  or (r.codigo = 'administrador' and p.codigo in ('pos.vender', 'pos.descuento.aplicar', 'caja.abrir', 'caja.cerrar', 'caja.movimiento.crear', 'producto.ver', 'producto.gestionar', 'compra.gestionar', 'cliente.gestionar', 'proveedor.gestionar', 'kenchita.usar', 'calculo_precio.usar', 'reporte.ver'))
+  or (r.codigo = 'administrador' and p.codigo in ('pos.vender', 'pos.descuento.aplicar', 'caja.abrir', 'caja.cerrar', 'caja.movimiento.crear', 'producto.ver', 'producto.gestionar', 'compra.gestionar', 'cliente.gestionar', 'proveedor.gestionar', 'haru.usar', 'calculo_precio.usar', 'reporte.ver'))
   or (r.codigo = 'cajero' and p.codigo in ('pos.vender', 'pos.descuento.aplicar', 'caja.abrir', 'caja.cerrar', 'caja.movimiento.crear', 'producto.ver', 'cliente.gestionar'))
   or (r.codigo = 'inventario' and p.codigo in ('producto.ver', 'producto.gestionar', 'compra.gestionar', 'proveedor.gestionar', 'reporte.ver'))
-  or (r.codigo = 'consulta' and p.codigo in ('producto.ver', 'reporte.ver', 'kenchita.usar'))
+  or (r.codigo = 'consulta' and p.codigo in ('producto.ver', 'reporte.ver', 'haru.usar'))
 )
 where r.tienda_id is null
 on conflict do nothing;

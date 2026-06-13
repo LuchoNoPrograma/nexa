@@ -46,6 +46,8 @@ type CatalogProduct = {
 type VariantForm = {
   name: string
   sku: string
+  barcode: string
+  cost: number | null
   price: number | null
   stock: number
 }
@@ -76,6 +78,20 @@ type ProductForm = {
 
 type ChipKey = 'todos' | 'productos' | 'servicios' | 'stockBajo' | 'combos'
 
+type StockMovement = {
+  id: string
+  type: 'entrada' | 'salida' | 'ajuste'
+  origin: 'venta' | 'compra' | 'manual' | 'devolucion'
+  quantity: number
+  previousStock: number
+  newStock: number
+  cost: number | null
+  notes: string | null
+  createdAt: string
+  variantName: string | null
+  userName: string | null
+}
+
 const products = ref<CatalogProduct[]>([])
 const categories = ref<CatalogCategory[]>([])
 const loading = ref(true)
@@ -83,6 +99,7 @@ const saving = ref(false)
 const productDialogOpen = ref(false)
 const categoryDialogOpen = ref(false)
 const stockDialogOpen = ref(false)
+const historyDialogOpen = ref(false)
 const catalogError = ref('')
 
 const searchTerm = ref('')
@@ -95,6 +112,9 @@ const stockAmount = ref(0)
 const stockReason = ref('recuento')
 const stockBranch = ref('Matriz')
 const stockNotes = ref('')
+const historyProduct = ref<CatalogProduct | null>(null)
+const historyRows = ref<StockMovement[]>([])
+const historyLoading = ref(false)
 
 const categoryForm = reactive({
   id: null as string | null,
@@ -156,8 +176,9 @@ const lowStockCount = computed(() =>
 const noStockCount = computed(() =>
   products.value.filter((product) => product.active && product.kind === 'producto' && product.stock <= 0).length,
 )
-const inventoryCost = computed(() => products.value.reduce((sum, product) => sum + product.cost * product.stock, 0))
-const inventorySale = computed(() => products.value.reduce((sum, product) => sum + product.price * product.stock, 0))
+const stockManagedProducts = computed(() => products.value.filter((product) => product.active && product.kind !== 'servicio'))
+const inventoryCost = computed(() => stockManagedProducts.value.reduce((sum, product) => sum + product.cost * product.stock, 0))
+const inventorySale = computed(() => stockManagedProducts.value.reduce((sum, product) => sum + product.price * product.stock, 0))
 
 const categoryOptions = computed(() => [
   { label: 'Sin categoría', value: null },
@@ -204,7 +225,7 @@ const filteredProducts = computed(() => {
 
 const statsLine = computed(() => {
   const shown = filteredProducts.value.length
-  return `${products.value.length} productos · mostrando ${shown} · ${lowStockCount.value} con stock bajo · ${noStockCount.value} sin stock`
+  return `${products.value.length} ítems · mostrando ${shown} · ${lowStockCount.value} con stock bajo · ${noStockCount.value} sin stock`
 })
 
 const stockResult = computed(() => {
@@ -220,6 +241,20 @@ const stockResult = computed(() => {
 
   return stockAmount.value
 })
+
+watch(
+  () => form.kind,
+  (kind) => {
+    if (kind !== 'servicio') {
+      return
+    }
+
+    form.stock = 0
+    form.minStock = 0
+    form.maxStock = null
+    form.variants = []
+  },
+)
 
 watch(
   filteredProducts,
@@ -303,7 +338,7 @@ const liveProfit = computed(() => {
 })
 
 function addVariant() {
-  form.variants.push({ name: '', sku: '', price: null, stock: 0 })
+  form.variants.push({ name: '', sku: '', barcode: '', cost: null, price: null, stock: 0 })
   sections.variants = true
 }
 
@@ -352,6 +387,8 @@ function openEditProduct(product: CatalogProduct | null) {
     variants: (product.variants ?? []).map((variant) => ({
       name: variant.name,
       sku: variant.sku ?? '',
+      barcode: variant.barcode ?? '',
+      cost: variant.cost,
       price: variant.price,
       stock: variant.stock,
     })),
@@ -409,6 +446,40 @@ function productIcon(product: CatalogProduct) {
   return 'pi pi-shopping-cart'
 }
 
+function movementLabel(type: StockMovement['type']) {
+  if (type === 'entrada') {
+    return 'Entrada'
+  }
+
+  if (type === 'salida') {
+    return 'Salida'
+  }
+
+  return 'Ajuste'
+}
+
+function movementSeverity(type: StockMovement['type']) {
+  if (type === 'entrada') {
+    return 'success'
+  }
+
+  if (type === 'salida') {
+    return 'danger'
+  }
+
+  return 'info'
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('es-BO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 async function loadCatalog() {
   loading.value = true
   catalogError.value = ''
@@ -463,6 +534,8 @@ async function saveProduct() {
       .map((variant) => ({
         name: variant.name,
         sku: variant.sku,
+        barcode: variant.barcode,
+        cost: variant.cost,
         price: variant.price,
         stock: variant.stock,
       })),
@@ -568,6 +641,27 @@ async function saveStockAdjustment() {
     saving.value = false
   }
 }
+
+async function openStockHistory(product: CatalogProduct | null) {
+  if (!product || product.kind === 'servicio') {
+    return
+  }
+
+  historyProduct.value = product
+  historyRows.value = []
+  historyLoading.value = true
+  catalogError.value = ''
+  historyDialogOpen.value = true
+
+  try {
+    const response = await $fetch<{ movements: StockMovement[] }>(`/api/pos/catalog/products/${product.id}/stock`)
+    historyRows.value = response.movements
+  } catch {
+    catalogError.value = 'No se pudo cargar el historial de stock.'
+  } finally {
+    historyLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -601,8 +695,6 @@ async function saveStockAdjustment() {
       </div>
 
       <div class="catalog-heading__actions">
-        <Button type="button" outlined severity="secondary" icon="pi pi-qrcode" label="Escanear" />
-        <Button type="button" outlined severity="secondary" icon="pi pi-upload" label="Importar" />
         <Button type="button" severity="contrast" icon="pi pi-plus" label="Nuevo producto" @click="openCreateProduct" />
       </div>
     </div>
@@ -613,19 +705,19 @@ async function saveStockAdjustment() {
 
     <section class="catalog-metrics" aria-label="Resumen del catálogo">
       <article>
-        <span>Total productos</span>
+        <span>Ítems registrados</span>
         <strong>{{ products.length }}</strong>
-        <small>en el inventario</small>
+        <small>productos, servicios y combos</small>
       </article>
       <article>
         <span>Valor a costo</span>
         <strong>Bs {{ money(inventoryCost) }}</strong>
-        <small>stock valorizado</small>
+        <small>solo stock físico</small>
       </article>
       <article>
         <span>Valor a precio venta</span>
         <strong>Bs {{ money(inventorySale) }}</strong>
-        <small>stock valorizado</small>
+        <small>solo stock físico</small>
       </article>
       <article :class="{ 'is-alert': lowStockCount > 0 }">
         <span>Alertas de stock</span>
@@ -712,7 +804,8 @@ async function saveStockAdjustment() {
 
           <Column field="stock" header="Stock" sortable style="min-width: 6rem">
             <template #body="{ data }">
-              <span :class="{ 'stock-low': isLowStock(data) }">{{ data.stock }}</span>
+              <span v-if="data.kind === 'servicio'" class="cell-muted">No aplica</span>
+              <span v-else :class="{ 'stock-low': isLowStock(data) }">{{ data.stock }}</span>
             </template>
           </Column>
 
@@ -729,7 +822,15 @@ async function saveStockAdjustment() {
                   :disabled="data.kind === 'servicio'"
                   @click.stop="openStockAdjustment(data)"
                 />
-                <Button type="button" size="small" text icon="pi pi-chart-line" label="Historial" disabled v-tooltip.top="'Próximamente'" />
+                <Button
+                  type="button"
+                  size="small"
+                  text
+                  icon="pi pi-chart-line"
+                  label="Historial"
+                  :disabled="data.kind === 'servicio'"
+                  @click.stop="openStockHistory(data)"
+                />
               </div>
             </template>
           </Column>
@@ -768,7 +869,8 @@ async function saveStockAdjustment() {
             </div>
             <div>
               <span>Stock total</span>
-              <strong :class="{ 'stock-low': isLowStock(selectedProduct) }">{{ selectedProduct.stock }}</strong>
+              <strong v-if="selectedProduct.kind === 'servicio'" class="cell-muted">No aplica</strong>
+              <strong v-else :class="{ 'stock-low': isLowStock(selectedProduct) }">{{ selectedProduct.stock }}</strong>
             </div>
           </div>
 
@@ -782,6 +884,15 @@ async function saveStockAdjustment() {
               @click="openStockAdjustment(selectedProduct)"
             />
             <Button type="button" outlined severity="secondary" icon="pi pi-pencil" label="Editar" @click="openEditProduct(selectedProduct)" />
+            <Button
+              type="button"
+              outlined
+              severity="secondary"
+              icon="pi pi-history"
+              label="Historial"
+              :disabled="selectedProduct.kind === 'servicio'"
+              @click="openStockHistory(selectedProduct)"
+            />
           </div>
         </template>
 
@@ -840,8 +951,9 @@ async function saveStockAdjustment() {
                 {{ form.id ? 'Stock actual' : 'Stock inicial' }}
                 <span v-if="!form.id" class="req">*</span>
               </label>
-              <InputNumber id="product-stock" v-model="form.stock" :min="0" :maxFractionDigits="2" :disabled="Boolean(form.id)" fluid />
-              <small v-if="form.id" class="field-help">Usa Ajustar stock para registrar movimientos.</small>
+              <InputNumber id="product-stock" v-model="form.stock" :min="0" :maxFractionDigits="2" :disabled="Boolean(form.id) || form.kind === 'servicio'" fluid />
+              <small v-if="form.kind === 'servicio'" class="field-help">Los servicios no manejan stock.</small>
+              <small v-else-if="form.id" class="field-help">Usa Ajustar stock para registrar movimientos.</small>
             </div>
           </div>
 
@@ -941,11 +1053,11 @@ async function saveStockAdjustment() {
             <div class="pgrid">
               <div class="pfield">
                 <label for="product-min-stock">Stock mínimo</label>
-                <InputNumber id="product-min-stock" v-model="form.minStock" :min="0" :maxFractionDigits="2" fluid />
+                <InputNumber id="product-min-stock" v-model="form.minStock" :min="0" :maxFractionDigits="2" :disabled="form.kind === 'servicio'" fluid />
               </div>
               <div class="pfield">
                 <label for="product-max-stock">Stock máximo</label>
-                <InputNumber id="product-max-stock" v-model="form.maxStock" :min="0" :maxFractionDigits="2" placeholder="Opcional" fluid />
+                <InputNumber id="product-max-stock" v-model="form.maxStock" :min="0" :maxFractionDigits="2" :disabled="form.kind === 'servicio'" placeholder="Opcional" fluid />
               </div>
             </div>
             <div class="pfield">
@@ -961,13 +1073,21 @@ async function saveStockAdjustment() {
           </div>
 
           <!-- Sección: Variantes -->
-          <button type="button" class="section-toggle" :class="{ 'is-open': sections.variants }" @click="toggleSection('variants')">
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ 'is-open': sections.variants, 'is-disabled': form.kind === 'servicio' }"
+            :disabled="form.kind === 'servicio'"
+            @click="toggleSection('variants')"
+          >
             <span><i class="pi pi-chevron-right" aria-hidden="true" /> Variantes</span>
-            <small>{{ form.variants.length ? `${form.variants.length} variante(s)` : 'Sin variantes' }}</small>
+            <small>{{ form.kind === 'servicio' ? 'No aplica a servicios' : form.variants.length ? `${form.variants.length} variante(s)` : 'Sin variantes' }}</small>
           </button>
           <div v-show="sections.variants" class="section-body">
             <div v-for="(variant, index) in form.variants" :key="index" class="variant-row">
               <InputText v-model="variant.name" placeholder="Nombre (ej. Talla M)" class="variant-name" />
+              <InputText v-model="variant.sku" placeholder="SKU" class="variant-sku" />
+              <InputNumber v-model="variant.cost" mode="decimal" :min="0" :minFractionDigits="2" :maxFractionDigits="2" placeholder="Costo" class="variant-cost" />
               <InputNumber v-model="variant.price" mode="decimal" :min="0" :minFractionDigits="2" :maxFractionDigits="2" placeholder="Precio" class="variant-price" />
               <InputNumber v-model="variant.stock" :min="0" :maxFractionDigits="2" placeholder="Stock" class="variant-stock" />
               <Button type="button" icon="pi pi-times" text rounded severity="danger" aria-label="Quitar variante" @click="removeVariant(index)" />
@@ -1078,6 +1198,43 @@ async function saveStockAdjustment() {
           <Button type="submit" label="Guardar categoría" :loading="saving" />
         </footer>
       </form>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="historyDialogOpen"
+      modal
+      :header="historyProduct ? `Historial de stock · ${historyProduct.name}` : 'Historial de stock'"
+      :style="{ width: 'min(760px, calc(100vw - 32px))' }"
+    >
+      <DataTable :value="historyRows" :loading="historyLoading" size="small" class="history-table">
+        <template #empty>No hay movimientos registrados para este producto.</template>
+        <Column header="Fecha" style="min-width: 9.5rem">
+          <template #body="{ data }">
+            <span class="cell-muted">{{ formatDate(data.createdAt) }}</span>
+          </template>
+        </Column>
+        <Column header="Tipo" style="min-width: 7rem">
+          <template #body="{ data }">
+            <Tag :value="movementLabel(data.type)" :severity="movementSeverity(data.type)" rounded />
+          </template>
+        </Column>
+        <Column field="origin" header="Origen" style="min-width: 7rem" />
+        <Column header="Cantidad" style="min-width: 7rem">
+          <template #body="{ data }">
+            <strong>{{ data.quantity }}</strong>
+          </template>
+        </Column>
+        <Column header="Stock" style="min-width: 8rem">
+          <template #body="{ data }">
+            <span>{{ data.previousStock }} → {{ data.newStock }}</span>
+          </template>
+        </Column>
+        <Column header="Detalle" style="min-width: 12rem">
+          <template #body="{ data }">
+            <span class="cell-muted">{{ data.variantName || data.notes || 'Sin detalle' }}</span>
+          </template>
+        </Column>
+      </DataTable>
     </Dialog>
   </section>
 </template>
@@ -1681,6 +1838,12 @@ async function saveStockAdjustment() {
   text-align: left;
 }
 
+.section-toggle:disabled,
+.section-toggle.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .section-toggle > span {
   display: inline-flex;
   align-items: center;
@@ -1792,7 +1955,7 @@ async function saveStockAdjustment() {
 /* Variantes */
 .variant-row {
   display: grid;
-  grid-template-columns: 1fr 110px 90px auto;
+  grid-template-columns: minmax(150px, 1.2fr) minmax(90px, 0.8fr) 100px 100px 90px auto;
   gap: 8px;
   align-items: center;
 }
@@ -1957,7 +2120,11 @@ async function saveStockAdjustment() {
 
 @media (max-width: 480px) {
   .variant-row {
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: 1fr;
+  }
+
+  .variant-row :deep(.p-button) {
+    justify-self: end;
   }
 }
 

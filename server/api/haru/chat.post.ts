@@ -65,7 +65,7 @@ function buildDemoReply(message: string, storeName: string) {
 
 function buildSystemInstruction(session: CurrentSession, businessContext: string, memorySummary: string | null) {
   return [
-    'Eres Kenchita IA, asesora empresarial de NEXA para microempresas de Cobija, Pando, Bolivia.',
+    'Eres Haru IA, asesor empresarial de IMPULSA para microempresas de Cobija, Pando, Bolivia.',
     'Responde siempre en espanol claro, practico y accionable.',
     'Si el usuario hace una pregunta general, matematica o breve, responde directamente primero.',
     'No inventes datos. Si falta informacion, pide un dato concreto.',
@@ -111,7 +111,7 @@ function extractGeminiText(response: GeminiResponse) {
 }
 
 function logGeminiResponse(response: GeminiResponse, reply: string, model: string) {
-  console.info('[kenchita:gemini]', {
+  console.info('[haru:gemini]', {
     model,
     candidates: response.candidates?.length ?? 0,
     finishReason: response.candidates?.[0]?.finishReason ?? null,
@@ -221,7 +221,7 @@ async function getConversationMemory(conversationId: string | null): Promise<Con
         select
           resumen as summary,
           resumen_mensajes as "summaryMessageCount"
-        from kenchita_conversacion
+        from haru_conversacion
         where id = $1
         limit 1
       `,
@@ -230,7 +230,7 @@ async function getConversationMemory(conversationId: string | null): Promise<Con
     pool.query<{ totalMessages: number }>(
       `
         select count(*)::int as "totalMessages"
-        from kenchita_mensaje
+        from haru_mensaje
         where conversacion_id = $1
           and rol in ('user', 'assistant')
           and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
@@ -242,7 +242,7 @@ async function getConversationMemory(conversationId: string | null): Promise<Con
         select
           rol as role,
           contenido as content
-        from kenchita_mensaje
+        from haru_mensaje
         where conversacion_id = $1
           and rol in ('user', 'assistant')
           and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
@@ -302,7 +302,7 @@ async function requestGemini(params: {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
-    console.error('[kenchita:gemini:error]', {
+    console.error('[haru:gemini:error]', {
       model: params.model,
       status: response.status,
       statusText: response.statusText,
@@ -430,7 +430,7 @@ async function summarizeConversationIfNeeded(params: {
       select
         rol as role,
         contenido as content
-      from kenchita_mensaje
+      from haru_mensaje
       where conversacion_id = $1
         and rol in ('user', 'assistant')
         and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'
@@ -450,7 +450,7 @@ async function summarizeConversationIfNeeded(params: {
     '',
     transcript.rows
       .reverse()
-      .map((item) => `${item.role === 'assistant' ? 'Kenchita' : 'Usuario'}: ${item.content}`)
+      .map((item) => `${item.role === 'assistant' ? 'Haru' : 'Usuario'}: ${item.content}`)
       .join('\n'),
   ].join('\n')
 
@@ -473,7 +473,7 @@ async function summarizeConversationIfNeeded(params: {
 
   await pool.query(
     `
-      update kenchita_conversacion
+      update haru_conversacion
       set
         resumen = $2,
         resumen_updated_at = now(),
@@ -490,7 +490,7 @@ export default defineEventHandler(async (event) => {
   await ensureDatabase()
 
   if (!session.storeId) {
-    throw createError({ statusCode: 400, statusMessage: 'Selecciona una tienda antes de usar Kenchita IA.' })
+    throw createError({ statusCode: 400, statusMessage: 'Selecciona una tienda antes de usar Haru IA.' })
   }
 
   const body = await readBody<ChatBody | null>(event)
@@ -510,7 +510,7 @@ export default defineEventHandler(async (event) => {
       const existing = await client.query<{ id: string }>(
         `
           select id
-          from kenchita_conversacion
+          from haru_conversacion
           where id = $1
             and tienda_id = $2
           limit 1
@@ -524,7 +524,7 @@ export default defineEventHandler(async (event) => {
     if (!conversationId) {
       const conversation = await client.query<{ id: string }>(
         `
-          insert into kenchita_conversacion (tienda_id, usuario_id, titulo, contexto, origen, estado, last_message_at)
+          insert into haru_conversacion (tienda_id, usuario_id, titulo, contexto, origen, estado, last_message_at)
           values (
             $1,
             $2,
@@ -548,7 +548,7 @@ export default defineEventHandler(async (event) => {
 
     await client.query(
       `
-        insert into kenchita_mensaje (conversacion_id, rol, contenido, metadata)
+        insert into haru_mensaje (conversacion_id, rol, contenido, metadata)
         values ($1, 'user', $2, jsonb_build_object('source', 'chat_widget'))
       `,
       [conversationId, message],
@@ -582,7 +582,7 @@ export default defineEventHandler(async (event) => {
 
   await pool.query(
     `
-      insert into kenchita_mensaje (conversacion_id, rol, contenido, metadata)
+      insert into haru_mensaje (conversacion_id, rol, contenido, metadata)
       values ($1, 'assistant', $2, $3::jsonb)
     `,
     [conversationId, aiResult.reply, JSON.stringify(aiResult.metadata)],
@@ -590,7 +590,7 @@ export default defineEventHandler(async (event) => {
 
   await pool.query(
     `
-      update kenchita_conversacion
+      update haru_conversacion
       set
         updated_at = now(),
         last_message_at = now()
@@ -608,7 +608,7 @@ export default defineEventHandler(async (event) => {
     apiKey: process.env.GEMINI_API_KEY,
     model: process.env.GEMINI_MODEL,
   }).catch((error: unknown) => {
-    console.error('[kenchita:memory:error]', error)
+    console.error('[haru:memory:error]', error)
   })
 
   return {

@@ -38,7 +38,7 @@ const standards = ['Accesible para microempresas', 'Sin pasarela en MVP', 'Catá
           Calidad práctica para una demo sólida y escalable
         </h1>
         <p class="mt-5 text-lg font-medium leading-8 text-[#5a6b5f]">
-          NEXA prioriza una experiencia pulida en landing y Kenchita IA, con soporte operativo suficiente para demostrar valor sin sobredimensionar el MVP.
+          IMPULSA prioriza una experiencia pulida en landing y Haru IA, con soporte operativo suficiente para demostrar valor sin sobredimensionar el MVP.
         </p>
       </div>
 

@@ -1,6 +1,19 @@
--- Reset + bootstrap NEXA para Supabase/PostgreSQL.
--- Este archivo borra las tablas de NEXA en public y recrea el modelo completo.
+-- Reset + bootstrap IMPULSA para Supabase/PostgreSQL.
+-- Este archivo borra las tablas de IMPULSA en public y recrea el modelo completo.
 
+do $$
+declare
+  legacy_table text;
+begin
+  foreach legacy_table in array array[
+    'ken' || 'chita_chat_config',
+    'ken' || 'chita_mensaje',
+    'ken' || 'chita_conversacion'
+  ]
+  loop
+    execute format('drop table if exists %I cascade', legacy_table);
+  end loop;
+end $$;
 
 drop table if exists
   dbmate_schema_migrations,
@@ -8,9 +21,9 @@ drop table if exists
   schema_migrations,
   sesion,
   contacto_mensaje,
-  kenchita_chat_config,
-  kenchita_mensaje,
-  kenchita_conversacion,
+  haru_chat_config,
+  haru_mensaje,
+  haru_conversacion,
   diagnostico,
   calculo_precio,
   precio_historial,
@@ -29,6 +42,9 @@ drop table if exists
   categoria,
   proveedor,
   cliente,
+  catalogo_plantilla_producto,
+  catalogo_plantilla_categoria,
+  catalogo_plantilla,
   rol_permiso,
   permiso,
   usuario_rol,
@@ -41,6 +57,7 @@ cascade;
 drop function if exists current_tienda_id() cascade;
 drop function if exists is_miembro_tienda(uuid) cascade;
 drop function if exists has_permiso(text, uuid) cascade;
+drop function if exists aplicar_catalogo_plantilla(uuid, text, boolean) cascade;
 
 
 create extension if not exists pgcrypto;
@@ -475,7 +492,7 @@ create table if not exists diagnostico (
   created_at timestamptz not null default now()
 );
 
-create table if not exists kenchita_conversacion (
+create table if not exists haru_conversacion (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tienda(id) on delete cascade,
   usuario_id uuid references usuario(id) on delete set null,
@@ -491,21 +508,21 @@ create table if not exists kenchita_conversacion (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists kenchita_mensaje (
+create table if not exists haru_mensaje (
   id uuid primary key default gen_random_uuid(),
-  conversacion_id uuid not null references kenchita_conversacion(id) on delete cascade,
+  conversacion_id uuid not null references haru_conversacion(id) on delete cascade,
   rol text not null check (rol in ('user', 'assistant', 'system')),
   contenido text not null,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
-create table if not exists kenchita_chat_config (
+create table if not exists haru_chat_config (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tienda(id) on delete cascade,
-  nombre_asistente text not null default 'Kenchita IA',
-  saludo text not null default 'Hola, soy Kenchita. Puedo ayudarte con precios, ventas, catalogo y decisiones de tu negocio.',
-  avatar_url text not null default '/kenchita-chat.png',
+  nombre_asistente text not null default 'Haru IA',
+  saludo text not null default 'Hola, soy Haru. Puedo ayudarte con precios, ventas, catalogo y decisiones de tu negocio.',
+  avatar_url text not null default '/haru-chat.png',
   prompts jsonb not null default '["Ideas para vender mas", "Analizar mis precios", "Que productos no se venden?"]'::jsonb,
   activo boolean not null default true,
   created_at timestamptz not null default now(),
@@ -573,9 +590,9 @@ create index if not exists inventario_movimiento_producto_idx on inventario_movi
 create index if not exists precio_historial_producto_idx on precio_historial (producto_id, created_at desc);
 create index if not exists calculo_precio_tienda_idx on calculo_precio (tienda_id, created_at desc);
 create index if not exists diagnostico_tienda_idx on diagnostico (tienda_id, created_at desc);
-create index if not exists kenchita_conversacion_tienda_idx on kenchita_conversacion (tienda_id, estado, last_message_at desc, created_at desc);
-create index if not exists kenchita_mensaje_conversacion_idx on kenchita_mensaje (conversacion_id, created_at);
-create index if not exists kenchita_chat_config_tienda_idx on kenchita_chat_config (tienda_id, activo);
+create index if not exists haru_conversacion_tienda_idx on haru_conversacion (tienda_id, estado, last_message_at desc, created_at desc);
+create index if not exists haru_mensaje_conversacion_idx on haru_mensaje (conversacion_id, created_at);
+create index if not exists haru_chat_config_tienda_idx on haru_chat_config (tienda_id, activo);
 create index if not exists contacto_mensaje_estado_idx on contacto_mensaje (estado, created_at desc);
 create index if not exists contacto_mensaje_created_at_idx on contacto_mensaje (created_at desc);
 create index if not exists sesion_token_hash_idx on sesion (token_hash);
@@ -585,7 +602,7 @@ insert into rol (alcance, codigo, nombre, descripcion, sistema)
 select v.alcance, v.codigo, v.nombre, v.descripcion, true
 from (
   values
-    ('plataforma', 'super_admin', 'Super admin', 'Control total de la plataforma NEXA'),
+    ('plataforma', 'super_admin', 'Super admin', 'Control total de la plataforma IMPULSA'),
     ('plataforma', 'soporte', 'Soporte', 'Soporte operativo para tiendas'),
     ('plataforma', 'comercial', 'Comercial', 'Gestion comercial de tiendas y prospectos'),
     ('plataforma', 'investigador', 'Investigador', 'Consulta de datos para el estudio academico'),
@@ -622,7 +639,7 @@ from (
     ('compra.gestionar', 'compra', 'gestionar', 'tienda', 'Registrar compras y reposicion'),
     ('cliente.gestionar', 'cliente', 'gestionar', 'tienda', 'Gestionar clientes'),
     ('proveedor.gestionar', 'proveedor', 'gestionar', 'tienda', 'Gestionar proveedores'),
-    ('kenchita.usar', 'kenchita', 'usar', 'tienda', 'Usar Kenchita IA'),
+    ('haru.usar', 'haru', 'usar', 'tienda', 'Usar Haru IA'),
     ('calculo_precio.usar', 'calculo_precio', 'usar', 'tienda', 'Usar calculadora de precios'),
     ('reporte.ver', 'reporte', 'ver', 'tienda', 'Ver ingresos, gastos y analisis'),
     ('configuracion.gestionar', 'configuracion', 'gestionar', 'tienda', 'Gestionar configuracion de tienda')
@@ -642,11 +659,236 @@ join permiso p on (
   or (r.codigo = 'comercial' and p.codigo in ('plataforma.tienda.ver', 'plataforma.tienda.gestionar'))
   or (r.codigo = 'investigador' and p.codigo in ('plataforma.reporte.ver'))
   or (r.codigo = 'propietario' and p.alcance = 'tienda')
-  or (r.codigo = 'administrador' and p.codigo in ('pos.vender', 'pos.descuento.aplicar', 'caja.abrir', 'caja.cerrar', 'caja.movimiento.crear', 'producto.ver', 'producto.gestionar', 'compra.gestionar', 'cliente.gestionar', 'proveedor.gestionar', 'kenchita.usar', 'calculo_precio.usar', 'reporte.ver'))
+  or (r.codigo = 'administrador' and p.codigo in ('pos.vender', 'pos.descuento.aplicar', 'caja.abrir', 'caja.cerrar', 'caja.movimiento.crear', 'producto.ver', 'producto.gestionar', 'compra.gestionar', 'cliente.gestionar', 'proveedor.gestionar', 'haru.usar', 'calculo_precio.usar', 'reporte.ver'))
   or (r.codigo = 'cajero' and p.codigo in ('pos.vender', 'pos.descuento.aplicar', 'caja.abrir', 'caja.cerrar', 'caja.movimiento.crear', 'producto.ver', 'cliente.gestionar'))
   or (r.codigo = 'inventario' and p.codigo in ('producto.ver', 'producto.gestionar', 'compra.gestionar', 'proveedor.gestionar', 'reporte.ver'))
-  or (r.codigo = 'consulta' and p.codigo in ('producto.ver', 'reporte.ver', 'kenchita.usar'))
+  or (r.codigo = 'consulta' and p.codigo in ('producto.ver', 'reporte.ver', 'haru.usar'))
 )
 where r.tienda_id is null
 on conflict do nothing;
+
+
+
+create table if not exists catalogo_plantilla (
+  id uuid primary key default gen_random_uuid(),
+  codigo text not null unique,
+  nombre text not null,
+  rubro text not null,
+  descripcion text,
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists catalogo_plantilla_categoria (
+  id uuid primary key default gen_random_uuid(),
+  plantilla_id uuid not null references catalogo_plantilla(id) on delete cascade,
+  nombre text not null,
+  descripcion text,
+  icono text,
+  orden integer not null default 0,
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (plantilla_id, nombre)
+);
+
+create table if not exists catalogo_plantilla_producto (
+  id uuid primary key default gen_random_uuid(),
+  plantilla_id uuid not null references catalogo_plantilla(id) on delete cascade,
+  categoria_nombre text not null,
+  nombre text not null,
+  tipo text not null default 'producto' check (tipo in ('producto', 'servicio', 'combo')),
+  unidad text not null default 'unidad',
+  sku_sugerido text,
+  descripcion text,
+  stock_minimo numeric(12,2) not null default 0,
+  orden integer not null default 0,
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (plantilla_id, nombre)
+);
+
+create index if not exists catalogo_plantilla_rubro_idx
+  on catalogo_plantilla (rubro, activo);
+
+create index if not exists catalogo_plantilla_categoria_idx
+  on catalogo_plantilla_categoria (plantilla_id, activo, orden);
+
+create index if not exists catalogo_plantilla_producto_idx
+  on catalogo_plantilla_producto (plantilla_id, categoria_nombre, activo, orden);
+
+insert into catalogo_plantilla (codigo, nombre, rubro, descripcion)
+values (
+  'minimarket_abarrotes',
+  'Minimarket / Abarrotes',
+  'abarrotes',
+  'Categorias y productos sugeridos para tienda de barrio, minimarket o abarrotes.'
+)
+on conflict (codigo) do update
+set
+  nombre = excluded.nombre,
+  rubro = excluded.rubro,
+  descripcion = excluded.descripcion,
+  activo = true,
+  updated_at = now();
+
+insert into catalogo_plantilla_categoria (plantilla_id, nombre, descripcion, icono, orden)
+select p.id, c.nombre, c.descripcion, c.icono, c.orden
+from catalogo_plantilla p
+join (
+  values
+    ('Abarrotes', 'Arroz, azucar, aceite, fideos, harina y productos basicos.', 'pi pi-shopping-bag', 1),
+    ('Bebidas', 'Agua, gaseosas, jugos, energizantes y bebidas familiares.', 'pi pi-cup', 2),
+    ('Lacteos', 'Leche, yogurt, queso, mantequilla y derivados.', 'pi pi-box', 3),
+    ('Panaderia', 'Pan, galletas, tostadas, queques y masas empacadas.', 'pi pi-prime', 4),
+    ('Snacks y golosinas', 'Papas fritas, chocolates, caramelos, chicles y bocaditos.', 'pi pi-star', 5),
+    ('Enlatados y conservas', 'Atun, sardina, leche evaporada, durazno y conservas.', 'pi pi-inbox', 6),
+    ('Limpieza', 'Detergente, lavandina, desinfectante, esponjas y escobas.', 'pi pi-sparkles', 7),
+    ('Higiene personal', 'Shampoo, jabon, pasta dental, papel higienico y afeitado.', 'pi pi-heart', 8),
+    ('Hogar y descartables', 'Bolsas, vasos, platos, servilletas, focos y pilas.', 'pi pi-home', 9),
+    ('Frutas y verduras', 'Productos frescos de rotacion diaria.', 'pi pi-apple', 10),
+    ('Congelados', 'Pollo, carnes, helados, embutidos y productos frios.', 'pi pi-snowflake', 11),
+    ('Mascotas', 'Alimento, arena y accesorios basicos para mascotas.', 'pi pi-github', 12),
+    ('Recargas y servicios', 'Recargas, pagos simples y servicios complementarios.', 'pi pi-mobile', 13),
+    ('Otros', 'Productos temporales, nuevos o sin clasificar.', 'pi pi-ellipsis-h', 99)
+) as c(nombre, descripcion, icono, orden) on p.codigo = 'minimarket_abarrotes'
+on conflict (plantilla_id, nombre) do update
+set
+  descripcion = excluded.descripcion,
+  icono = excluded.icono,
+  orden = excluded.orden,
+  activo = true;
+
+insert into catalogo_plantilla_producto (
+  plantilla_id,
+  categoria_nombre,
+  nombre,
+  tipo,
+  unidad,
+  sku_sugerido,
+  descripcion,
+  stock_minimo,
+  orden
+)
+select p.id, pr.categoria_nombre, pr.nombre, pr.tipo, pr.unidad, pr.sku_sugerido, pr.descripcion, pr.stock_minimo, pr.orden
+from catalogo_plantilla p
+join (
+  values
+    ('Abarrotes', 'Arroz 1 kg', 'producto', 'unidad', 'ARR-1KG', 'Producto basico de alta rotacion.', 10, 1),
+    ('Abarrotes', 'Azucar 1 kg', 'producto', 'unidad', 'AZU-1KG', 'Producto basico de alta rotacion.', 10, 2),
+    ('Abarrotes', 'Aceite 1 L', 'producto', 'unidad', 'ACE-1L', 'Producto basico de cocina.', 8, 3),
+    ('Abarrotes', 'Fideo 400 g', 'producto', 'unidad', 'FID-400G', 'Producto seco de rotacion frecuente.', 12, 4),
+    ('Abarrotes', 'Harina 1 kg', 'producto', 'unidad', 'HAR-1KG', 'Producto basico de despensa.', 8, 5),
+    ('Bebidas', 'Agua 2 L', 'producto', 'unidad', 'AGU-2L', 'Bebida de alta rotacion.', 12, 1),
+    ('Bebidas', 'Gaseosa 2 L', 'producto', 'unidad', 'GAS-2L', 'Bebida familiar.', 10, 2),
+    ('Bebidas', 'Jugo personal', 'producto', 'unidad', 'JUG-PER', 'Bebida individual.', 10, 3),
+    ('Lacteos', 'Leche 1 L', 'producto', 'unidad', 'LEC-1L', 'Producto refrigerado o UHT.', 8, 1),
+    ('Lacteos', 'Yogurt 1 L', 'producto', 'unidad', 'YOG-1L', 'Producto lacteo de rotacion media.', 6, 2),
+    ('Panaderia', 'Pan molde', 'producto', 'unidad', 'PAN-MOL', 'Producto de panaderia empacado.', 5, 1),
+    ('Panaderia', 'Galletas familiares', 'producto', 'unidad', 'GAL-FAM', 'Producto de consumo familiar.', 8, 2),
+    ('Snacks y golosinas', 'Papas fritas personales', 'producto', 'unidad', 'SNA-PAP', 'Snack de impulso.', 10, 1),
+    ('Snacks y golosinas', 'Chocolate pequeño', 'producto', 'unidad', 'GOL-CHO', 'Golosina de impulso.', 10, 2),
+    ('Enlatados y conservas', 'Atun lata', 'producto', 'unidad', 'ATL-001', 'Conserva de alta demanda.', 6, 1),
+    ('Limpieza', 'Detergente 1 kg', 'producto', 'unidad', 'DET-1KG', 'Producto de limpieza domestica.', 5, 1),
+    ('Limpieza', 'Lavandina 1 L', 'producto', 'unidad', 'LAV-1L', 'Producto de limpieza domestica.', 5, 2),
+    ('Higiene personal', 'Jabon de tocador', 'producto', 'unidad', 'HIG-JAB', 'Higiene personal basica.', 8, 1),
+    ('Higiene personal', 'Papel higienico pack', 'producto', 'unidad', 'HIG-PAP', 'Higiene personal basica.', 6, 2),
+    ('Hogar y descartables', 'Bolsas plasticas', 'producto', 'paquete', 'HOG-BOL', 'Descartable de uso diario.', 4, 1),
+    ('Frutas y verduras', 'Tomate', 'producto', 'kg', 'VER-TOM', 'Producto fresco.', 3, 1),
+    ('Frutas y verduras', 'Cebolla', 'producto', 'kg', 'VER-CEB', 'Producto fresco.', 3, 2),
+    ('Congelados', 'Pollo trozado', 'producto', 'kg', 'CON-POL', 'Producto refrigerado/congelado.', 3, 1),
+    ('Mascotas', 'Alimento para perro 1 kg', 'producto', 'unidad', 'MAS-PER-1KG', 'Producto basico para mascotas.', 4, 1),
+    ('Recargas y servicios', 'Recarga telefonica', 'servicio', 'servicio', 'SER-REC', 'Servicio complementario sin stock.', 0, 1)
+) as pr(categoria_nombre, nombre, tipo, unidad, sku_sugerido, descripcion, stock_minimo, orden) on p.codigo = 'minimarket_abarrotes'
+on conflict (plantilla_id, nombre) do update
+set
+  categoria_nombre = excluded.categoria_nombre,
+  tipo = excluded.tipo,
+  unidad = excluded.unidad,
+  sku_sugerido = excluded.sku_sugerido,
+  descripcion = excluded.descripcion,
+  stock_minimo = excluded.stock_minimo,
+  orden = excluded.orden,
+  activo = true;
+
+create or replace function aplicar_catalogo_plantilla(
+  tienda_uuid uuid,
+  plantilla_codigo text,
+  incluir_productos boolean default false
+)
+returns void
+language plpgsql
+as $$
+declare
+  plantilla_uuid uuid;
+begin
+  select id
+    into plantilla_uuid
+  from catalogo_plantilla
+  where codigo = plantilla_codigo
+    and activo = true
+  limit 1;
+
+  if plantilla_uuid is null then
+    raise exception 'No existe la plantilla de catalogo %', plantilla_codigo;
+  end if;
+
+  insert into categoria (tienda_id, nombre, descripcion, icono, orden, activo)
+  select tienda_uuid, c.nombre, c.descripcion, c.icono, c.orden, c.activo
+  from catalogo_plantilla_categoria c
+  where c.plantilla_id = plantilla_uuid
+    and c.activo = true
+  on conflict (tienda_id, nombre) do update
+  set
+    descripcion = coalesce(categoria.descripcion, excluded.descripcion),
+    icono = coalesce(categoria.icono, excluded.icono),
+    orden = excluded.orden,
+    activo = true,
+    updated_at = now();
+
+  if incluir_productos then
+    insert into producto (
+      tienda_id,
+      categoria_id,
+      sku,
+      nombre,
+      descripcion,
+      tipo,
+      unidad,
+      stock_minimo,
+      visible_pos,
+      visible_catalogo,
+      activo,
+      orden_catalogo
+    )
+    select
+      tienda_uuid,
+      c.id,
+      pr.sku_sugerido,
+      pr.nombre,
+      pr.descripcion,
+      pr.tipo,
+      pr.unidad,
+      pr.stock_minimo,
+      true,
+      false,
+      true,
+      pr.orden
+    from catalogo_plantilla_producto pr
+    join categoria c on c.tienda_id = tienda_uuid and c.nombre = pr.categoria_nombre
+    where pr.plantilla_id = plantilla_uuid
+      and pr.activo = true
+    on conflict (tienda_id, sku) where sku is not null do update
+    set
+      categoria_id = excluded.categoria_id,
+      descripcion = coalesce(producto.descripcion, excluded.descripcion),
+      tipo = excluded.tipo,
+      unidad = excluded.unidad,
+      stock_minimo = excluded.stock_minimo,
+      visible_pos = true,
+      orden_catalogo = excluded.orden_catalogo,
+      updated_at = now();
+  end if;
+end;
+$$;
 

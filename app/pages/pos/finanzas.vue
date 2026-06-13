@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Finanzas | NEXA',
+  title: 'Finanzas | IMPULSA',
 })
 
 type Tone = 'green' | 'red' | 'amber' | 'blue'
@@ -250,7 +250,7 @@ function money(value: number) {
           <Button type="button" icon="pi pi-sparkles" label="Ver análisis con IA" severity="success" />
           <small>Actualizado hoy, 08:30 a.m.</small>
         </div>
-        <img src="/kenchita.png" alt="" aria-hidden="true">
+        <img src="/haru.png" alt="" aria-hidden="true">
       </section>
     </div>
   </div>
@@ -682,7 +682,7 @@ function money(value: number) {
   padding: 17px;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(254, 252, 232, 0.9) 58%, rgba(254, 252, 232, 0.3)),
-    url('/kenchita-selva.jpg') center / cover no-repeat;
+    url('/haru-selva.jpg') center / cover no-repeat;
 }
 
 .ai-panel :deep(.p-tag) {

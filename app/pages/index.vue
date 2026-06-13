@@ -6,7 +6,7 @@ definePageMeta({
 const menuItems = [
   { label: 'Inicio', href: '#inicio' },
   { label: 'Herramientas', href: '#herramientas' },
-  { label: 'Conoce a Kenchita', href: '#como-funciona' },
+  { label: 'Conoce a Haru', href: '#como-funciona' },
   { label: 'Contacto', href: '#contacto' },
 ]
 
@@ -20,9 +20,9 @@ const socials = [
 // Tarjetas "Herramientas para crecer" (las imágenes las provee el equipo)
 const tools = [
   {
-    title: 'Kenchita · Asesor 24/7',
-    src: '/tools/kenchita-asesor.jpg',
-    alt: 'Kenchita, el jaguar asesor de NEXA, trabajando frente a la computadora en una oficina',
+    title: 'Haru · Asesor 24/7',
+    src: '/tools/haru-asesor.jpg',
+    alt: 'Haru, el jaguar asesor de IMPULSA, trabajando frente a la computadora en una oficina',
   },
   {
     title: 'Finanzas',
@@ -49,8 +49,8 @@ const tools = [
     <section class="mx-auto w-[min(1240px,calc(100%-32px))] pt-6">
       <div class="hero2">
         <img
-          :src="'/hero-emprendedora.jpg'"
-          alt="Emprendedora con delantal usando una tablet en su tienda junto al río amazónico"
+          :src="'/hero-impulsa-digital.webp'"
+          alt="Equipo de trabajo revisando una estrategia digital en una oficina"
           class="hero2__bg"
           loading="eager"
         />
@@ -86,32 +86,32 @@ const tools = [
       </div>
     </section>
 
-    <!-- Conoce a Kenchita -->
+    <!-- Conoce a Haru -->
     <section id="como-funciona" class="mx-auto w-[min(1240px,calc(100%-32px))] pb-20">
       <div class="grid items-stretch gap-8 lg:grid-cols-2">
         <div class="pam-photo" v-reveal="{ variant: 'left' }">
           <img
-            :src="'/kenchita-conoce-cta.jpg'"
-            alt="Kenchita, el jaguar asesor de NEXA, en la selva amazónica"
+            :src="'/haru-conoce-cta.jpg'"
+            alt="Haru, el jaguar asesor de IMPULSA, en la selva amazónica"
             class="pam-photo__img"
             loading="lazy"
           />
         </div>
 
         <div class="pam-panel" v-reveal="{ variant: 'right', delay: 120 }">
-          <h2 class="section-title">Conoce a <span class="text-primary-600">Kenchita</span>,<br />tu asesor con IA</h2>
+          <h2 class="section-title">Conoce a <span class="text-primary-600">Haru</span>,<br />tu asesor con IA</h2>
           <p class="section-lead !mt-4 max-w-md">
-            Kenchita analiza los datos reales de tu negocio y te dice exactamente dónde actuar.
+            Haru analiza los datos reales de tu negocio y te dice exactamente dónde actuar.
           </p>
 
           <!-- Ventana de chat: demo con datos reales del negocio -->
           <div class="chat-win mt-6">
             <header class="chat-win__head">
               <span class="chat-ava chat-ava--ai">
-                <img src="/kenchita-chat.png" alt="Kenchita, el jaguar asesor de NEXA" />
+                <img src="/haru-chat.png" alt="Haru, el jaguar asesor de IMPULSA" />
               </span>
               <div>
-                <strong>Kenchita</strong>
+                <strong>Haru</strong>
                 <small><span class="chat-win__dot" />En línea · analizando tu negocio</small>
               </div>
             </header>
@@ -123,10 +123,10 @@ const tools = [
                 <span class="chat-ava chat-ava--user"><i class="pi pi-user" /></span>
               </div>
 
-              <!-- Respuesta de Kenchita -->
+              <!-- Respuesta de Haru -->
               <div class="flex items-start gap-2.5">
                 <span class="chat-ava chat-ava--ai">
-                  <img src="/kenchita-chat.png" alt="Kenchita, el jaguar asesor de NEXA" />
+                  <img src="/haru-chat.png" alt="Haru, el jaguar asesor de IMPULSA" />
                 </span>
                 <div class="chat-bubble-ai !max-w-[94%] !p-3.5 sm:!p-4">
                   <p class="mb-3 text-sm font-semibold text-[#1f2d23]">Revisé tu inventario y tus ventas de los últimos 30 días 👇</p>
@@ -161,7 +161,7 @@ const tools = [
           </div>
 
           <div class="mt-7 flex flex-wrap items-center gap-3">
-            <Button label="Hablar con Kenchita" icon="pi pi-comments" class="btn-shine !w-max !rounded-full !border-0 !bg-primary-500 !px-6 !py-3 !font-bold !text-white" />
+            <Button label="Hablar con Haru" icon="pi pi-comments" class="btn-shine !w-max !rounded-full !border-0 !bg-primary-500 !px-6 !py-3 !font-bold !text-white" />
             <span class="data-pill"><i class="pi pi-database" />Analizó 42 productos · 128 ventas</span>
           </div>
         </div>
@@ -176,7 +176,7 @@ const tools = [
             Empieza a hacer <span class="text-gradient">crecer tu negocio</span> hoy
           </h2>
           <p class="mt-4 max-w-md text-base font-medium text-[#d9f5df]">
-            Crea tu cuenta gratis y descubre todo lo que NEXA y Kenchita pueden hacer por tu negocio.
+            Crea tu cuenta gratis y descubre todo lo que IMPULSA y Haru pueden hacer por tu negocio.
           </p>
           <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !mt-7 !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
         </div>
@@ -188,9 +188,9 @@ const tools = [
       <div class="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-10 py-14 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <a href="#inicio" class="flex items-center gap-3">
-            <img src="/nexa-logo.png" alt="" class="site-logo site-logo--footer" aria-hidden="true" />
+            <img src="/impulsa-logo-white.webp" alt="" class="site-logo site-logo--footer" aria-hidden="true" />
             <span class="leading-none">
-              <span class="font-display block text-[1.6rem] font-extrabold">NEXA</span>
+              <span class="font-display block text-[1.6rem] font-extrabold">IMPULSA</span>
               <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#bfeac8]">IA para tu negocio</span>
             </span>
           </a>
@@ -222,7 +222,7 @@ const tools = [
 
       <div class="border-t border-[#16431d]">
         <div class="mx-auto w-[min(1240px,calc(100%-32px))] py-6 text-center text-xs font-semibold text-[#bfeac8]">
-          © {{ new Date().getFullYear() }} NEXA · Hecho con 💚 en Cobija, Pando — Bolivia
+          © {{ new Date().getFullYear() }} IMPULSA · Hecho con 💚 en Cobija, Pando — Bolivia
         </div>
       </div>
     </footer>
@@ -413,7 +413,7 @@ const tools = [
   gap: 12px;
 }
 
-/* ---- Conoce a Kenchita ---- */
+/* ---- Conoce a Haru ---- */
 .pam-photo {
   position: relative;
   overflow: hidden;
@@ -510,7 +510,7 @@ const tools = [
   background: #fbfdfb;
 }
 
-/* tarjetas de insight dentro de la respuesta de Kenchita */
+/* tarjetas de insight dentro de la respuesta de Haru */
 .insight {
   display: flex;
   gap: 10px;

@@ -1,7 +1,7 @@
 import { ensureDatabase, pool } from '../../utils/db'
 import { requireSession } from '../../utils/session'
 
-type KenchitaMessageRow = {
+type HaruMessageRow = {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const conversation = await pool.query<{ id: string }>(
     `
       select id
-      from kenchita_conversacion
+      from haru_conversacion
       where tienda_id = $1
         and usuario_id = $2
         and estado = 'abierta'
@@ -40,13 +40,13 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const messages = await pool.query<KenchitaMessageRow>(
+  const messages = await pool.query<HaruMessageRow>(
     `
       select
         id,
         rol as role,
         contenido as content
-      from kenchita_mensaje
+      from haru_mensaje
       where conversacion_id = $1
         and rol in ('user', 'assistant')
         and coalesce(metadata->>'finishReason', '') <> 'MAX_TOKENS'

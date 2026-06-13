@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Inicio | NEXA',
+  title: 'Inicio | IMPULSA',
 })
 
 const { currentWeather, weatherDays, weatherStatus } = await useCobijaWeather()
@@ -195,7 +195,7 @@ function go(to?: string) {
 
       <section class="ai-card">
         <div>
-          <span class="card-kicker"><i class="pi pi-comments" aria-hidden="true" />Habla con NEXA, tu asistente IA</span>
+          <span class="card-kicker"><i class="pi pi-comments" aria-hidden="true" />Habla con IMPULSA, tu asistente IA</span>
           <h2>¿En qué puedo ayudarte hoy?</h2>
           <p>Consulta ideas de venta, precios, promociones o próximos pasos para tu negocio.</p>
         </div>

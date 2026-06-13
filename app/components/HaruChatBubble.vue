@@ -24,8 +24,8 @@ type MessageBlock =
     items: MessageInline[][]
   }
 
-const COLLAPSED_KEY = 'nexa-kenchita-chat-collapsed'
-const CHAT_OPEN_KEY = 'nexa-kenchita-chat-open'
+const COLLAPSED_KEY = 'impulsa-haru-chat-collapsed'
+const CHAT_OPEN_KEY = 'impulsa-haru-chat-open'
 
 const isCollapsed = ref(false)
 const isChatOpen = ref(false)
@@ -39,7 +39,7 @@ const messages = ref<ChatMessage[]>([
   {
     id: 'welcome',
     role: 'assistant',
-    content: 'Hola, soy Kenchita. Puedo ayudarte a revisar precios, ventas, catalogo y acciones para mejorar tu negocio en Cobija.',
+    content: 'Hola, soy Haru. Puedo ayudarte a revisar precios, ventas, catalogo y acciones para mejorar tu negocio en Cobija.',
   },
 ])
 
@@ -49,7 +49,7 @@ const quickPrompts = [
   'Que productos no se venden?',
 ]
 
-const chatTitle = computed(() => isSending.value ? 'Kenchita esta pensando' : 'Kenchita IA')
+const chatTitle = computed(() => isSending.value ? 'Haru esta pensando' : 'Haru IA')
 const hasActiveConversation = computed(() => Boolean(conversationId.value) || messages.value.length > 1)
 const lastAssistantMessage = computed(() => [...messages.value].reverse().find((item) => item.role === 'assistant' && !item.pending)?.content ?? '')
 const previewDescription = computed(() => {
@@ -224,7 +224,7 @@ async function loadLatestConversation() {
     const response = await $fetch<{
       conversationId: string | null
       messages: ChatMessage[]
-    }>('/api/kenchita/chat')
+    }>('/api/haru/chat')
 
     conversationId.value = response.conversationId
 
@@ -271,7 +271,7 @@ async function sendMessage(content = draft.value) {
     const response = await $fetch<{
       conversationId: string
       reply: string
-    }>('/api/kenchita/chat', {
+    }>('/api/haru/chat', {
       method: 'POST',
       body: {
         conversationId: conversationId.value,
@@ -310,50 +310,50 @@ function onComposerKeydown(event: KeyboardEvent) {
 
 <template>
   <ClientOnly>
-    <aside class="kenchita-chat" :class="{ 'is-collapsed': isCollapsed, 'is-open': isChatOpen }" aria-label="Asistente IA Kenchita">
-      <Transition name="kenchita-state" mode="out-in">
+    <aside class="haru-chat" :class="{ 'is-collapsed': isCollapsed, 'is-open': isChatOpen }" aria-label="Asistente IA Haru">
+      <Transition name="haru-state" mode="out-in">
         <section
           v-if="!isCollapsed && !isChatOpen"
           key="preview"
-          class="kenchita-chat__preview"
+          class="haru-chat__preview"
           role="button"
           tabindex="0"
-          aria-label="Abrir chat con Kenchita"
+          aria-label="Abrir chat con Haru"
           @click="openChat()"
           @keydown.enter.prevent="openChat()"
           @keydown.space.prevent="openChat()"
         >
           <button
             type="button"
-            class="kenchita-chat__close"
-            aria-label="Cerrar asistente Kenchita"
+            class="haru-chat__close"
+            aria-label="Cerrar asistente Haru"
             title="Cerrar"
             @click.stop="setCollapsed(true)"
           >
             <i class="pi pi-times" aria-hidden="true" />
           </button>
 
-          <span class="kenchita-chat__avatar-wrap" aria-hidden="true">
-            <img src="/kenchita-chat.png" alt="" class="kenchita-chat__avatar">
+          <span class="haru-chat__avatar-wrap" aria-hidden="true">
+            <img src="/haru-chat.png" alt="" class="haru-chat__avatar">
           </span>
 
-          <div class="kenchita-chat__message">
-            <span class="kenchita-chat__status">
-              <span class="kenchita-chat__dot" aria-hidden="true" />
-              Kenchita IA
+          <div class="haru-chat__message">
+            <span class="haru-chat__status">
+              <span class="haru-chat__dot" aria-hidden="true" />
+              Haru IA
             </span>
-            <strong>{{ hasActiveConversation ? 'Chat en curso' : 'Hola, soy Kenchita' }}</strong>
+            <strong>{{ hasActiveConversation ? 'Chat en curso' : 'Hola, soy Haru' }}</strong>
             <p>{{ previewDescription }}</p>
-            <span v-if="hasActiveConversation" class="kenchita-chat__resume">
+            <span v-if="hasActiveConversation" class="haru-chat__resume">
               <i class="pi pi-comments" aria-hidden="true" />
               Continuar chat
             </span>
-            <div v-if="!hasActiveConversation" class="kenchita-chat__chips" aria-label="Consultas rapidas">
+            <div v-if="!hasActiveConversation" class="haru-chat__chips" aria-label="Consultas rapidas">
               <button
                 v-for="prompt in quickPrompts"
                 :key="prompt"
                 type="button"
-                class="kenchita-chat__chip"
+                class="haru-chat__chip"
                 @click.stop="openChat(prompt)"
               >
                 {{ prompt }}
@@ -362,14 +362,14 @@ function onComposerKeydown(event: KeyboardEvent) {
           </div>
         </section>
 
-        <section v-else-if="isChatOpen" key="chat" class="kenchita-chat__window">
-          <header class="kenchita-chat__header">
-            <span class="kenchita-chat__header-avatar" aria-hidden="true">
-              <img src="/kenchita-chat.png" alt="">
+        <section v-else-if="isChatOpen" key="chat" class="haru-chat__window">
+          <header class="haru-chat__header">
+            <span class="haru-chat__header-avatar" aria-hidden="true">
+              <img src="/haru-chat.png" alt="">
             </span>
-            <span class="kenchita-chat__header-copy">
+            <span class="haru-chat__header-copy">
               <strong>{{ chatTitle }}</strong>
-              <small><span class="kenchita-chat__dot" aria-hidden="true" />Asesor empresarial para tu tienda</small>
+              <small><span class="haru-chat__dot" aria-hidden="true" />Asesor empresarial para tu tienda</small>
             </span>
             <button type="button" aria-label="Minimizar chat" title="Minimizar" @click="closeChatToPreview">
               <i class="pi pi-minus" aria-hidden="true" />
@@ -379,17 +379,17 @@ function onComposerKeydown(event: KeyboardEvent) {
             </button>
           </header>
 
-          <div ref="messagesEl" class="kenchita-chat__messages" aria-live="polite">
+          <div ref="messagesEl" class="haru-chat__messages" aria-live="polite">
             <article
               v-for="message in messages"
               :key="message.id"
-              class="kenchita-chat__bubble"
+              class="haru-chat__bubble"
               :class="[`is-${message.role}`, { 'is-pending': message.pending }]"
             >
-              <span v-if="message.role === 'assistant'" class="kenchita-chat__bubble-avatar" aria-hidden="true">
-                <img src="/kenchita-chat.png" alt="">
+              <span v-if="message.role === 'assistant'" class="haru-chat__bubble-avatar" aria-hidden="true">
+                <img src="/haru-chat.png" alt="">
               </span>
-              <div v-if="!message.pending" class="kenchita-chat__bubble-content">
+              <div v-if="!message.pending" class="haru-chat__bubble-content">
                 <template
                   v-for="(block, blockIndex) in parseMessageBlocks(message.content)"
                   :key="`${message.id}-${blockIndex}`"
@@ -433,7 +433,7 @@ function onComposerKeydown(event: KeyboardEvent) {
                   </ul>
                 </template>
               </div>
-              <p v-else class="kenchita-chat__typing" aria-label="Kenchita esta escribiendo">
+              <p v-else class="haru-chat__typing" aria-label="Haru esta escribiendo">
                 <span>{{ message.content }}</span>
                 <i aria-hidden="true" />
                 <i aria-hidden="true" />
@@ -442,7 +442,7 @@ function onComposerKeydown(event: KeyboardEvent) {
             </article>
           </div>
 
-          <div v-if="!hasActiveConversation" class="kenchita-chat__suggestions" aria-label="Sugerencias de consulta">
+          <div v-if="!hasActiveConversation" class="haru-chat__suggestions" aria-label="Sugerencias de consulta">
             <button
               v-for="prompt in quickPrompts"
               :key="prompt"
@@ -454,12 +454,12 @@ function onComposerKeydown(event: KeyboardEvent) {
             </button>
           </div>
 
-          <form class="kenchita-chat__composer" @submit.prevent="sendMessage()">
+          <form class="haru-chat__composer" @submit.prevent="sendMessage()">
             <textarea
               v-model="draft"
               rows="1"
               placeholder="Escribe tu pregunta..."
-              aria-label="Mensaje para Kenchita"
+              aria-label="Mensaje para Haru"
               :disabled="isSending"
               @keydown="onComposerKeydown"
             />
@@ -473,15 +473,15 @@ function onComposerKeydown(event: KeyboardEvent) {
           v-else
           key="launcher"
           type="button"
-          class="kenchita-chat__launcher"
-          aria-label="Abrir asistente Kenchita"
-          title="Abrir Kenchita IA"
+          class="haru-chat__launcher"
+          aria-label="Abrir asistente Haru"
+          title="Abrir Haru IA"
           @click="setCollapsed(false)"
         >
-          <span class="kenchita-chat__launcher-crop" aria-hidden="true">
-            <img src="/kenchita-chat.png" alt="" class="kenchita-chat__launcher-avatar">
+          <span class="haru-chat__launcher-crop" aria-hidden="true">
+            <img src="/haru-chat.png" alt="" class="haru-chat__launcher-avatar">
           </span>
-          <span class="kenchita-chat__launcher-pulse" aria-hidden="true" />
+          <span class="haru-chat__launcher-pulse" aria-hidden="true" />
         </button>
       </Transition>
     </aside>
@@ -489,7 +489,7 @@ function onComposerKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.kenchita-chat {
+.haru-chat {
   position: fixed;
   right: max(18px, env(safe-area-inset-right));
   bottom: max(18px, env(safe-area-inset-bottom));
@@ -500,13 +500,13 @@ function onComposerKeydown(event: KeyboardEvent) {
   isolation: isolate;
 }
 
-.kenchita-chat__preview,
-.kenchita-chat__window,
-.kenchita-chat__launcher {
+.haru-chat__preview,
+.haru-chat__window,
+.haru-chat__launcher {
   pointer-events: auto;
 }
 
-.kenchita-chat__preview {
+.haru-chat__preview {
   position: relative;
   display: grid;
   grid-template-columns: 74px minmax(0, 1fr);
@@ -523,8 +523,8 @@ function onComposerKeydown(event: KeyboardEvent) {
   cursor: pointer;
 }
 
-.kenchita-chat__close,
-.kenchita-chat__header button {
+.haru-chat__close,
+.haru-chat__header button {
   display: grid;
   place-items: center;
   border: 0;
@@ -535,7 +535,7 @@ function onComposerKeydown(event: KeyboardEvent) {
     transform 0.18s ease;
 }
 
-.kenchita-chat__close {
+.haru-chat__close {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -546,14 +546,14 @@ function onComposerKeydown(event: KeyboardEvent) {
   color: #31523a;
 }
 
-.kenchita-chat__close:hover,
-.kenchita-chat__header button:hover {
+.haru-chat__close:hover,
+.haru-chat__header button:hover {
   background: #dcfce5;
   color: #0a6f1f;
   transform: translateY(-1px);
 }
 
-.kenchita-chat__avatar-wrap {
+.haru-chat__avatar-wrap {
   align-self: center;
   display: grid;
   width: 64px;
@@ -568,20 +568,20 @@ function onComposerKeydown(event: KeyboardEvent) {
   overflow: hidden;
 }
 
-.kenchita-chat__avatar {
+.haru-chat__avatar {
   width: 68px;
   height: 63px;
   object-fit: contain;
   transform: translateY(3px);
 }
 
-.kenchita-chat__message {
+.haru-chat__message {
   min-width: 0;
   color: #0b1f3a;
   overflow-wrap: anywhere;
 }
 
-.kenchita-chat__status {
+.haru-chat__status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -593,7 +593,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   text-transform: uppercase;
 }
 
-.kenchita-chat__dot {
+.haru-chat__dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -601,7 +601,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.16);
 }
 
-.kenchita-chat__message strong {
+.haru-chat__message strong {
   display: block;
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
   font-size: 1rem;
@@ -610,7 +610,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   overflow-wrap: anywhere;
 }
 
-.kenchita-chat__message p {
+.haru-chat__message p {
   margin: 5px 0 11px;
   color: #5f6d7e;
   font-size: 0.82rem;
@@ -623,7 +623,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   overflow: hidden;
 }
 
-.kenchita-chat__resume {
+.haru-chat__resume {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -633,19 +633,19 @@ function onComposerKeydown(event: KeyboardEvent) {
   font-weight: 900;
 }
 
-.kenchita-chat__resume i {
+.haru-chat__resume i {
   font-size: 0.8rem;
 }
 
-.kenchita-chat__chips,
-.kenchita-chat__suggestions {
+.haru-chat__chips,
+.haru-chat__suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.kenchita-chat__chip,
-.kenchita-chat__suggestions button {
+.haru-chat__chip,
+.haru-chat__suggestions button {
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid rgba(15, 158, 46, 0.2);
@@ -661,14 +661,14 @@ function onComposerKeydown(event: KeyboardEvent) {
     transform 0.18s ease;
 }
 
-.kenchita-chat__chip:hover,
-.kenchita-chat__suggestions button:hover:not(:disabled) {
+.haru-chat__chip:hover,
+.haru-chat__suggestions button:hover:not(:disabled) {
   border-color: rgba(15, 158, 46, 0.45);
   background: #effdf3;
   transform: translateY(-1px);
 }
 
-.kenchita-chat__window {
+.haru-chat__window {
   display: grid;
   width: min(420px, calc(100vw - 32px));
   height: min(640px, calc(100dvh - 36px));
@@ -680,7 +680,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   box-shadow: 0 24px 60px rgba(4, 32, 13, 0.24);
 }
 
-.kenchita-chat__header {
+.haru-chat__header {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) 34px 34px;
   align-items: center;
@@ -692,45 +692,45 @@ function onComposerKeydown(event: KeyboardEvent) {
   color: #ffffff;
 }
 
-.kenchita-chat__header-avatar,
-.kenchita-chat__bubble-avatar,
-.kenchita-chat__launcher-crop {
+.haru-chat__header-avatar,
+.haru-chat__bubble-avatar,
+.haru-chat__launcher-crop {
   display: grid;
   place-items: center;
   border-radius: 999px;
   overflow: hidden;
 }
 
-.kenchita-chat__header-avatar {
+.haru-chat__header-avatar {
   width: 46px;
   height: 46px;
   background: #eaffef;
   border: 2px solid rgba(255, 255, 255, 0.76);
 }
 
-.kenchita-chat__header-avatar img {
+.haru-chat__header-avatar img {
   width: 52px;
   height: 48px;
   object-fit: contain;
   transform: translateY(3px);
 }
 
-.kenchita-chat__header-copy {
+.haru-chat__header-copy {
   min-width: 0;
 }
 
-.kenchita-chat__header-copy strong,
-.kenchita-chat__header-copy small {
+.haru-chat__header-copy strong,
+.haru-chat__header-copy small {
   display: block;
 }
 
-.kenchita-chat__header-copy strong {
+.haru-chat__header-copy strong {
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
   font-size: 1rem;
   font-weight: 900;
 }
 
-.kenchita-chat__header-copy small {
+.haru-chat__header-copy small {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -739,7 +739,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   font-weight: 700;
 }
 
-.kenchita-chat__header button {
+.haru-chat__header button {
   width: 32px;
   height: 32px;
   border-radius: 999px;
@@ -747,7 +747,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   color: #ffffff;
 }
 
-.kenchita-chat__messages {
+.haru-chat__messages {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -759,15 +759,15 @@ function onComposerKeydown(event: KeyboardEvent) {
     #ffffff;
 }
 
-.kenchita-chat__bubble {
+.haru-chat__bubble {
   display: flex;
   align-items: flex-end;
   gap: 8px;
   max-width: 90%;
 }
 
-.kenchita-chat__bubble-content,
-.kenchita-chat__bubble p {
+.haru-chat__bubble-content,
+.haru-chat__bubble p {
   margin: 0;
   padding: 10px 12px;
   border-radius: 16px;
@@ -777,7 +777,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   line-height: 1.45;
 }
 
-.kenchita-chat__bubble-content p {
+.haru-chat__bubble-content p {
   margin: 0;
   padding: 0;
   border: 0;
@@ -787,21 +787,21 @@ function onComposerKeydown(event: KeyboardEvent) {
   font: inherit;
 }
 
-.kenchita-chat__bubble-content p + p,
-.kenchita-chat__bubble-content p + ul,
-.kenchita-chat__bubble-content p + ol,
-.kenchita-chat__bubble-content ul + p,
-.kenchita-chat__bubble-content ol + p {
+.haru-chat__bubble-content p + p,
+.haru-chat__bubble-content p + ul,
+.haru-chat__bubble-content p + ol,
+.haru-chat__bubble-content ul + p,
+.haru-chat__bubble-content ol + p {
   margin-top: 8px;
 }
 
-.kenchita-chat__bubble-content strong {
+.haru-chat__bubble-content strong {
   color: #031f0b;
   font-weight: 750;
 }
 
-.kenchita-chat__bubble-content ul,
-.kenchita-chat__bubble-content ol {
+.haru-chat__bubble-content ul,
+.haru-chat__bubble-content ol {
   display: grid;
   gap: 6px;
   margin: 8px 0 0;
@@ -809,74 +809,74 @@ function onComposerKeydown(event: KeyboardEvent) {
   list-style-position: outside;
 }
 
-.kenchita-chat__bubble-content li {
+.haru-chat__bubble-content li {
   padding-left: 2px;
   line-height: 1.45;
 }
 
-.kenchita-chat__bubble-content li::marker {
+.haru-chat__bubble-content li::marker {
   color: #0f9e2e;
   font-weight: 800;
 }
 
-.kenchita-chat__bubble.is-assistant {
+.haru-chat__bubble.is-assistant {
   align-self: flex-start;
 }
 
-.kenchita-chat__bubble.is-assistant .kenchita-chat__bubble-content,
-.kenchita-chat__bubble.is-assistant > p {
+.haru-chat__bubble.is-assistant .haru-chat__bubble-content,
+.haru-chat__bubble.is-assistant > p {
   border-bottom-left-radius: 5px;
   background: #ffffff;
   border: 1px solid #dbeee0;
 }
 
-.kenchita-chat__bubble.is-user {
+.haru-chat__bubble.is-user {
   align-self: flex-end;
   justify-content: flex-end;
 }
 
-.kenchita-chat__bubble.is-user .kenchita-chat__bubble-content,
-.kenchita-chat__bubble.is-user > p {
+.haru-chat__bubble.is-user .haru-chat__bubble-content,
+.haru-chat__bubble.is-user > p {
   border-bottom-right-radius: 5px;
   background: #0f9e2e;
   color: #ffffff;
 }
 
-.kenchita-chat__bubble.is-user .kenchita-chat__bubble-content strong {
+.haru-chat__bubble.is-user .haru-chat__bubble-content strong {
   color: #ffffff;
 }
 
-.kenchita-chat__bubble.is-pending > p {
+.haru-chat__bubble.is-pending > p {
   color: #64748b;
 }
 
-.kenchita-chat__typing {
+.haru-chat__typing {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.kenchita-chat__typing span {
+.haru-chat__typing span {
   margin-right: 2px;
 }
 
-.kenchita-chat__typing i {
+.haru-chat__typing i {
   width: 6px;
   height: 6px;
   border-radius: 999px;
   background: #22c55e;
-  animation: kenchita-typing 1s ease-in-out infinite;
+  animation: haru-typing 1s ease-in-out infinite;
 }
 
-.kenchita-chat__typing i:nth-child(3) {
+.haru-chat__typing i:nth-child(3) {
   animation-delay: 0.15s;
 }
 
-.kenchita-chat__typing i:nth-child(4) {
+.haru-chat__typing i:nth-child(4) {
   animation-delay: 0.3s;
 }
 
-.kenchita-chat__bubble-avatar {
+.haru-chat__bubble-avatar {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
@@ -884,14 +884,14 @@ function onComposerKeydown(event: KeyboardEvent) {
   border: 1px solid #c6f6d5;
 }
 
-.kenchita-chat__bubble-avatar img {
+.haru-chat__bubble-avatar img {
   width: 32px;
   height: 30px;
   object-fit: contain;
   transform: translateY(2px);
 }
 
-.kenchita-chat__suggestions {
+.haru-chat__suggestions {
   flex-wrap: nowrap;
   gap: 7px;
   padding: 10px 12px 0;
@@ -902,17 +902,17 @@ function onComposerKeydown(event: KeyboardEvent) {
   scrollbar-color: #bfeac8 transparent;
 }
 
-.kenchita-chat__suggestions button {
+.haru-chat__suggestions button {
   flex: 0 0 auto;
   white-space: nowrap;
 }
 
-.kenchita-chat__suggestions button:disabled {
+.haru-chat__suggestions button:disabled {
   opacity: 0.58;
   cursor: not-allowed;
 }
 
-.kenchita-chat__composer {
+.haru-chat__composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;
   gap: 8px;
@@ -920,7 +920,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   background: #ffffff;
 }
 
-.kenchita-chat__composer textarea {
+.haru-chat__composer textarea {
   width: 100%;
   min-height: 42px;
   max-height: 110px;
@@ -933,12 +933,12 @@ function onComposerKeydown(event: KeyboardEvent) {
   outline: 0;
 }
 
-.kenchita-chat__composer textarea:focus {
+.haru-chat__composer textarea:focus {
   border-color: #35d35c;
   box-shadow: 0 0 0 3px rgba(53, 211, 92, 0.16);
 }
 
-.kenchita-chat__composer button {
+.haru-chat__composer button {
   display: grid;
   width: 42px;
   height: 42px;
@@ -950,12 +950,12 @@ function onComposerKeydown(event: KeyboardEvent) {
   cursor: pointer;
 }
 
-.kenchita-chat__composer button:disabled {
+.haru-chat__composer button:disabled {
   background: #a7d9b2;
   cursor: not-allowed;
 }
 
-.kenchita-chat__launcher {
+.haru-chat__launcher {
   position: relative;
   display: grid;
   width: 68px;
@@ -968,21 +968,21 @@ function onComposerKeydown(event: KeyboardEvent) {
   cursor: pointer;
 }
 
-.kenchita-chat__launcher-crop {
+.haru-chat__launcher-crop {
   position: relative;
   z-index: 1;
   width: 62px;
   height: 62px;
 }
 
-.kenchita-chat__launcher-avatar {
+.haru-chat__launcher-avatar {
   width: 72px;
   height: 66px;
   object-fit: contain;
   transform: translateY(4px);
 }
 
-.kenchita-chat__launcher-pulse {
+.haru-chat__launcher-pulse {
   position: absolute;
   right: 5px;
   top: 6px;
@@ -992,23 +992,23 @@ function onComposerKeydown(event: KeyboardEvent) {
   border-radius: 999px;
   background: #22c55e;
   box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.42);
-  animation: kenchita-pulse 1.8s ease-out infinite;
+  animation: haru-pulse 1.8s ease-out infinite;
 }
 
-.kenchita-state-enter-active,
-.kenchita-state-leave-active {
+.haru-state-enter-active,
+.haru-state-leave-active {
   transition:
     opacity 0.16s ease,
     transform 0.16s ease;
 }
 
-.kenchita-state-enter-from,
-.kenchita-state-leave-to {
+.haru-state-enter-from,
+.haru-state-leave-to {
   opacity: 0;
   transform: translateY(8px) scale(0.98);
 }
 
-@keyframes kenchita-pulse {
+@keyframes haru-pulse {
   70% {
     box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
   }
@@ -1018,7 +1018,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   }
 }
 
-@keyframes kenchita-typing {
+@keyframes haru-typing {
   0%,
   80%,
   100% {
@@ -1033,38 +1033,38 @@ function onComposerKeydown(event: KeyboardEvent) {
 }
 
 @media (max-width: 640px) {
-  .kenchita-chat {
+  .haru-chat {
     right: 12px;
     bottom: 12px;
   }
 
-  .kenchita-chat__preview {
+  .haru-chat__preview {
     grid-template-columns: 58px minmax(0, 1fr);
     width: calc(100vw - 24px);
     padding: 13px 38px 13px 12px;
     border-radius: 20px 20px 8px 20px;
   }
 
-  .kenchita-chat__avatar-wrap {
+  .haru-chat__avatar-wrap {
     width: 52px;
     height: 52px;
   }
 
-  .kenchita-chat__avatar {
+  .haru-chat__avatar {
     width: 57px;
     height: 53px;
   }
 
-  .kenchita-chat__chips {
+  .haru-chat__chips {
     gap: 5px;
   }
 
-  .kenchita-chat__message p {
+  .haru-chat__message p {
     margin-bottom: 8px;
     -webkit-line-clamp: 2;
   }
 
-  .kenchita-chat__window {
+  .haru-chat__window {
     width: calc(100vw - 24px);
     height: min(620px, calc(100dvh - 24px));
   }

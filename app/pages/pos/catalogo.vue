@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Catálogo | NEXA',
+  title: 'Catálogo | IMPULSA',
 })
 </script>
 

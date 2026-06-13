@@ -5,7 +5,7 @@ import { hashSessionToken } from '../../utils/password'
 export default defineEventHandler(async (event) => {
   await ensureDatabase()
 
-  const token = getCookie(event, 'nexa_session_token')
+  const token = getCookie(event, 'impulsa_session_token')
 
   if (token) {
     await pool.query(
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     )
   }
 
-  deleteCookie(event, 'nexa_session_token', {
+  deleteCookie(event, 'impulsa_session_token', {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

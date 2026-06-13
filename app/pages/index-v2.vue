@@ -9,8 +9,8 @@ const menuItems = [
 
 const tools = [
   { icon: 'pi pi-calculator', title: 'Calculadora de precios', text: 'Define precios justos y rentables con un desglose claro de costos y ganancia.' },
-  { icon: 'pi pi-megaphone', title: 'Marketing y ventas', text: 'Ideas listas para atraer clientes y vender más en TikTok, WhatsApp y Facebook — con la ayuda de Kenchita.' },
-  { icon: 'pi pi-palette', title: 'Branding y diseño', text: 'Recomendaciones de nombre, colores e identidad visual para tu negocio — con la ayuda de Kenchita.' },
+  { icon: 'pi pi-megaphone', title: 'Marketing y ventas', text: 'Ideas listas para atraer clientes y vender más en TikTok, WhatsApp y Facebook — con la ayuda de Haru.' },
+  { icon: 'pi pi-palette', title: 'Branding y diseño', text: 'Recomendaciones de nombre, colores e identidad visual para tu negocio — con la ayuda de Haru.' },
   { icon: 'pi pi-box', title: 'Gestión de inventario', text: 'Controla productos y existencias de forma simple, sin planillas complicadas.' }
 ]
 
@@ -29,12 +29,12 @@ const products = [
 
 const steps = [
   { number: '1', icon: 'pi pi-user-plus', title: 'Registra tu negocio', text: 'Crea tu cuenta gratis y cuéntanos a qué te dedicas. Toma menos de 2 minutos.' },
-  { number: '2', icon: 'pi pi-sparkles', title: 'Usa las herramientas y Kenchita', text: 'Pregunta, calcula precios y recibe ideas hechas a la medida de tu negocio.' },
+  { number: '2', icon: 'pi pi-sparkles', title: 'Usa las herramientas y Haru', text: 'Pregunta, calcula precios y recibe ideas hechas a la medida de tu negocio.' },
   { number: '3', icon: 'pi pi-chart-line', title: 'Crece y vende más', text: 'Aplica las recomendaciones, mide resultados y haz crecer tus ventas.' },
 ]
 
 const testimonials = [
-  { name: 'María Quispe', role: 'Dueña · Sabores del Acre', initials: 'MQ', text: 'Con NEXA aprendí a poner precios sin perder plata. Kenchita me dio ideas para WhatsApp y mis ventas subieron en dos semanas.' },
+  { name: 'María Quispe', role: 'Dueña · Sabores del Acre', initials: 'MQ', text: 'Con IMPULSA aprendí a poner precios sin perder plata. Haru me dio ideas para WhatsApp y mis ventas subieron en dos semanas.' },
   { name: 'Carlos Vargas', role: 'Boutique Amazonía', initials: 'CV', text: 'Lo mejor es que está pensado para negocios como el mío. Todo en simple, sin tecnicismos. Lo uso todos los días.' },
   { name: 'Lucía Mamani', role: 'Belleza Pando', initials: 'LM', text: 'El asesor responde al instante y entiende el mercado local. Es como tener un consultor disponible 24/7.' },
 ]
@@ -66,9 +66,9 @@ onBeforeUnmount(() => {
     <!-- Header (transparente sobre el hero, sólido al hacer scroll) -->
     <header class="site-header" :class="scrolled ? 'is-solid' : 'is-ghost'">
       <div class="mx-auto flex h-[74px] w-[min(1280px,calc(100%-32px))] items-center justify-between gap-4">
-        <a href="#inicio" class="flex items-center gap-2.5" aria-label="NEXA inicio">
-          <span class="nexa-mark"><i class="pi pi-bolt" /></span>
-          <span class="font-display text-[1.55rem] font-extrabold tracking-tight">NEXA</span>
+        <a href="#inicio" class="flex items-center gap-2.5" aria-label="IMPULSA inicio">
+          <span class="impulsa-mark"><i class="pi pi-bolt" /></span>
+          <span class="font-display text-[1.55rem] font-extrabold tracking-tight">IMPULSA</span>
         </a>
 
         <nav class="hidden items-center gap-7 text-sm font-semibold lg:flex">
@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
           <h1 class="hero-title font-display">
             Vende más, atrae clientes y pon <span class="text-gradient-warm">precios con cabeza</span>
           </h1>
-          <p class="hero-sub font-display">NEXA es tu asesor inteligente, hecho en Cobija para los emprendedores de la Amazonía boliviana.</p>
+          <p class="hero-sub font-display">IMPULSA es tu asesor inteligente, hecho en Cobija para los emprendedores de la Amazonía boliviana.</p>
         </div>
 
         <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine hero-cta !mt-6 !rounded-full !border-0 !px-6 !py-3 !text-sm !font-bold" />
@@ -119,13 +119,13 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <!-- Conoce a Kenchita (chat) — la estrella, primero -->
+    <!-- Conoce a Haru (chat) — la estrella, primero -->
     <section class="mx-auto w-[min(1180px,calc(100%-28px))] py-16">
       <div class="grid items-center gap-10 lg:grid-cols-[0.85fr_1.15fr]">
         <div v-reveal>
           <span class="section-eyebrow"><i class="pi pi-comments" />Asesor con IA</span>
-          <h2 class="section-title mt-4">Conoce a Kenchita, tu asesor de negocios</h2>
-          <p class="section-lead">Pregúntale lo que quieras sobre tu negocio. Kenchita entiende el mercado local y te da respuestas claras y accionables, al instante.</p>
+          <h2 class="section-title mt-4">Conoce a Haru, tu asesor de negocios</h2>
+          <p class="section-lead">Pregúntale lo que quieras sobre tu negocio. Haru entiende el mercado local y te da respuestas claras y accionables, al instante.</p>
           <ul class="mt-6 space-y-3">
             <li v-for="t in ['Respuestas hechas a la medida de tu rubro', 'Ideas de marketing listas para usar', 'Disponible las 24 horas, todos los días']" :key="t" class="flex items-center gap-3 text-sm font-semibold text-[#1f2d23]">
               <span class="grid h-6 w-6 place-items-center rounded-full bg-primary-50 text-primary-500"><i class="pi pi-check text-xs" /></span>{{ t }}
@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
           <div class="mb-5 flex items-center gap-3 border-b border-[#eef1ee] pb-4">
             <span class="h-12 w-12 overflow-hidden rounded-full bg-[#f3faf2] ring-2 ring-[#e7efe7]"><MascotJaguar variant="head" /></span>
             <div>
-              <strong class="block">Kenchita</strong>
+              <strong class="block">Haru</strong>
               <span class="flex items-center gap-1.5 text-xs font-semibold text-primary-700"><span class="h-2 w-2 rounded-full bg-primary-500" />En línea</span>
             </div>
           </div>
@@ -169,12 +169,12 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="mt-12 grid gap-5 lg:grid-cols-3">
-        <!-- featured Kenchita card -->
+        <!-- featured Haru card -->
         <article class="pam-feature lg:row-span-2" v-reveal>
           <div class="relative z-10 flex h-full flex-col p-7">
             <span class="chip-soft w-max bg-[#2fe04a]/20 text-[#bfffca]"><i class="pi pi-bolt" />Estrella</span>
             <div class="mx-auto my-4 h-56 w-48"><MascotJaguar variant="full" /></div>
-            <h3 class="font-display text-2xl font-extrabold">Kenchita · Tu asesor 24/7</h3>
+            <h3 class="font-display text-2xl font-extrabold">Haru · Tu asesor 24/7</h3>
             <p class="mt-3 text-sm font-medium leading-7 text-[#d9f5df]">
               Un asistente inteligente que conoce tu negocio y responde al instante: marketing, ventas, branding y precios. Como tener un consultor siempre disponible.
             </p>
@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
               <span class="chip-soft bg-white/10 text-white"><i class="pi pi-comments" />Chat</span>
               <span class="chip-soft bg-white/10 text-white"><i class="pi pi-clock" />24/7</span>
             </div>
-            <Button label="Hablar con Kenchita" icon="pi pi-arrow-right" iconPos="right" class="btn-shine mt-auto !mt-7 !w-max !rounded-full !border-0 !bg-white !px-5 !py-2.5 !font-bold !text-[#053d17]" />
+            <Button label="Hablar con Haru" icon="pi pi-arrow-right" iconPos="right" class="btn-shine mt-auto !mt-7 !w-max !rounded-full !border-0 !bg-white !px-5 !py-2.5 !font-bold !text-[#053d17]" />
           </div>
         </article>
 
@@ -210,20 +210,20 @@ onBeforeUnmount(() => {
             <span class="mock-dot bg-[#ff6058]" />
             <span class="mock-dot bg-[#ffbd2e]" />
             <span class="mock-dot bg-[#28c840]" />
-            <span class="ml-3 text-[11px] font-semibold text-[#5a6b5f]">app.nexa.bo/panel</span>
+            <span class="ml-3 text-[11px] font-semibold text-[#5a6b5f]">app.impulsa.bo/panel</span>
           </div>
 
           <div class="flex">
             <aside class="hidden w-[150px] shrink-0 bg-[#053d17] p-4 text-white sm:block">
               <div class="mb-6 flex items-center gap-2">
-                <span class="nexa-mark small"><i class="pi pi-bolt" /></span>
-                <strong class="font-display text-base">NEXA</strong>
+                <span class="impulsa-mark small"><i class="pi pi-bolt" /></span>
+                <strong class="font-display text-base">IMPULSA</strong>
               </div>
               <div class="space-y-1.5 text-[11px] font-semibold">
                 <span class="flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2"><i class="pi pi-home" />Inicio</span>
                 <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-chart-line" />Diagnóstico</span>
                 <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-wrench" />Herramientas</span>
-                <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-comments" />Kenchita</span>
+                <span class="flex items-center gap-2 px-3 py-2 text-[#bfeac8]"><i class="pi pi-comments" />Haru</span>
               </div>
             </aside>
 
@@ -292,7 +292,7 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-2.5">
             <span class="grid h-9 w-9 place-items-center rounded-lg bg-[#fff4dc] text-[#d87414]"><i class="pi pi-bolt" /></span>
             <div>
-              <strong class="block text-sm leading-tight">Asesor Kenchita</strong>
+              <strong class="block text-sm leading-tight">Asesor Haru</strong>
               <span class="text-[10px] font-semibold text-[#5a6b5f]">disponible 24/7</span>
             </div>
           </div>
@@ -326,15 +326,15 @@ onBeforeUnmount(() => {
             Tecnología con <span class="text-gradient">raíces amazónicas</span>
           </h2>
           <p class="mt-5 max-w-[520px] text-base font-medium leading-8 text-[#d9f5df]">
-            NEXA nació en Cobija para destacar el talento local y el enorme potencial de nuestra Amazonía. Combinamos inteligencia artificial de punta con un profundo conocimiento del mercado boliviano.
+            IMPULSA nació en Cobija para destacar el talento local y el enorme potencial de nuestra Amazonía. Combinamos inteligencia artificial de punta con un profundo conocimiento del mercado boliviano.
           </p>
           <blockquote class="roots-quote">
             <i class="pi pi-quote-left roots-quote__mark" />
-            <p class="font-display text-lg font-semibold leading-7 text-[#eafff0]">NEXA cree en el talento de nuestra gente y en el potencial de nuestra Amazonía.</p>
+            <p class="font-display text-lg font-semibold leading-7 text-[#eafff0]">IMPULSA cree en el talento de nuestra gente y en el potencial de nuestra Amazonía.</p>
             <div class="roots-quote__by">
-              <span class="nexa-mark small"><i class="pi pi-bolt" /></span>
+              <span class="impulsa-mark small"><i class="pi pi-bolt" /></span>
               <div class="leading-tight">
-                <strong class="block text-sm text-white">Equipo NEXA</strong>
+                <strong class="block text-sm text-white">Equipo IMPULSA</strong>
                 <span class="text-xs font-medium text-[#9dd1a6]">Cobija, Pando · Bolivia</span>
               </div>
             </div>
@@ -390,7 +390,7 @@ onBeforeUnmount(() => {
     <section class="mx-auto w-[min(1180px,calc(100%-28px))] pb-16">
       <div class="mx-auto max-w-2xl text-center" v-reveal>
         <span class="section-eyebrow"><i class="pi pi-users" />Para ti</span>
-        <h2 class="section-title mt-4">¿Para quién es NEXA?</h2>
+        <h2 class="section-title mt-4">¿Para quién es IMPULSA?</h2>
         <p class="section-lead">Pensado para microempresas y emprendedores que quieren modernizarse sin complicarse.</p>
       </div>
 
@@ -455,7 +455,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <!-- CTA band (fondo con Kenchita ya integrado a la derecha) -->
+    <!-- CTA band (fondo con Haru ya integrado a la derecha) -->
     <section class="mx-auto w-[min(1240px,calc(100%-24px))] pb-16">
       <div class="cta-band relative overflow-hidden" v-reveal>
         <div class="cta-band__scrim" />
@@ -464,11 +464,11 @@ onBeforeUnmount(() => {
             Empieza a hacer <span class="text-primary-300">crecer tu negocio</span> hoy
           </h2>
           <p class="mt-4 max-w-md text-base font-medium text-[#e3ffe8]">
-            Únete a la revolución inteligente de la Amazonía. Crea tu cuenta gratis y descubre todo lo que NEXA puede hacer por ti.
+            Únete a la revolución inteligente de la Amazonía. Crea tu cuenta gratis y descubre todo lo que IMPULSA puede hacer por ti.
           </p>
           <div class="mt-7 flex flex-wrap items-center gap-3">
             <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
-            <Button label="Hablar con Kenchita" icon="pi pi-comments" outlined class="!rounded-full !border-white/55 !px-7 !py-3.5 !text-base !font-bold !text-white hover:!bg-white/10" />
+            <Button label="Hablar con Haru" icon="pi pi-comments" outlined class="!rounded-full !border-white/55 !px-7 !py-3.5 !text-base !font-bold !text-white hover:!bg-white/10" />
           </div>
           <p class="mt-5 text-xs font-semibold text-[#cdeed3]"><i class="pi pi-check-circle mr-1" />Gratis · Sin complicaciones</p>
         </div>
@@ -480,14 +480,14 @@ onBeforeUnmount(() => {
       <div class="mx-auto grid w-[min(1240px,calc(100%-28px))] gap-10 py-14 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
         <div>
           <a href="#inicio" class="flex items-center gap-3">
-            <span class="nexa-mark"><i class="pi pi-bolt" /></span>
+            <span class="impulsa-mark"><i class="pi pi-bolt" /></span>
             <span class="leading-none">
-              <span class="font-display block text-[1.7rem] font-extrabold">NEXA</span>
+              <span class="font-display block text-[1.7rem] font-extrabold">IMPULSA</span>
               <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#bfeac8]">IA para tu negocio</span>
             </span>
           </a>
           <p class="mt-5 max-w-xs text-sm font-medium leading-7 text-[#bfeac8]">
-            NEXA cree en el talento de nuestra gente y en el potencial de nuestra Amazonía.
+            IMPULSA cree en el talento de nuestra gente y en el potencial de nuestra Amazonía.
           </p>
           <div class="mt-6 flex gap-2.5">
             <a v-for="ic in ['pi-facebook', 'pi-instagram', 'pi-whatsapp', 'pi-tiktok', 'pi-youtube']" :key="ic" href="#" class="social-btn" :aria-label="ic"><i :class="`pi ${ic}`" /></a>
@@ -501,7 +501,7 @@ onBeforeUnmount(() => {
 
         <div>
           <h3 class="footer-title">Herramientas</h3>
-          <a class="footer-link" href="#">Kenchita</a>
+          <a class="footer-link" href="#">Haru</a>
           <a class="footer-link" href="#">Calculadora de precios</a>
           <a class="footer-link" href="#">Marketing y ventas</a>
           <a class="footer-link" href="#">Inventario</a>
@@ -510,14 +510,14 @@ onBeforeUnmount(() => {
         <div>
           <h3 class="footer-title">Contacto</h3>
           <span class="footer-link"><i class="pi pi-map-marker mr-2" />Cobija, Pando · Bolivia</span>
-          <span class="footer-link"><i class="pi pi-envelope mr-2" />hola@nexa.bo</span>
+          <span class="footer-link"><i class="pi pi-envelope mr-2" />hola@impulsa.bo</span>
           <span class="footer-link"><i class="pi pi-phone mr-2" />+591 730 12345</span>
         </div>
       </div>
 
       <div class="border-t border-[#16431d]">
         <div class="mx-auto flex w-[min(1240px,calc(100%-28px))] flex-col items-center justify-between gap-3 py-6 text-xs font-semibold text-[#bfeac8] sm:flex-row">
-          <span>© {{ new Date().getFullYear() }} NEXA · Hecho con 💚 en Cobija, Pando — Bolivia</span>
+          <span>© {{ new Date().getFullYear() }} IMPULSA · Hecho con 💚 en Cobija, Pando — Bolivia</span>
           <div class="flex gap-5">
             <a class="hover:text-white" href="#">Términos</a>
             <a class="hover:text-white" href="#">Privacidad</a>

@@ -9,6 +9,6 @@ export type PosSession = {
 }
 
 export function usePosSession() {
-  return useState<PosSession | null>('nexa-pos-session', () => null)
+  return useState<PosSession | null>('impulsa-pos-session', () => null)
 }
 

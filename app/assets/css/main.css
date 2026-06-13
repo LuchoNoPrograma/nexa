@@ -16,7 +16,7 @@
 }
 
 /* ============================================================
-   NEXA · Design tokens
+   IMPULSA · Design tokens
    ============================================================ */
 :root {
   --primary: #0f9e2e;
@@ -85,7 +85,7 @@ select {
 /* ============================================================
    Reusable bits
    ============================================================ */
-.nexa-mark {
+.impulsa-mark {
   display: grid;
   width: 46px;
   height: 46px;
@@ -98,17 +98,17 @@ select {
     0 8px 20px rgba(15, 158, 46, 0.32);
 }
 
-.nexa-mark i {
+.impulsa-mark i {
   font-size: 1.4rem;
 }
 
-.nexa-mark.small {
+.impulsa-mark.small {
   width: 34px;
   height: 34px;
   border-radius: 10px;
 }
 
-.nexa-mark.small i {
+.impulsa-mark.small i {
   font-size: 1rem;
 }
 
@@ -548,7 +548,7 @@ select {
   transform: none;
 }
 
-/* featured Kenchita card (bento) */
+/* featured Haru card (bento) */
 .pam-feature {
   position: relative;
   overflow: hidden;
@@ -970,7 +970,7 @@ select {
 }
 
 /* ============================================================
-   Mascot (Kenchita · PNG)
+   Mascot (Haru · PNG)
    ============================================================ */
 .mascot {
   display: block;

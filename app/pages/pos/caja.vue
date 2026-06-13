@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Caja | NEXA',
+  title: 'Caja | IMPULSA',
 })
 
 type MovementType = 'Ingreso' | 'Egreso'

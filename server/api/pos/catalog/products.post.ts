@@ -44,6 +44,8 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<ProductBody>(event)
   const categoryId = await assertCategoryBelongsToStore(body.categoryId, session.storeId)
   const name = ensureProductName(body.name)
+  const kind = productKind(body.kind)
+  const initialStock = kind === 'servicio' ? 0 : numberOrZero(body.stock)
   const variants = parseVariants(body.variants)
 
   const client = await pool.connect()
@@ -85,11 +87,11 @@ export default defineEventHandler(async (event) => {
         nullableText(body.barcode),
         name,
         nullableText(body.description),
-        productKind(body.kind),
+        kind,
         cleanText(body.unit, 'unidad') || 'unidad',
         numberOrZero(body.cost),
         numberOrZero(body.price),
-        numberOrZero(body.stock),
+        initialStock,
         numberOrZero(body.minStock),
         nullableNumber(body.maxStock),
         nullableNumber(body.minMargin),
@@ -103,6 +105,48 @@ export default defineEventHandler(async (event) => {
 
     const productId = result.rows[0].id as string
     await replaceProductVariants(client, productId, variants)
+
+    if (initialStock > 0) {
+      const adjustmentResult = await client.query<{ id: string }>(
+        `
+          insert into inventario_ajuste (
+            tienda_id,
+            producto_id,
+            usuario_id,
+            tipo,
+            motivo,
+            cantidad,
+            stock_anterior,
+            stock_nuevo,
+            notas
+          )
+          values ($1, $2, $3, 'fijar', 'recuento', $4, 0, $4, 'Stock inicial del producto')
+          returning id
+        `,
+        [session.storeId, productId, session.id, initialStock],
+      )
+
+      await client.query(
+        `
+          insert into inventario_movimiento (
+            tienda_id,
+            producto_id,
+            usuario_id,
+            ajuste_id,
+            tipo,
+            origen,
+            cantidad,
+            stock_anterior,
+            stock_nuevo,
+            costo_unitario,
+            notas
+          )
+          values ($1, $2, $3, $4, 'entrada', 'manual', $5, 0, $5, $6, 'Stock inicial del producto')
+        `,
+        [session.storeId, productId, session.id, adjustmentResult.rows[0].id, initialStock, numberOrZero(body.cost)],
+      )
+    }
+
     await client.query('commit')
 
     return { id: productId }

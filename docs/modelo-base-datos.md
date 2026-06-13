@@ -1,4 +1,4 @@
-# Modelo de base de datos NEXA
+# Modelo de base de datos IMPULSA
 
 ## Criterios de diseño
 
@@ -7,7 +7,7 @@
 - `tienda` representa cada negocio o microempresa.
 - Las tablas privadas del negocio llevan `tienda_id` para aplicar RLS.
 - El POS es soporte operativo para generar datos; no es el producto principal.
-- Kenchita IA, calculadora, catálogo público y análisis de rentabilidad son el núcleo del MVP.
+- Haru IA, calculadora, catálogo público y análisis de rentabilidad son el núcleo del MVP.
 - No se modela facturación legal, pasarela de pago, contabilidad completa ni multisucursal avanzada.
 - Se prefiere resolver casos simples con columnas/estados antes de crear tablas adicionales.
 
@@ -15,7 +15,7 @@
 
 ### `usuario`
 
-Representa el perfil interno de una cuenta autenticada. La autenticación la maneja Supabase en `auth.users`; esta tabla guarda los datos operativos que NEXA sí gestiona desde la base de datos.
+Representa el perfil interno de una cuenta autenticada. La autenticación la maneja Supabase en `auth.users`; esta tabla guarda los datos operativos que IMPULSA sí gestiona desde la base de datos.
 
 Campos:
 
@@ -31,7 +31,7 @@ Campos:
 
 ### `tienda`
 
-Representa el negocio cliente de NEXA.
+Representa el negocio cliente de IMPULSA.
 
 Campos:
 
@@ -74,8 +74,8 @@ Restricción: `unique (tienda_id, usuario_id)`.
 
 El modelo separa dos alcances:
 
-- `plataforma`: roles de la startup NEXA para administrar tiendas, planes, soporte y operación interna.
-- `tienda`: roles del negocio cliente para usar POS, caja, inventario, catálogo, Kenchita y reportes.
+- `plataforma`: roles de la startup IMPULSA para administrar tiendas, planes, soporte y operación interna.
+- `tienda`: roles del negocio cliente para usar POS, caja, inventario, catálogo, Haru y reportes.
 
 ### `rol`
 
@@ -125,7 +125,7 @@ Permisos base sugeridos:
 - Plataforma: `plataforma.tienda.ver`, `plataforma.tienda.gestionar`, `plataforma.usuario.gestionar`, `plataforma.soporte.acceder`, `plataforma.reporte.ver`.
 - Tienda/POS: `pos.vender`, `pos.descuento.aplicar`, `caja.abrir`, `caja.cerrar`, `caja.movimiento.crear`.
 - Tienda/operación: `producto.ver`, `producto.gestionar`, `compra.gestionar`, `cliente.gestionar`, `proveedor.gestionar`.
-- Tienda/core: `kenchita.usar`, `calculo_precio.usar`, `reporte.ver`, `configuracion.gestionar`.
+- Tienda/core: `haru.usar`, `calculo_precio.usar`, `reporte.ver`, `configuracion.gestionar`.
 
 ### `rol_permiso`
 
@@ -512,7 +512,7 @@ Campos:
 
 ### `diagnostico`
 
-Diagnóstico empresarial breve para alimentar recomendaciones de Kenchita IA.
+Diagnóstico empresarial breve para alimentar recomendaciones de Haru IA.
 
 Campos:
 
@@ -526,11 +526,11 @@ Campos:
 - `resultado jsonb default '{}'::jsonb`
 - `created_at timestamptz default now()`
 
-## Kenchita IA
+## Haru IA
 
-### `kenchita_conversacion`
+### `haru_conversacion`
 
-Agrupa conversaciones con Kenchita. Permite retomar una sesion de chat sin perder el historial.
+Agrupa conversaciones con Haru. Permite retomar una sesion de chat sin perder el historial.
 
 Campos:
 
@@ -545,9 +545,9 @@ Campos:
 - `created_at timestamptz default now()`
 - `updated_at timestamptz default now()`
 
-### `kenchita_mensaje`
+### `haru_mensaje`
 
-Mensaje de usuario o respuesta de Kenchita.
+Mensaje de usuario o respuesta de Haru.
 
 Campos:
 
@@ -558,7 +558,7 @@ Campos:
 - `metadata jsonb default '{}'::jsonb`
 - `created_at timestamptz default now()`
 
-### `kenchita_chat_config`
+### `haru_chat_config`
 
 Configuracion por tienda de la burbuja de chat.
 
@@ -566,9 +566,9 @@ Campos:
 
 - `id uuid pk`
 - `tienda_id uuid not null`
-- `nombre_asistente text default 'Kenchita IA'`
+- `nombre_asistente text default 'Haru IA'`
 - `saludo text`
-- `avatar_url text default '/kenchita-chat.png'`
+- `avatar_url text default '/haru-chat.png'`
 - `prompts jsonb`
 - `activo boolean default true`
 - `created_at timestamptz default now()`
@@ -676,10 +676,10 @@ $$;
 - `inventario_ajuste(producto_id, created_at desc)`
 - `inventario_movimiento(tienda_id, created_at desc)`
 - `inventario_movimiento(producto_id, created_at desc)`
-- `kenchita_conversacion(tienda_id, estado, last_message_at desc, created_at desc)`
-- `kenchita_mensaje(conversacion_id, created_at)`
-- `kenchita_chat_config(tienda_id, activo)`
+- `haru_conversacion(tienda_id, estado, last_message_at desc, created_at desc)`
+- `haru_mensaje(conversacion_id, created_at)`
+- `haru_chat_config(tienda_id, activo)`
 
 ## Resumen técnico
 
-El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera ventas, pagos, compras, movimientos de inventario y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_item` al cobrar. Los mockups de ingresos y gastos son reportes calculados desde `pago` y `caja_movimiento`, no módulos contables duplicados. La calculadora y Kenchita IA tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en líneas de venta/compra para análisis posterior.
+El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup IMPULSA como para cada tienda. El módulo POS genera ventas, pagos, compras, movimientos de inventario y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_item` al cobrar. Los mockups de ingresos y gastos son reportes calculados desde `pago` y `caja_movimiento`, no módulos contables duplicados. La calculadora y Haru IA tienen tablas propias porque son parte de la propuesta de valor de IMPULSA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en líneas de venta/compra para análisis posterior.

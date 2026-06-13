@@ -1,17 +1,17 @@
 <script setup lang="ts">
 useHead({
-  title: 'Iniciar sesión | NEXA',
+  title: 'Iniciar sesión | IMPULSA',
   meta: [
     {
       name: 'description',
-      content: 'Accede a NEXA, tu asistente inteligente para analizar, decidir y hacer crecer tu negocio.',
+      content: 'Accede a IMPULSA, tu asistente inteligente para analizar, decidir y hacer crecer tu negocio.',
     },
   ],
 })
 
 const form = reactive({
-  email: 'admin@nexa.bo',
-  password: 'NexaAdmin2026!',
+  email: 'admin@impulsa.bo',
+  password: 'ImpulsaAdmin2026!',
   remember: false,
 })
 
@@ -47,9 +47,9 @@ async function onSubmit() {
     <!-- ============ Panel izquierdo · marca + beneficios ============ -->
     <section class="login-showcase" aria-labelledby="login-showcase-title">
       <div class="login-showcase__content">
-        <a href="/" class="login-brand" aria-label="NEXA inicio">
-          <img src="/nexa-logo.png" alt="" class="brand-logo" aria-hidden="true">
-          <span class="font-display">NEXA</span>
+        <a href="/" class="login-brand" aria-label="IMPULSA inicio">
+          <img src="/impulsa-logo-color.webp" alt="" class="brand-logo" aria-hidden="true">
+          <span class="font-display">IMPULSA</span>
         </a>
 
         <div class="login-copy">
@@ -71,15 +71,15 @@ async function onSubmit() {
         >
         <img
           class="login-card__decor login-card__decor--mascot"
-          src="/kenchita-avatar.webp"
+          src="/haru-avatar.webp"
           alt=""
           aria-hidden="true"
         >
 
         <header class="login-card__header">
-          <a href="/" class="login-card__brand" aria-label="NEXA inicio">
-            <img src="/nexa-logo.png" alt="" class="brand-logo" aria-hidden="true">
-            <span class="font-display">NEXA</span>
+          <a href="/" class="login-card__brand" aria-label="IMPULSA inicio">
+            <img src="/impulsa-logo-color.webp" alt="" class="brand-logo" aria-hidden="true">
+            <span class="font-display">IMPULSA</span>
           </a>
           <p>IA para tu negocio</p>
         </header>
@@ -235,7 +235,7 @@ async function onSubmit() {
   color: var(--ink);
 }
 
-/* Isotipo NEXA */
+/* Isotipo IMPULSA */
 .brand-logo {
   height: 1.5em;
   width: auto;

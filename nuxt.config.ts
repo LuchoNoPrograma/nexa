@@ -2,7 +2,7 @@ import Aura from '@primeuix/themes/aura'
 import { definePreset } from '@primeuix/themes'
 import tailwindcss from '@tailwindcss/vite'
 
-const NexaPrimePreset = definePreset(Aura, {
+const ImpulsaPrimePreset = definePreset(Aura, {
   semantic: {
     primary: {
       50: '#ecfdf0',
@@ -35,14 +35,14 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: 'es' },
-      title: 'NEXA — IA para hacer crecer tu negocio | Cobija, Pando',
+      title: 'IMPULSA — IA para hacer crecer tu negocio | Cobija, Pando',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         {
           name: 'description',
           content:
-            'NEXA es tu asistente inteligente que te ayuda a vender más, atraer clientes y poner precios justos. Hecho en la Amazonía boliviana.',
+            'IMPULSA es tu asistente inteligente que te ayuda a vender más, atraer clientes y poner precios justos. Hecho en la Amazonía boliviana.',
         },
         { name: 'theme-color', content: '#0f9e2e' },
       ],
@@ -61,7 +61,7 @@ export default defineNuxtConfig({
       ripple: true,
       inputVariant: 'filled',
       theme: {
-        preset: NexaPrimePreset,
+        preset: ImpulsaPrimePreset,
         options: {
           prefix: 'p',
           darkModeSelector: 'light',
