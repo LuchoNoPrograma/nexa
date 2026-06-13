@@ -10,8 +10,8 @@ useHead({
 })
 
 const form = reactive({
-  email: 'admin@impulsa.bo',
-  password: 'ImpulsaAdmin2026!',
+  email: 'admin@nexa.bo',
+  password: 'NexaAdmin2026!',
   remember: false,
 })
 
