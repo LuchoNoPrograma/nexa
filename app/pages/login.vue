@@ -196,7 +196,7 @@ async function onSubmit() {
   grid-template-columns: 1.02fr 0.98fr;
   background:
     linear-gradient(90deg, rgba(248, 252, 248, 0.06) 0%, rgba(248, 252, 248, 0.1) 48%, rgba(255, 255, 255, 0.38) 72%, rgba(255, 255, 255, 0.62) 100%),
-    url('/login-bg.webp') left center / cover no-repeat,
+    url('/login-bg.jpg') left center / cover no-repeat,
     var(--soft);
   color: var(--ink);
   overflow-x: hidden;
@@ -629,7 +629,7 @@ async function onSubmit() {
     grid-template-columns: 1fr;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.38) 44%, rgba(255, 255, 255, 0.7) 100%),
-      url('/login-bg.webp') 28% center / cover no-repeat,
+      url('/login-bg.jpg') 28% center / cover no-repeat,
       var(--soft);
     overflow-x: hidden;
     overflow-y: auto;
