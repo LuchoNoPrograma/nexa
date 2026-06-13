@@ -8,7 +8,7 @@ const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:post
 const isProduction = process.env.NODE_ENV === 'production'
 const hasAdminCredentials = Boolean(process.env.IMPULSA_SUPER_ADMIN_EMAIL && process.env.IMPULSA_SUPER_ADMIN_PASSWORD)
 const seedDemo = isProduction ? hasAdminCredentials : true
-const seedDemoProducts = process.env.IMPULSA_SEED_DEMO_PRODUCTS === 'true'
+const seedDemoProducts = process.env.IMPULSA_SEED_DEMO_PRODUCTS !== 'false'
 const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (isProduction ? 1 : 10))
 const useSsl =
   process.env.DATABASE_SSL !== 'false' && (
@@ -76,7 +76,7 @@ async function seedLocalData() {
         'Tienda Demo IMPULSA',
         'tienda-demo-impulsa',
         'Abarrotes',
-        'Tienda base para probar el punto de venta de IMPULSA.',
+        'Tienda base de abarrotes bolivianos para probar el punto de venta de IMPULSA.',
         'Cobija',
         'Pando',
         'Bolivia',
@@ -154,45 +154,9 @@ async function assignRole(userId: string, roleCode: string, storeId: string | nu
 }
 
 async function seedProducts(storeId: string) {
-  const categories = ['Abarrotes', 'Bebidas', 'Combos', 'Lacteos', 'Panaderia']
-
-  for (const [index, name] of categories.entries()) {
-    await pool.query(
-      `
-        insert into categoria (tienda_id, nombre, orden)
-        values ($1, $2, $3)
-        on conflict (tienda_id, nombre) do nothing
-      `,
-      [storeId, name, index],
-    )
-  }
-
   await pool.query(
     `
-      insert into producto (tienda_id, categoria_id, sku, nombre, tipo, precio_venta, stock_actual, precio_variable, visible_pos, orden_catalogo)
-      select $1, c.id, p.sku, p.nombre, p.tipo, p.precio_venta, p.stock_actual, p.precio_variable, true, p.orden_catalogo
-      from (
-        values
-          ('ACEITE-1L', 'Aceite Fino 1L', 'Abarrotes', 'producto', 15.00::numeric, 43.00::numeric, false, 1),
-          ('AGUA-25L', 'Agua Vital 2.5L', 'Bebidas', 'producto', 5.00::numeric, 111.00::numeric, false, 2),
-          ('ARROZ-1KG', 'Arroz Grano de Oro 1kg', 'Abarrotes', 'producto', 8.50::numeric, 85.00::numeric, false, 3),
-          ('AZUCAR-1KG', 'Azucar Guabira 1kg', 'Abarrotes', 'producto', 7.00::numeric, 50.00::numeric, false, 4),
-          ('COCA-2L', 'Coca Cola 2L', 'Bebidas', 'producto', 13.00::numeric, 136.00::numeric, true, 5),
-          ('COMBO-COCINA', 'Combo Cocina Basica', 'Combos', 'combo', 30.15::numeric, 43.00::numeric, false, 6),
-          ('LECHE-1L', 'Leche Pil 1L', 'Lacteos', 'producto', 6.50::numeric, 27.00::numeric, false, 7),
-          ('PAN-MOLDE', 'Pan Molde Familiar', 'Panaderia', 'producto', 12.00::numeric, 18.00::numeric, false, 8)
-      ) as p(sku, nombre, categoria, tipo, precio_venta, stock_actual, precio_variable, orden_catalogo)
-      join categoria c on c.tienda_id = $1 and c.nombre = p.categoria
-      on conflict (tienda_id, sku) where sku is not null do update
-      set
-        nombre = excluded.nombre,
-        categoria_id = excluded.categoria_id,
-        tipo = excluded.tipo,
-        precio_venta = excluded.precio_venta,
-        precio_variable = excluded.precio_variable,
-        visible_pos = true,
-        orden_catalogo = excluded.orden_catalogo,
-        updated_at = now()
+      select aplicar_catalogo_plantilla($1, 'minimarket_abarrotes', true)
     `,
     [storeId],
   )

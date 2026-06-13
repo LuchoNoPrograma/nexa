@@ -44,7 +44,6 @@ type SaleReceipt = {
 
 const session = usePosSession()
 const search = ref('')
-const selectedCategory = ref('Todas')
 const discount = ref(0)
 const catalogView = ref<'grid' | 'table'>('grid')
 const selectedProduct = ref<Product | null>(null)
@@ -87,29 +86,12 @@ const paymentOptions: Array<{ id: PaymentMethod, icon: string, label: string, de
   { id: 'tarjeta', icon: 'pi pi-credit-card', label: 'Tarjeta', detail: 'Débito o crédito' },
 ]
 
-const categories = computed(() => {
-  const grouped = products.value.reduce<Record<string, number>>((acc, product) => {
-    acc[product.category] = (acc[product.category] ?? 0) + 1
-    return acc
-  }, {})
-
-  return [
-    { name: 'Todas', count: products.value.length, icon: 'pi pi-th-large' },
-    ...Object.entries(grouped).map(([name, count]) => ({
-      name,
-      count,
-      icon: name === 'Bebidas' ? 'pi pi-cup' : name === 'Combos' ? 'pi pi-box' : 'pi pi-shopping-bag',
-    })),
-  ]
-})
-
 const filteredProducts = computed(() => {
   const term = search.value.trim().toLowerCase()
 
   return products.value.filter((product) => {
-    const matchesCategory = selectedCategory.value === 'Todas' || product.category === selectedCategory.value
     const matchesSearch = !term || product.name.toLowerCase().includes(term)
-    return matchesCategory && matchesSearch
+    return matchesSearch
   })
 })
 
@@ -778,26 +760,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         </section>
       </div>
 
-      <section class="category-strip" aria-label="Categorías">
-        <header>
-          <span>Categorías</span>
-        </header>
-
-        <button
-          v-for="category in categories"
-          :key="category.name"
-          type="button"
-          class="category-button"
-          :class="{ 'is-active': selectedCategory === category.name }"
-          @click="selectedCategory = category.name"
-        >
-          <span>
-            <i :class="category.icon" aria-hidden="true" />
-          </span>
-          <strong>{{ category.name }}</strong>
-          <small>{{ category.count }}</small>
-        </button>
-      </section>
     </section>
 
     <aside ref="cartPanelEl" class="cart-panel" :class="{ 'is-pulsing': cartPulse }">
@@ -1868,46 +1830,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   border-radius: 8px !important;
   justify-content: center;
   font-weight: 900 !important;
-}
-
-.category-strip {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid #dde4ec;
-  border-radius: 10px;
-  background: #ffffff;
-  overflow-x: auto;
-}
-
-.category-strip header {
-  flex: 0 0 78px;
-  color: #6b778a;
-  font-size: 0.62rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.category-button {
-  display: grid;
-  min-width: 78px;
-  place-items: center;
-  gap: 3px;
-  padding: 8px 10px;
-  border: 1px solid #dce4ec;
-  border-radius: 10px;
-  color: #223049;
-  background: #fbfdff;
-  cursor: pointer;
-}
-
-.category-button.is-active {
-  color: #ffffff;
-  border-color: #71829d;
-  background: #71829d;
 }
 
 .cart-panel {

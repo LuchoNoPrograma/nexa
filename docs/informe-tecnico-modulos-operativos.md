@@ -193,9 +193,9 @@ Plantilla inicial:
 
 Decision actual:
 
-- Aplicar categorias por defecto a la tienda.
-- No aplicar productos automaticamente, para evitar inventario falso.
-- Los productos sugeridos quedan disponibles para una opcion explicita posterior.
+- Aplicar la plantilla `minimarket_abarrotes` por defecto a la tienda demo.
+- Aplicar productos demo de abarrotes bolivianos con costo, precio, stock inicial y stock minimo.
+- Usar estos datos como simulacion de feria/MVP, no como inventario real de una tienda existente.
 
 Ejemplo:
 
@@ -203,6 +203,6 @@ Ejemplo:
 select aplicar_catalogo_plantilla(
   'uuid-de-la-tienda',
   'minimarket_abarrotes',
-  false
+  true
 );
 ```

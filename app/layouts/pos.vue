@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
-const nuxtApp = useNuxtApp()
+const router = useRouter()
 const session = usePosSession()
 const isReady = ref(false)
 const isRouteLoading = ref(false)
@@ -16,6 +16,13 @@ const SIDEBAR_MIN_WIDTH = 180
 const SIDEBAR_MAX_WIDTH = 360
 const SIDEBAR_COLLAPSED_WIDTH = 76
 const SIDEBAR_KEYBOARD_STEP = 12
+const ROUTE_LOADING_MIN_MS = 240
+
+let routeLoadingStartedAt = 0
+let routeLoadingTimer: ReturnType<typeof setTimeout> | undefined
+let removeRouteBeforeGuard: (() => void) | undefined
+let removeRouteAfterGuard: (() => void) | undefined
+let removeRouteErrorGuard: (() => void) | undefined
 
 const currentSidebarWidth = computed(() => sidebarCollapsed.value ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth.value)
 
@@ -125,6 +132,7 @@ const sidebarItems = [
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
   { label: 'Contenido', icon: 'pi pi-file' },
   { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas' },
+  { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
   { label: 'Reportes', icon: 'pi pi-chart-bar' },
   { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
@@ -145,13 +153,29 @@ const userInitials = computed(() => {
     .join('')
 })
 
-nuxtApp.hook('page:start', () => {
-  isRouteLoading.value = true
-})
+function startRouteLoading() {
+  if (routeLoadingTimer) {
+    clearTimeout(routeLoadingTimer)
+    routeLoadingTimer = undefined
+  }
 
-nuxtApp.hook('page:finish', () => {
-  isRouteLoading.value = false
-})
+  routeLoadingStartedAt = Date.now()
+  isRouteLoading.value = true
+}
+
+function finishRouteLoading() {
+  const elapsed = Date.now() - routeLoadingStartedAt
+  const remaining = Math.max(0, ROUTE_LOADING_MIN_MS - elapsed)
+
+  if (routeLoadingTimer) {
+    clearTimeout(routeLoadingTimer)
+  }
+
+  routeLoadingTimer = setTimeout(() => {
+    isRouteLoading.value = false
+    routeLoadingTimer = undefined
+  }, remaining)
+}
 
 onMounted(async () => {
   if (import.meta.client) {
@@ -162,6 +186,26 @@ onMounted(async () => {
     if (Number.isFinite(savedWidth)) {
       sidebarWidth.value = clampSidebarWidth(savedWidth)
     }
+
+    removeRouteBeforeGuard = router.beforeEach((to, from) => {
+      const isPosNavigation = to.path.startsWith('/pos') || from.path.startsWith('/pos')
+
+      if (isPosNavigation && to.fullPath !== from.fullPath) {
+        startRouteLoading()
+      }
+    })
+
+    removeRouteAfterGuard = router.afterEach((to, from) => {
+      const isPosNavigation = to.path.startsWith('/pos') || from.path.startsWith('/pos')
+
+      if (isPosNavigation && to.fullPath !== from.fullPath) {
+        finishRouteLoading()
+      }
+    })
+
+    removeRouteErrorGuard = router.onError(() => {
+      finishRouteLoading()
+    })
   }
 
   try {
@@ -171,6 +215,16 @@ onMounted(async () => {
   } catch {
     void navigateTo('/login')
   }
+})
+
+onBeforeUnmount(() => {
+  if (routeLoadingTimer) {
+    clearTimeout(routeLoadingTimer)
+  }
+
+  removeRouteBeforeGuard?.()
+  removeRouteAfterGuard?.()
+  removeRouteErrorGuard?.()
 })
 
 async function logout() {
@@ -194,7 +248,7 @@ function selectModule(to?: string) {
 
 <template>
   <main
-    v-if="isReady"
+    v-show="isReady"
     class="pos-page"
     :class="{ 'is-collapsed': sidebarCollapsed, 'is-resizing-sidebar': isResizingSidebar }"
     :style="{ '--sidebar-w': `${currentSidebarWidth}px` }"
@@ -338,12 +392,10 @@ function selectModule(to?: string) {
     </section>
   </main>
 
-  <main v-else class="pos-loading">
+  <main v-if="!isReady" class="pos-loading">
     <div class="pos-loading__card" role="status" aria-live="polite" aria-label="Abriendo punto de venta">
       <div class="pos-loading__spinner" aria-hidden="true">
-        <span class="pos-loading__halo" />
         <span class="pos-loading__ring pos-loading__ring--outer" />
-        <span class="pos-loading__ring pos-loading__ring--inner" />
         <span class="pos-loading__mark">
           <img src="/impulsa-logo-color.webp" alt="">
         </span>
@@ -668,46 +720,42 @@ function selectModule(to?: string) {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  min-height: 56px;
-  padding: 12px 18px 12px 14px;
+  min-height: 52px;
+  padding: 10px 16px 10px 12px;
   border: 1px solid rgba(11, 31, 58, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   color: #0b1f3a;
-  box-shadow:
-    0 18px 50px rgba(11, 31, 58, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  box-shadow: 0 14px 32px rgba(11, 31, 58, 0.12);
 }
 
 .pos-route-feedback__spinner {
   position: relative;
-  isolation: isolate;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   background: #ffffff;
-  box-shadow:
-    0 8px 18px rgba(11, 31, 58, 0.14),
-    inset 0 0 0 1px rgba(11, 31, 58, 0.08);
+  border: 1px solid rgba(11, 31, 58, 0.1);
 }
 
 .pos-route-feedback__spinner::before {
   content: "";
   position: absolute;
-  inset: -3px;
+  inset: -1px;
   border-radius: inherit;
-  background: conic-gradient(from 0deg, #0b1f3a, #16a34a, #f2c200, #0b1f3a);
-  animation: pos-route-feedback-spin 0.85s linear infinite;
-  z-index: -1;
+  border: 2px solid rgba(11, 31, 58, 0.1);
+  border-top-color: #0b1f3a;
+  border-right-color: #16a34a;
+  animation: pos-route-feedback-spin 0.9s linear infinite;
 }
 
 .pos-route-feedback__spinner img {
   position: relative;
   z-index: 1;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
@@ -880,9 +928,7 @@ function selectModule(to?: string) {
   place-content: center;
   place-items: center;
   padding: 24px;
-  background:
-    radial-gradient(circle at 50% 38%, rgba(242, 194, 0, 0.18), transparent 28%),
-    linear-gradient(135deg, #eef7f1 0%, #f8fbff 48%, #edf4ff 100%);
+  background: #f5f7fb;
   color: var(--brand-700);
   font-weight: 800;
 }
@@ -890,34 +936,21 @@ function selectModule(to?: string) {
 .pos-loading__card {
   display: grid;
   justify-items: center;
-  gap: 18px;
-  width: min(100%, 320px);
-  padding: 30px 28px 26px;
+  gap: 16px;
+  width: min(100%, 280px);
+  padding: 28px 26px 24px;
   border: 1px solid rgba(11, 31, 58, 0.1);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-    0 26px 70px rgba(11, 31, 58, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(11, 31, 58, 0.1);
 }
 
 .pos-loading__spinner {
   position: relative;
   display: grid;
   place-items: center;
-  width: 104px;
-  height: 104px;
-}
-
-.pos-loading__halo {
-  position: absolute;
-  inset: -14px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle, rgba(242, 194, 0, 0.22), transparent 62%),
-    radial-gradient(circle, rgba(22, 163, 74, 0.18), transparent 70%);
-  animation: pos-loading-breathe 1.9s ease-in-out infinite;
+  width: 88px;
+  height: 88px;
 }
 
 .pos-loading__ring {
@@ -929,19 +962,10 @@ function selectModule(to?: string) {
 .pos-loading__ring--outer {
   inset: 0;
   border-radius: 50%;
-  border: 4px solid rgba(11, 31, 58, 0.08);
+  border: 3px solid rgba(11, 31, 58, 0.1);
   border-top-color: #0b1f3a;
-  border-right-color: #f2c200;
-  border-bottom-color: rgba(22, 163, 74, 0.35);
-  animation: pos-loading-spin 1s linear infinite;
-}
-
-.pos-loading__ring--inner {
-  inset: 12px;
-  border: 2px solid rgba(22, 163, 74, 0.14);
-  border-left-color: #16a34a;
-  border-bottom-color: rgba(242, 194, 0, 0.86);
-  animation: pos-loading-spin-reverse 1.55s linear infinite;
+  border-right-color: #16a34a;
+  animation: pos-loading-spin 1.05s linear infinite;
 }
 
 .pos-loading__mark {
@@ -949,19 +973,17 @@ function selectModule(to?: string) {
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 66px;
-  height: 66px;
-  border-radius: 14px;
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
   background: #ffffff;
-  box-shadow:
-    0 16px 34px rgba(11, 31, 58, 0.18),
-    inset 0 0 0 1px rgba(11, 31, 58, 0.07);
-  animation: pos-loading-pulse 1.6s ease-in-out infinite;
+  border: 1px solid rgba(11, 31, 58, 0.08);
+  box-shadow: 0 10px 24px rgba(11, 31, 58, 0.1);
 }
 
 .pos-loading__mark img {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   object-fit: contain;
 }
 
@@ -976,7 +998,7 @@ function selectModule(to?: string) {
 .pos-loading__bar {
   position: relative;
   width: min(100%, 190px);
-  height: 6px;
+  height: 4px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(11, 31, 58, 0.1);
@@ -986,10 +1008,10 @@ function selectModule(to?: string) {
   content: "";
   position: absolute;
   inset: 0;
-  width: 46%;
+  width: 40%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #0b1f3a, #16a34a, #f2c200);
-  animation: pos-loading-bar 1.25s ease-in-out infinite;
+  background: #0b1f3a;
+  animation: pos-loading-bar 1.35s ease-in-out infinite;
 }
 
 .pos-loading__dots span {
@@ -1008,34 +1030,6 @@ function selectModule(to?: string) {
 @keyframes pos-loading-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes pos-loading-spin-reverse {
-  to {
-    transform: rotate(-360deg);
-  }
-}
-
-@keyframes pos-loading-breathe {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(0.96);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes pos-loading-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.045);
   }
 }
 
@@ -1067,9 +1061,7 @@ function selectModule(to?: string) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pos-loading__halo,
   .pos-loading__ring,
-  .pos-loading__mark,
   .pos-loading__bar::before,
   .pos-loading__dots span,
   .pos-route-feedback__spinner::before {

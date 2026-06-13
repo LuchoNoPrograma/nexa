@@ -38,7 +38,7 @@ begin
     'Tienda Demo IMPULSA',
     'tienda-demo-impulsa',
     'Abarrotes',
-    'Tienda base para probar el punto de venta de IMPULSA.',
+    'Tienda base de abarrotes bolivianos para probar el punto de venta de IMPULSA.',
     'Cobija',
     'Pando',
     'Bolivia',
@@ -90,4 +90,6 @@ begin
   insert into usuario_rol (usuario_id, rol_id, tienda_id)
   values (super_admin_id, rol_propietario_id, tienda_demo_id)
   on conflict do nothing;
+
+  perform aplicar_catalogo_plantilla(tienda_demo_id, 'minimarket_abarrotes', true);
 end $$;
