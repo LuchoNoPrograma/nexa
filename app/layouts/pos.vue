@@ -327,7 +327,9 @@ function selectModule(to?: string) {
         <Transition name="pos-route-feedback">
           <div v-if="isRouteLoading" class="pos-route-feedback" role="status" aria-live="polite" aria-label="Cargando sección">
             <div class="pos-route-feedback__panel">
-              <span class="pos-route-feedback__spinner" aria-hidden="true" />
+              <span class="pos-route-feedback__spinner" aria-hidden="true">
+                <img src="/impulsa-logo-color.webp" alt="">
+              </span>
               <span class="pos-route-feedback__copy">Cargando sección</span>
             </div>
           </div>
@@ -337,13 +339,20 @@ function selectModule(to?: string) {
   </main>
 
   <main v-else class="pos-loading">
-    <div class="pos-loading__spinner">
-      <span class="pos-loading__ring" aria-hidden="true" />
-      <img src="/impulsa-logo-white.webp" alt="" class="brand-logo pos-loading__mark">
+    <div class="pos-loading__card" role="status" aria-live="polite" aria-label="Abriendo punto de venta">
+      <div class="pos-loading__spinner" aria-hidden="true">
+        <span class="pos-loading__halo" />
+        <span class="pos-loading__ring pos-loading__ring--outer" />
+        <span class="pos-loading__ring pos-loading__ring--inner" />
+        <span class="pos-loading__mark">
+          <img src="/impulsa-logo-color.webp" alt="">
+        </span>
+      </div>
+      <p class="pos-loading__text">
+        Abriendo punto de venta<span class="pos-loading__dots"><span>.</span><span>.</span><span>.</span></span>
+      </p>
+      <span class="pos-loading__bar" aria-hidden="true" />
     </div>
-    <p class="pos-loading__text">
-      Abriendo punto de venta<span class="pos-loading__dots"><span>.</span><span>.</span><span>.</span></span>
-    </p>
   </main>
 </template>
 
@@ -659,23 +668,47 @@ function selectModule(to?: string) {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
-  padding: 12px 18px;
+  min-height: 56px;
+  padding: 12px 18px 12px 14px;
   border: 1px solid rgba(11, 31, 58, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   color: #0b1f3a;
-  box-shadow: 0 18px 50px rgba(11, 31, 58, 0.16);
+  box-shadow:
+    0 18px 50px rgba(11, 31, 58, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .pos-route-feedback__spinner {
-  width: 24px;
-  height: 24px;
-  border: 3px solid rgba(15, 158, 46, 0.18);
-  border-top-color: var(--primary-600);
-  border-right-color: #f2c200;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
-  animation: pos-route-feedback-spin 0.8s linear infinite;
+  background: #ffffff;
+  box-shadow:
+    0 8px 18px rgba(11, 31, 58, 0.14),
+    inset 0 0 0 1px rgba(11, 31, 58, 0.08);
+}
+
+.pos-route-feedback__spinner::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, #0b1f3a, #16a34a, #f2c200, #0b1f3a);
+  animation: pos-route-feedback-spin 0.85s linear infinite;
+  z-index: -1;
+}
+
+.pos-route-feedback__spinner img {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .pos-route-feedback__copy {
@@ -846,43 +879,117 @@ function selectModule(to?: string) {
   display: grid;
   place-content: center;
   place-items: center;
-  gap: 20px;
-  background: var(--soft);
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(242, 194, 0, 0.18), transparent 28%),
+    linear-gradient(135deg, #eef7f1 0%, #f8fbff 48%, #edf4ff 100%);
   color: var(--brand-700);
   font-weight: 800;
+}
+
+.pos-loading__card {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  width: min(100%, 320px);
+  padding: 30px 28px 26px;
+  border: 1px solid rgba(11, 31, 58, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 26px 70px rgba(11, 31, 58, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(14px);
 }
 
 .pos-loading__spinner {
   position: relative;
   display: grid;
   place-items: center;
-  width: 76px;
-  height: 76px;
+  width: 104px;
+  height: 104px;
+}
+
+.pos-loading__halo {
+  position: absolute;
+  inset: -14px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(242, 194, 0, 0.22), transparent 62%),
+    radial-gradient(circle, rgba(22, 163, 74, 0.18), transparent 70%);
+  animation: pos-loading-breathe 1.9s ease-in-out infinite;
 }
 
 .pos-loading__ring {
   position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.pos-loading__ring--outer {
   inset: 0;
   border-radius: 50%;
-  border: 3px solid rgba(15, 158, 46, 0.16);
-  border-top-color: var(--brand-700);
-  border-right-color: var(--lime);
-  animation: pos-loading-spin 0.9s linear infinite;
+  border: 4px solid rgba(11, 31, 58, 0.08);
+  border-top-color: #0b1f3a;
+  border-right-color: #f2c200;
+  border-bottom-color: rgba(22, 163, 74, 0.35);
+  animation: pos-loading-spin 1s linear infinite;
+}
+
+.pos-loading__ring--inner {
+  inset: 12px;
+  border: 2px solid rgba(22, 163, 74, 0.14);
+  border-left-color: #16a34a;
+  border-bottom-color: rgba(242, 194, 0, 0.86);
+  animation: pos-loading-spin-reverse 1.55s linear infinite;
 }
 
 .pos-loading__mark {
-  height: 40px;
-  width: auto;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow:
+    0 16px 34px rgba(11, 31, 58, 0.18),
+    inset 0 0 0 1px rgba(11, 31, 58, 0.07);
   animation: pos-loading-pulse 1.6s ease-in-out infinite;
 }
 
-.pos-loading__mark i {
-  animation: pos-loading-bolt 1.6s ease-in-out infinite;
+.pos-loading__mark img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
 }
 
 .pos-loading__text {
   margin: 0;
-  letter-spacing: 0.2px;
+  color: #0b1f3a;
+  font-size: 0.96rem;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.pos-loading__bar {
+  position: relative;
+  width: min(100%, 190px);
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(11, 31, 58, 0.1);
+}
+
+.pos-loading__bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 46%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0b1f3a, #16a34a, #f2c200);
+  animation: pos-loading-bar 1.25s ease-in-out infinite;
 }
 
 .pos-loading__dots span {
@@ -904,31 +1011,31 @@ function selectModule(to?: string) {
   }
 }
 
+@keyframes pos-loading-spin-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes pos-loading-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
 @keyframes pos-loading-pulse {
   0%,
   100% {
     transform: scale(1);
-    box-shadow:
-      inset 0 -8px 16px rgba(0, 0, 0, 0.16),
-      0 8px 20px rgba(15, 158, 46, 0.32);
   }
   50% {
-    transform: scale(1.06);
-    box-shadow:
-      inset 0 -8px 16px rgba(0, 0, 0, 0.16),
-      0 12px 30px rgba(15, 158, 46, 0.45);
-  }
-}
-
-@keyframes pos-loading-bolt {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scale(1.12);
-    opacity: 1;
+    transform: scale(1.045);
   }
 }
 
@@ -944,6 +1051,15 @@ function selectModule(to?: string) {
   }
 }
 
+@keyframes pos-loading-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(230%);
+  }
+}
+
 @keyframes pos-route-feedback-spin {
   to {
     transform: rotate(360deg);
@@ -951,11 +1067,12 @@ function selectModule(to?: string) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .pos-loading__halo,
   .pos-loading__ring,
   .pos-loading__mark,
-  .pos-loading__mark i,
+  .pos-loading__bar::before,
   .pos-loading__dots span,
-  .pos-route-feedback__spinner {
+  .pos-route-feedback__spinner::before {
     animation: none;
   }
 
