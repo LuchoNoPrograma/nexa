@@ -455,13 +455,23 @@ function areaScore(key: keyof AreaScores) {
         </div>
 
         <div class="diag-result__cols">
-          <div v-if="resultado.problemas.length" class="diag-card diag-list diag-list--warn">
-            <h3><i class="pi pi-exclamation-circle" /> Problemas detectados</h3>
-            <ul>
+          <div
+            class="diag-card diag-list"
+            :class="resultado.problemas.length ? 'diag-list--warn' : 'diag-list--ok'"
+          >
+            <h3>
+              <i :class="resultado.problemas.length ? 'pi pi-exclamation-circle' : 'pi pi-check-circle'" />
+              {{ resultado.problemas.length ? 'Problemas detectados' : 'Observaciones' }}
+            </h3>
+            <ul v-if="resultado.problemas.length">
               <li v-for="(p, i) in resultado.problemas" :key="i" :style="{ '--i': i }">
                 <i class="pi pi-angle-right" /> {{ p }}
               </li>
             </ul>
+            <div v-else class="diag-empty">
+              <i class="pi pi-shield" />
+              <p>No detectamos problemas graves en tu negocio. ¡Buen trabajo! Sigue las recomendaciones para mejorar aún más.</p>
+            </div>
           </div>
 
           <div class="diag-card diag-list diag-list--ok">
@@ -1210,6 +1220,30 @@ function areaScore(key: keyof AreaScores) {
 .diag-list--warn h3 { color: #b4541f; }
 .diag-list--warn li i { color: #e0852f; margin-top: 2px; }
 .diag-list--ok h3 { color: #0a6f1f; }
+
+.diag-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f4faf2;
+  border: 1px solid #e2efe0;
+}
+
+.diag-empty i {
+  color: #0f9e2e;
+  font-size: 1.1rem;
+  margin-top: 1px;
+}
+
+.diag-empty p {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #2f4a37;
+  line-height: 1.45;
+}
 
 .diag-num {
   display: grid;
