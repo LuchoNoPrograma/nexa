@@ -1,13 +1,13 @@
 -- Ejecutar despues de crear el usuario en Supabase Auth:
--- email: admin@impulsa.bo
--- password sugerido para dev: ImpulsaAdmin2026!
+-- email: admin@nexa.bo
+-- password sugerido para dev: NexaAdmin2026!
 --
 -- Este script no guarda contrasenas en tablas publicas. Solo crea el perfil,
 -- una tienda demo y asigna roles para entrar al POS.
 
 do $$
 declare
-  super_admin_email text := 'admin@impulsa.bo';
+  super_admin_email text := 'admin@nexa.bo';
   super_admin_id uuid;
   tienda_demo_id uuid;
   rol_super_admin_id uuid;
@@ -24,7 +24,7 @@ begin
   end if;
 
   insert into usuario (id, email, nombre, estado, ultimo_acceso_at)
-  values (super_admin_id, super_admin_email, 'Super Admin IMPULSA', 'activo', now())
+  values (super_admin_id, super_admin_email, 'Super Admin NEXA', 'activo', now())
   on conflict (id) do update
   set
     email = excluded.email,
@@ -35,10 +35,10 @@ begin
   insert into tienda (owner_id, nombre, slug, rubro, descripcion, ciudad, departamento, pais, plan, activo)
   values (
     super_admin_id,
-    'Tienda Demo IMPULSA',
-    'tienda-demo-impulsa',
+    'Tienda Demo NEXA',
+    'tienda-demo-nexa',
     'Abarrotes',
-    'Tienda base de abarrotes bolivianos para probar el punto de venta de IMPULSA.',
+    'Tienda base de abarrotes bolivianos para probar el punto de venta de NEXA.',
     'Cobija',
     'Pando',
     'Bolivia',

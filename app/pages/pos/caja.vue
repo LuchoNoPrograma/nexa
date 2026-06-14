@@ -5,423 +5,872 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Caja | IMPULSA',
+  title: 'Caja | NEXA',
 })
 
+type CashStatus = 'abierta' | 'cerrada'
 type MovementType = 'Ingreso' | 'Egreso'
-type MovementStatus = 'Confirmado' | 'Pendiente'
+type PaymentMethod = 'Efectivo' | 'QR' | 'Tarjeta'
 
-const periods = ['Hoy', 'Mayo 2026', 'Abril 2026', 'Marzo 2026']
-const accounts = ['Caja principal', 'QR digital', 'Banco']
-
-const selectedPeriod = ref('Mayo 2026')
-const selectedAccount = ref('Caja principal')
-const initialBalance = ref(12000)
-const projectedBalance = ref(24890)
-
-const summary = [
-  { label: 'Ventas cobradas', value: 48750, delta: '+18.4%', icon: 'pi pi-arrow-up-right', tone: 'green' },
-  { label: 'Gastos pagados', value: 23860, delta: '+9.7%', icon: 'pi pi-arrow-down-left', tone: 'red' },
-  { label: 'Saldo esperado', value: 24890, delta: '76% liquidez', icon: 'pi pi-wallet', tone: 'green' },
-]
-
-const paymentMethods = [
-  { label: 'Efectivo', code: 'EFE', amount: 18400, percent: 38, tone: 'green' },
-  { label: 'QR digital', code: 'QR', amount: 21350, percent: 44, tone: 'blue' },
-  { label: 'Tarjeta', code: 'TAR', amount: 9000, percent: 18, tone: 'violet' },
-]
-
-const recentActivity = [
-  { time: '09:20', detail: 'Venta de mostrador', type: 'Ingreso' as MovementType, method: 'QR', amount: 8900, status: 'Confirmado' as MovementStatus },
-  { time: '10:15', detail: 'Pago a proveedor', type: 'Egreso' as MovementType, method: 'Efectivo', amount: 3250, status: 'Confirmado' as MovementStatus },
-  { time: '12:40', detail: 'Servicio de consultoría', type: 'Ingreso' as MovementType, method: 'QR', amount: 6400, status: 'Confirmado' as MovementStatus },
-  { time: '15:05', detail: 'Publicidad digital', type: 'Egreso' as MovementType, method: 'Tarjeta', amount: 2240, status: 'Pendiente' as MovementStatus },
-]
-
-const topProducts = [
-  { name: 'Combo emprendedor', units: 18, amount: 12600 },
-  { name: 'Asesoría express', units: 9, amount: 8100 },
-  { name: 'Pack identidad visual', units: 5, amount: 6000 },
-]
-
-const reconciliation = computed(() => [
-  { label: 'Saldo inicial', value: Number(initialBalance.value || 0) },
-  { label: 'Ventas cobradas', value: 48750 },
-  { label: 'Gastos registrados', value: -23860 },
-  { label: 'Esperado en caja', value: Number(projectedBalance.value || 0) },
-])
+interface CashMovement {
+  id: number
+  time: string
+  concept: string
+  type: MovementType
+  method: PaymentMethod
+  amount: number
+  note?: string
+}
 
 const currencyFormatter = new Intl.NumberFormat('es-BO', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
 
+const cashStatus = ref<CashStatus>('abierta')
+const registerName = ref('Caja principal')
+const openedBy = ref('María López')
+const openedAt = ref('08:00')
+const openingFloat = ref(300)
+const countedCash = ref(1230)
+const desiredFloat = ref(300)
+const closingNote = ref('')
+const closedAt = ref('')
+const lastPrintedAt = ref('')
+
+const openDialogVisible = ref(false)
+const movementDialogVisible = ref(false)
+const arqueoDialogVisible = ref(false)
+const productDialogVisible = ref(false)
+const closeDialogVisible = ref(false)
+
+const openingForm = reactive({
+  registerName: 'Caja principal',
+  openedBy: 'María López',
+  openingFloat: 300,
+  note: '',
+})
+
+const movementForm = reactive({
+  type: 'Ingreso' as MovementType,
+  method: 'Efectivo' as PaymentMethod,
+  concept: '',
+  amount: 0,
+  note: '',
+})
+
+const movements = ref<CashMovement[]>([
+  { id: 1, time: '08:35', concept: 'Venta de mostrador', type: 'Ingreso', method: 'Efectivo', amount: 420 },
+  { id: 2, time: '09:10', concept: 'Venta con QR', type: 'Ingreso', method: 'QR', amount: 680 },
+  { id: 3, time: '10:25', concept: 'Compra de bolsas', type: 'Egreso', method: 'Efectivo', amount: 45 },
+  { id: 4, time: '11:50', concept: 'Venta de mostrador', type: 'Ingreso', method: 'Efectivo', amount: 360 },
+  { id: 5, time: '14:15', concept: 'Venta con tarjeta', type: 'Ingreso', method: 'Tarjeta', amount: 520 },
+  { id: 6, time: '15:40', concept: 'Retiro para depósito', type: 'Egreso', method: 'Efectivo', amount: 110 },
+])
+
+// Ventas por producto del turno (demo: aún no hay módulo de ventas real).
+const productSales = ref([
+  { name: 'Coca-Cola 2L', qty: 14, total: 168 },
+  { name: 'Pan de molde', qty: 9, total: 81 },
+  { name: 'Aceite 900 ml', qty: 5, total: 90 },
+  { name: 'Arroz 1 kg', qty: 7, total: 70 },
+  { name: 'Leche entera 1 L', qty: 6, total: 42 },
+])
+
+const movementTypes: MovementType[] = ['Ingreso', 'Egreso']
+const paymentMethods: PaymentMethod[] = ['Efectivo', 'QR', 'Tarjeta']
+
+const currentTime = computed(() => {
+  const now = new Date()
+  return now.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
+})
+
+const cashIncome = computed(() => movements.value
+  .filter((movement) => movement.type === 'Ingreso' && movement.method === 'Efectivo')
+  .reduce((sum, movement) => sum + movement.amount, 0))
+
+const cashOutcome = computed(() => movements.value
+  .filter((movement) => movement.type === 'Egreso' && movement.method === 'Efectivo')
+  .reduce((sum, movement) => sum + movement.amount, 0))
+
+const expectedCash = computed(() => openingFloat.value + cashIncome.value - cashOutcome.value)
+
+const countedDifference = computed(() => Number(countedCash.value || 0) - expectedCash.value)
+
+const totalSales = computed(() => movements.value
+  .filter((movement) => movement.type === 'Ingreso')
+  .reduce((sum, movement) => sum + movement.amount, 0))
+
+const movementCount = computed(() => movements.value.length)
+
+const depositAmount = computed(() => Math.max(Number(countedCash.value || 0) - Number(desiredFloat.value || 0), 0))
+
+const productUnits = computed(() => productSales.value.reduce((sum, item) => sum + item.qty, 0))
+const productTotal = computed(() => productSales.value.reduce((sum, item) => sum + item.total, 0))
+const productRanking = computed(() => [...productSales.value].sort((a, b) => b.total - a.total))
+
+const paymentBreakdown = computed(() => paymentMethods.map((method) => {
+  const income = movements.value
+    .filter((movement) => movement.type === 'Ingreso' && movement.method === method)
+    .reduce((sum, movement) => sum + movement.amount, 0)
+
+  return {
+    method,
+    income,
+    count: movements.value.filter((movement) => movement.type === 'Ingreso' && movement.method === method).length,
+  }
+}))
+
+// Los 4 accesos grandes de la caja (estilo POS profesional).
+const cashTools = computed<{ key: string; label: string; desc: string; icon: string; tone: string; action: () => void }[]>(() => [
+  { key: 'movimiento', label: 'Registrar movimiento', desc: 'Ingreso o egreso de efectivo', icon: 'pi pi-plus-circle', tone: 'green', action: () => openMovementDialog('Ingreso') },
+  { key: 'producto', label: 'Reporte por producto', desc: 'Qué y cuánto se vendió hoy', icon: 'pi pi-box', tone: 'blue', action: () => { productDialogVisible.value = true } },
+  { key: 'arqueo', label: 'Arqueo de caja', desc: 'Cuenta el efectivo físico', icon: 'pi pi-calculator', tone: 'amber', action: () => { arqueoDialogVisible.value = true } },
+  { key: 'cierre', label: 'Reporte de cierre', desc: 'Cuadra e imprime el turno', icon: 'pi pi-file-check', tone: 'slate', action: () => { closeDialogVisible.value = true } },
+])
+
+const closeReportRows = computed(() => [
+  { label: 'Fondo inicial', value: money(openingFloat.value) },
+  { label: 'Ingresos en efectivo', value: money(cashIncome.value) },
+  { label: 'Egresos en efectivo', value: money(cashOutcome.value) },
+  { label: 'Efectivo esperado', value: money(expectedCash.value), strong: true },
+  { label: 'Efectivo contado', value: money(Number(countedCash.value || 0)), strong: true },
+  { label: 'Diferencia', value: money(countedDifference.value), strong: true, tone: differenceTone.value },
+  { label: 'Dejar en caja', value: money(Number(desiredFloat.value || 0)) },
+  { label: 'Retirar / depositar', value: money(depositAmount.value) },
+])
+
+const sessionDuration = computed(() => `${openedAt.value} - ${cashStatus.value === 'cerrada' ? closedAt.value : 'en curso'}`)
+
+const differenceTone = computed(() => {
+  const absDifference = Math.abs(countedDifference.value)
+
+  if (absDifference <= 0.01) {
+    return 'green'
+  }
+
+  if (absDifference <= 5) {
+    return 'gold'
+  }
+
+  return 'red'
+})
+
+const differenceLabel = computed(() => {
+  if (Math.abs(countedDifference.value) <= 0.01) {
+    return 'Caja cuadrada'
+  }
+
+  return countedDifference.value > 0 ? 'Sobrante' : 'Faltante'
+})
+
+const differenceHelp = computed(() => {
+  if (Math.abs(countedDifference.value) <= 0.01) {
+    return 'El conteo coincide con lo esperado.'
+  }
+
+  return countedDifference.value > 0
+    ? 'Hay más efectivo contado que el esperado.'
+    : 'Hay menos efectivo contado que el esperado.'
+})
+
 function money(value: number) {
   const sign = value < 0 ? '-' : ''
-  return `${sign}Bs. ${currencyFormatter.format(Math.abs(value))}`
+  return `${sign}Bs. ${currencyFormatter.format(Math.abs(value || 0))}`
 }
 
-function movementSeverity(status: MovementStatus) {
-  return status === 'Confirmado' ? 'success' : 'warn'
+function formatSigned(value: number) {
+  if (Math.abs(value) <= 0.01) {
+    return money(0)
+  }
+
+  return value > 0 ? `+${money(value)}` : money(value)
 }
 
 function movementClass(type: MovementType) {
-  return type === 'Ingreso' ? 'text-primary-600' : 'text-red-500'
+  return type === 'Ingreso' ? 'text-emerald-700' : 'text-red-600'
+}
+
+function movementSign(type: MovementType) {
+  return type === 'Ingreso' ? '+' : '-'
+}
+
+function resetMovementForm() {
+  movementForm.type = 'Ingreso'
+  movementForm.method = 'Efectivo'
+  movementForm.concept = ''
+  movementForm.amount = 0
+  movementForm.note = ''
+}
+
+function openCashSession() {
+  registerName.value = openingForm.registerName.trim() || 'Caja principal'
+  openedBy.value = openingForm.openedBy.trim() || 'Responsable de caja'
+  openingFloat.value = Number(openingForm.openingFloat || 0)
+  countedCash.value = openingFloat.value
+  desiredFloat.value = openingFloat.value
+  openedAt.value = currentTime.value
+  closedAt.value = ''
+  closingNote.value = openingForm.note.trim()
+  movements.value = []
+  cashStatus.value = 'abierta'
+  openDialogVisible.value = false
+}
+
+function openMovementDialog(type: MovementType) {
+  resetMovementForm()
+  movementForm.type = type
+  movementDialogVisible.value = true
+}
+
+function saveMovement() {
+  if (!movementForm.concept.trim() || Number(movementForm.amount || 0) <= 0) {
+    return
+  }
+
+  movements.value.unshift({
+    id: Date.now(),
+    time: currentTime.value,
+    concept: movementForm.concept.trim(),
+    type: movementForm.type,
+    method: movementForm.method,
+    amount: Number(movementForm.amount || 0),
+    note: movementForm.note.trim() || undefined,
+  })
+
+  movementDialogVisible.value = false
+  resetMovementForm()
+}
+
+function closeCashSession(printAfterClose = false) {
+  cashStatus.value = 'cerrada'
+  closedAt.value = currentTime.value
+  closeDialogVisible.value = false
+
+  if (printAfterClose) {
+    printClosureReport()
+  }
+}
+
+function reopenForDemo() {
+  openingForm.registerName = registerName.value
+  openingForm.openedBy = openedBy.value
+  openingForm.openingFloat = Number(desiredFloat.value || openingFloat.value || 0)
+  openingForm.note = ''
+  openDialogVisible.value = true
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function printClosureReport() {
+  if (!import.meta.client) {
+    return
+  }
+
+  lastPrintedAt.value = currentTime.value
+
+  const rows = closeReportRows.value.map((row) => `
+    <tr class="${row.strong ? 'strong' : ''}">
+      <td>${escapeHtml(row.label)}</td>
+      <td>${escapeHtml(row.value)}</td>
+    </tr>
+  `).join('')
+
+  const payments = paymentBreakdown.value.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.method)}</td>
+      <td>${item.count}</td>
+      <td>${escapeHtml(money(item.income))}</td>
+    </tr>
+  `).join('')
+
+  const activity = movements.value.map((movement) => `
+    <tr>
+      <td>${escapeHtml(movement.time)}</td>
+      <td>${escapeHtml(movement.concept)}</td>
+      <td>${escapeHtml(movement.type)}</td>
+      <td>${escapeHtml(movement.method)}</td>
+      <td>${escapeHtml(`${movementSign(movement.type)} ${money(movement.amount)}`)}</td>
+    </tr>
+  `).join('')
+
+  const reportWindow = window.open('', 'nexa-cierre-caja', 'width=820,height=900')
+
+  if (!reportWindow) {
+    window.print()
+    return
+  }
+
+  reportWindow.document.write(`
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Reporte de cierre de caja - NEXA</title>
+        <style>
+          body { margin: 0; padding: 28px; color: #111827; font-family: Arial, sans-serif; }
+          header { border-bottom: 2px solid #0B1F3A; padding-bottom: 14px; margin-bottom: 18px; }
+          h1 { margin: 0; color: #0B1F3A; font-size: 22px; }
+          p { margin: 4px 0; color: #4b5563; font-size: 12px; }
+          section { margin-top: 18px; }
+          h2 { margin: 0 0 8px; color: #0B1F3A; font-size: 14px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          td, th { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+          th { background: #f3f4f6; }
+          td:last-child, th:last-child { text-align: right; }
+          .strong td { font-weight: 700; background: #f8fafc; }
+          .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 42px; }
+          .signature { border-top: 1px solid #111827; padding-top: 8px; text-align: center; }
+          @media print { body { padding: 18px; } }
+        </style>
+      </head>
+      <body>
+        <header>
+          <h1>NEXA - Reporte de cierre de caja</h1>
+          <p>${escapeHtml(registerName.value)} · Responsable: ${escapeHtml(openedBy.value)}</p>
+          <p>Turno: ${escapeHtml(sessionDuration.value)} · Impreso: ${escapeHtml(lastPrintedAt.value)}</p>
+        </header>
+
+        <section>
+          <h2>Arqueo</h2>
+          <table><tbody>${rows}</tbody></table>
+        </section>
+
+        <section>
+          <h2>Ventas por método de pago</h2>
+          <table>
+            <thead><tr><th>Método</th><th>Operaciones</th><th>Total</th></tr></thead>
+            <tbody>${payments}</tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>Movimientos del turno</h2>
+          <table>
+            <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Método</th><th>Monto</th></tr></thead>
+            <tbody>${activity}</tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>Observación</h2>
+          <p>${escapeHtml(closingNote.value || 'Sin observaciones.')}</p>
+        </section>
+
+        <div class="signatures">
+          <div class="signature">Responsable de caja</div>
+          <div class="signature">Supervisor / propietario</div>
+        </div>
+
+        <script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>
+      </body>
+    </html>
+  `)
+  reportWindow.document.close()
+}
+
+function printProductReport() {
+  if (!import.meta.client) {
+    return
+  }
+
+  const rows = productRanking.value.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${item.qty}</td>
+      <td>${escapeHtml(money(item.total))}</td>
+    </tr>
+  `).join('')
+
+  const reportWindow = window.open('', 'nexa-reporte-productos', 'width=720,height=900')
+
+  if (!reportWindow) {
+    window.print()
+    return
+  }
+
+  reportWindow.document.write(`
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Reporte por producto - NEXA</title>
+        <style>
+          body { margin: 0; padding: 28px; color: #111827; font-family: Arial, sans-serif; }
+          header { border-bottom: 2px solid #0B1F3A; padding-bottom: 14px; margin-bottom: 18px; }
+          h1 { margin: 0; color: #0B1F3A; font-size: 22px; }
+          p { margin: 4px 0; color: #4b5563; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+          td, th { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+          th { background: #f3f4f6; }
+          td:nth-child(2), th:nth-child(2), td:last-child, th:last-child { text-align: right; }
+          tfoot td { font-weight: 700; background: #f8fafc; }
+          @media print { body { padding: 18px; } }
+        </style>
+      </head>
+      <body>
+        <header>
+          <h1>NEXA - Reporte por producto</h1>
+          <p>${escapeHtml(registerName.value)} · Turno: ${escapeHtml(sessionDuration.value)}</p>
+        </header>
+        <table>
+          <thead><tr><th>Producto</th><th>Unidades</th><th>Total</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr><td>Total</td><td>${productUnits.value}</td><td>${escapeHtml(money(productTotal.value))}</td></tr>
+          </tfoot>
+        </table>
+        <script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>
+      </body>
+    </html>
+  `)
+  reportWindow.document.close()
 }
 </script>
 
 <template>
   <div class="cash-page">
-    <section class="cash-hero">
-      <div class="cash-status">
-        <span class="status-dot" aria-hidden="true" />
+    <!-- Encabezado: estado del turno + total del día bien visible -->
+    <section class="cash-top">
+      <div class="cash-state" :class="cashStatus === 'abierta' ? 'is-open' : 'is-closed'">
+        <span class="state-dot" aria-hidden="true" />
         <div>
-          <strong>Caja abierta</strong>
-          <small>0 ventas hoy · Turno iniciado 08:00</small>
+          <strong>{{ cashStatus === 'abierta' ? 'Caja abierta' : 'Caja cerrada' }}</strong>
+          <small>{{ registerName }} · {{ sessionDuration }}</small>
         </div>
       </div>
 
-      <div class="cash-title">
-        <span><i class="pi pi-wallet" aria-hidden="true" />Flujo de Caja</span>
-        <h1>Control diario, conciliación y cierre de turno</h1>
-        <p>Diseñado para responder rápido: cuánto hay, qué entró, qué salió y si el cierre cuadra.</p>
+      <div class="cash-balance">
+        <small>Ventas del turno</small>
+        <strong>{{ money(totalSales) }}</strong>
+        <div class="cash-balance__stats">
+          <span><em>Efectivo esperado</em>{{ money(expectedCash) }}</span>
+          <span><em>Movimientos</em>{{ movementCount }}</span>
+        </div>
       </div>
 
-      <div class="hero-actions">
-        <Button type="button" icon="pi pi-file-export" label="Exportar análisis" outlined severity="secondary" />
-        <Button type="button" icon="pi pi-plus" label="Nuevo movimiento" severity="success" />
-        <Button type="button" icon="pi pi-lock" label="Cerrar caja del día" severity="danger" />
-      </div>
+      <Button
+        v-if="cashStatus === 'cerrada'"
+        type="button"
+        icon="pi pi-unlock"
+        label="Abrir caja"
+        severity="success"
+        class="cash-open-btn"
+        @click="reopenForDemo"
+      />
     </section>
 
-    <section class="summary-grid" aria-label="Resumen de caja">
-      <article v-for="item in summary" :key="item.label" class="summary-card">
-        <span class="summary-icon" :class="`is-${item.tone}`">
-          <i :class="item.icon" aria-hidden="true" />
-        </span>
-        <div>
-          <small>{{ item.label }}</small>
-          <strong>{{ money(item.value) }}</strong>
-          <em :class="item.tone === 'red' ? 'text-red-500' : 'text-primary-600'">{{ item.delta }}</em>
-        </div>
-      </article>
+    <!-- 4 botones grandes: lo esencial de una caja profesional -->
+    <section class="cash-tools" aria-label="Acciones de caja">
+      <button
+        v-for="tool in cashTools"
+        :key="tool.key"
+        type="button"
+        class="cash-tool"
+        :class="`is-${tool.tone}`"
+        :disabled="cashStatus === 'cerrada'"
+        @click="tool.action"
+      >
+        <span class="cash-tool__icon"><i :class="tool.icon" aria-hidden="true" /></span>
+        <strong>{{ tool.label }}</strong>
+        <small>{{ tool.desc }}</small>
+      </button>
     </section>
 
-    <div class="cash-grid">
-      <section class="panel close-panel">
-        <header class="panel-head">
-          <h2>1. Resumen de flujo de caja</h2>
-          <Tag value="En curso" severity="success" />
-        </header>
-
-        <div class="close-form">
-          <label>
-            <span>Periodo</span>
-            <Select v-model="selectedPeriod" :options="periods" fluid />
-          </label>
-          <label>
-            <span>Caja / cuenta</span>
-            <Select v-model="selectedAccount" :options="accounts" fluid />
-          </label>
-          <label>
-            <span>Saldo inicial</span>
-            <InputNumber v-model="initialBalance" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
-          </label>
-          <label>
-            <span>Saldo proyectado</span>
-            <InputNumber v-model="projectedBalance" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
-          </label>
-        </div>
-
-        <div class="close-actions">
-          <Button type="button" icon="pi pi-refresh" label="Actualizar" severity="success" size="small" />
-          <Button type="button" icon="pi pi-eraser" label="Limpiar" outlined severity="secondary" size="small" />
-        </div>
-      </section>
-
-      <section class="panel result-panel">
-        <span>Resultado</span>
-        <strong>{{ money(projectedBalance) }}</strong>
+    <!-- Movimientos del día: lista simple y legible -->
+    <section class="panel moves-panel">
+      <header class="panel-head">
         <div>
-          <small>Entradas totales <b class="text-primary-600">Bs. 48,750</b></small>
-          <small>Salidas totales <b class="text-red-500">Bs. 23,860</b></small>
-          <small>Liquidez estimada <b class="text-primary-600">76%</b></small>
+          <span>Registro del turno</span>
+          <h2>Movimientos de hoy</h2>
         </div>
-      </section>
+        <Button
+          type="button"
+          icon="pi pi-plus"
+          label="Movimiento"
+          size="small"
+          severity="success"
+          :disabled="cashStatus === 'cerrada'"
+          @click="openMovementDialog('Ingreso')"
+        />
+      </header>
 
-      <section class="panel chart-panel">
-        <header class="panel-head">
-          <h2>2. Flujo del periodo</h2>
-          <div class="chart-legend">
-            <span><b class="bg-primary-500" />Ingresos</span>
-            <span><b class="bg-orange-500" />Gastos</span>
-            <span><b class="bg-emerald-700" />Saldo</span>
-          </div>
-        </header>
+      <ul class="move-list">
+        <li v-for="movement in movements" :key="movement.id">
+          <span class="move-time">{{ movement.time }}</span>
+          <span class="move-main">
+            <strong>{{ movement.concept }}</strong>
+            <small>{{ movement.method }}</small>
+          </span>
+          <strong class="move-amount" :class="movementClass(movement.type)">
+            {{ movementSign(movement.type) }} {{ money(movement.amount) }}
+          </strong>
+        </li>
+        <li v-if="!movements.length" class="move-empty">Aún no hay movimientos en este turno.</li>
+      </ul>
+    </section>
 
-        <svg class="period-chart" viewBox="0 0 430 190" aria-label="Flujo del periodo">
-          <path class="grid-line" d="M42 155 H408 M42 118 H408 M42 81 H408 M42 44 H408" />
-          <g class="bar-group">
-            <rect x="76" y="121" width="26" height="34" />
-            <rect class="expense-bar" x="106" y="137" width="26" height="18" />
-            <rect x="166" y="105" width="26" height="50" />
-            <rect class="expense-bar" x="196" y="129" width="26" height="26" />
-            <rect x="256" y="90" width="26" height="65" />
-            <rect class="expense-bar" x="286" y="125" width="26" height="30" />
-            <rect x="346" y="82" width="26" height="73" />
-            <rect class="expense-bar" x="376" y="119" width="26" height="36" />
-          </g>
-          <path class="saldo-line" d="M88 118 L178 103 L268 82 L358 60" />
-          <circle cx="88" cy="118" r="5" /><circle cx="178" cy="103" r="5" /><circle cx="268" cy="82" r="5" /><circle cx="358" cy="60" r="5" />
-          <g class="axis-labels">
-            <text x="86" y="176">Sem 1</text><text x="176" y="176">Sem 2</text><text x="266" y="176">Sem 3</text><text x="356" y="176">Sem 4</text>
-          </g>
-        </svg>
-      </section>
+    <!-- Diálogo: abrir caja -->
+    <Dialog v-model:visible="openDialogVisible" modal header="Abrir caja" class="cash-dialog">
+      <form class="dialog-form" @submit.prevent="openCashSession">
+        <label class="field">
+          <span>Caja</span>
+          <InputText v-model="openingForm.registerName" />
+        </label>
+        <label class="field">
+          <span>Responsable</span>
+          <InputText v-model="openingForm.openedBy" />
+        </label>
+        <label class="field">
+          <span>Fondo inicial para cambio</span>
+          <InputNumber v-model="openingForm.openingFloat" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+        </label>
+        <label class="field full">
+          <span>Nota de apertura</span>
+          <Textarea v-model="openingForm.note" rows="3" auto-resize />
+        </label>
 
-      <section class="panel methods-panel">
-        <header class="panel-head">
-          <h2>Métodos de pago</h2>
-          <span>3 canales</span>
-        </header>
+        <footer>
+          <Button type="button" label="Cancelar" outlined severity="secondary" @click="openDialogVisible = false" />
+          <Button type="submit" label="Abrir caja" icon="pi pi-unlock" severity="success" />
+        </footer>
+      </form>
+    </Dialog>
 
-        <div class="payment-list">
-          <article v-for="method in paymentMethods" :key="method.label">
-            <span class="method-code" :class="`is-${method.tone}`">{{ method.code }}</span>
-            <div>
-              <strong>{{ method.label }}</strong>
-              <span class="progress-track"><b :style="{ width: `${method.percent}%` }" /></span>
-            </div>
-            <em>{{ money(method.amount) }}<small>{{ method.percent }}%</small></em>
-          </article>
-        </div>
-      </section>
+    <!-- Diálogo: registrar movimiento -->
+    <Dialog v-model:visible="movementDialogVisible" modal header="Registrar movimiento" class="cash-dialog">
+      <form class="dialog-form" @submit.prevent="saveMovement">
+        <label class="field">
+          <span>Tipo</span>
+          <SelectButton v-model="movementForm.type" :options="movementTypes" />
+        </label>
+        <label class="field">
+          <span>Método</span>
+          <Select v-model="movementForm.method" :options="paymentMethods" fluid />
+        </label>
+        <label class="field full">
+          <span>Concepto</span>
+          <InputText v-model="movementForm.concept" placeholder="Ej. Retiro para depósito" />
+        </label>
+        <label class="field">
+          <span>Monto</span>
+          <InputNumber v-model="movementForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+        </label>
+        <label class="field full">
+          <span>Nota opcional</span>
+          <Textarea v-model="movementForm.note" rows="3" auto-resize />
+        </label>
 
-      <section class="panel activity-panel">
-        <header class="panel-head">
-          <h2>3. Historial de movimientos</h2>
-          <Button type="button" text size="small" severity="success" label="Ver historial completo" />
-        </header>
-
-        <DataTable :value="recentActivity" size="small" class="cash-table">
-          <Column field="time" header="Hora" />
-          <Column field="detail" header="Concepto" />
-          <Column field="method" header="Método" />
-          <Column header="Tipo">
-            <template #body="{ data }">
-              <strong :class="movementClass(data.type)">{{ data.type }}</strong>
-            </template>
-          </Column>
-          <Column header="Monto">
-            <template #body="{ data }">
-              <strong :class="movementClass(data.type)">{{ money(data.amount) }}</strong>
-            </template>
-          </Column>
-          <Column header="Estado">
-            <template #body="{ data }">
-              <Tag :value="data.status" :severity="movementSeverity(data.status)" rounded />
-            </template>
-          </Column>
-        </DataTable>
-      </section>
-
-      <section class="panel side-panel">
-        <header class="panel-head">
-          <h2>Resumen del cierre</h2>
-          <Tag value="Conciliación" severity="info" />
-        </header>
-
-        <div class="reconcile-list">
-          <div v-for="item in reconciliation" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong :class="item.value < 0 ? 'text-red-500' : 'text-primary-700'">{{ money(item.value) }}</strong>
-          </div>
-        </div>
-
-        <Divider />
-
-        <div class="top-products">
-          <h3>Top productos</h3>
-          <article v-for="product in topProducts" :key="product.name">
-            <div>
-              <strong>{{ product.name }}</strong>
-              <small>{{ product.units }} ventas</small>
-            </div>
-            <span>{{ money(product.amount) }}</span>
-          </article>
-        </div>
-      </section>
-
-      <section class="panel insight-panel">
-        <Message severity="success" icon="pi pi-check-circle">
-          Tu flujo de caja está saludable este mes. La recomendación es revisar pagos pendientes antes de cerrar el turno.
+        <Message v-if="movementForm.method !== 'Efectivo'" severity="info" size="small" icon="pi pi-info-circle">
+          Este movimiento aparecerá en el reporte, pero no cambia el efectivo físico esperado.
         </Message>
-        <Button type="button" text severity="success" icon="pi pi-sparkles" label="Ver recomendaciones IA" />
-      </section>
-    </div>
+
+        <footer>
+          <Button type="button" label="Cancelar" outlined severity="secondary" @click="movementDialogVisible = false" />
+          <Button type="submit" label="Guardar movimiento" icon="pi pi-check" :disabled="!movementForm.concept.trim() || Number(movementForm.amount || 0) <= 0" />
+        </footer>
+      </form>
+    </Dialog>
+
+    <!-- Diálogo: reporte por producto -->
+    <Dialog v-model:visible="productDialogVisible" modal header="Reporte por producto" class="cash-dialog">
+      <div class="report-block">
+        <div class="report-totals">
+          <div>
+            <small>Unidades vendidas</small>
+            <strong>{{ productUnits }}</strong>
+          </div>
+          <div>
+            <small>Total vendido</small>
+            <strong>{{ money(productTotal) }}</strong>
+          </div>
+        </div>
+
+        <ul class="product-list">
+          <li v-for="(item, index) in productRanking" :key="item.name">
+            <b>{{ index + 1 }}</b>
+            <span class="product-main">
+              <strong>{{ item.name }}</strong>
+              <small>{{ item.qty }} unidades</small>
+            </span>
+            <strong class="product-total">{{ money(item.total) }}</strong>
+          </li>
+        </ul>
+      </div>
+
+      <template #footer>
+        <Button type="button" label="Cerrar" outlined severity="secondary" @click="productDialogVisible = false" />
+        <Button type="button" label="Imprimir" icon="pi pi-print" @click="printProductReport" />
+      </template>
+    </Dialog>
+
+    <!-- Diálogo: arqueo de caja -->
+    <Dialog v-model:visible="arqueoDialogVisible" modal header="Arqueo de caja" class="cash-dialog">
+      <div class="arqueo-block">
+        <p class="arqueo-hint">Cuenta el efectivo físico que tienes en la caja y compáralo con lo esperado.</p>
+
+        <label class="field">
+          <span>Efectivo contado</span>
+          <InputNumber v-model="countedCash" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+        </label>
+
+        <div class="report-rows">
+          <div><span>Efectivo esperado</span><strong>{{ money(expectedCash) }}</strong></div>
+          <div><span>Efectivo contado</span><strong>{{ money(Number(countedCash || 0)) }}</strong></div>
+        </div>
+
+        <div class="difference-box" :class="`is-${differenceTone}`">
+          <span>{{ differenceLabel }}</span>
+          <strong>{{ formatSigned(countedDifference) }}</strong>
+          <small>{{ differenceHelp }}</small>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button type="button" label="Cerrar" outlined severity="secondary" @click="arqueoDialogVisible = false" />
+        <Button type="button" label="Continuar al cierre" icon="pi pi-arrow-right" severity="danger" :disabled="cashStatus === 'cerrada'" @click="arqueoDialogVisible = false; closeDialogVisible = true" />
+      </template>
+    </Dialog>
+
+    <!-- Diálogo: reporte de cierre -->
+    <Dialog v-model:visible="closeDialogVisible" modal header="Reporte de cierre de caja" class="cash-dialog close-dialog">
+      <div class="close-content">
+        <Message severity="warn" icon="pi pi-exclamation-triangle">
+          Al cerrar, el turno queda finalizado para revisión. Revisa el efectivo contado antes de imprimir.
+        </Message>
+
+        <div class="close-fields">
+          <label class="field">
+            <span>Efectivo contado</span>
+            <InputNumber v-model="countedCash" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+          </label>
+          <label class="field">
+            <span>Fondo que quedará para mañana</span>
+            <InputNumber v-model="desiredFloat" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+          </label>
+          <label class="field full">
+            <span>Observación del cierre</span>
+            <Textarea v-model="closingNote" rows="3" auto-resize placeholder="Ej. Faltan Bs. 2 por cambio entregado sin moneda exacta." />
+          </label>
+        </div>
+
+        <div class="report-rows">
+          <div v-for="row in closeReportRows" :key="row.label" :class="{ strong: row.strong, [`is-${row.tone}`]: row.tone }">
+            <span>{{ row.label }}</span>
+            <strong>{{ row.value }}</strong>
+          </div>
+        </div>
+
+        <Message v-if="lastPrintedAt" severity="success" size="small" icon="pi pi-check">
+          Último reporte enviado a impresión: {{ lastPrintedAt }}
+        </Message>
+      </div>
+
+      <template #footer>
+        <Button type="button" label="Cancelar" outlined severity="secondary" @click="closeDialogVisible = false" />
+        <Button type="button" label="Solo cerrar" severity="danger" outlined @click="closeCashSession(false)" />
+        <Button type="button" label="Cerrar e imprimir" icon="pi pi-print" severity="danger" @click="closeCashSession(true)" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <style scoped>
 .cash-page {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  max-width: 860px;
+  margin: 0 auto;
   color: #102016;
 }
 
-.cash-hero,
-.summary-card,
+.cash-top,
 .panel {
   border: 1px solid #e7eee8;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
+  border-radius: 16px;
+  background: #ffffff;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 }
 
-.cash-hero {
+/* --- Encabezado --- */
+.cash-top {
   display: grid;
-  grid-template-columns: minmax(210px, 0.86fr) minmax(300px, 1.35fr) auto;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 16px;
   align-items: center;
-  overflow: hidden;
-  padding: 16px;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.98), rgba(244, 252, 241, 0.92) 64%, rgba(244, 252, 241, 0.45)),
-    url('/tools/finanzas.jpg') center / cover no-repeat;
+  padding: 16px 18px;
 }
 
-.cash-status {
+.cash-state {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 64px;
   padding: 13px 14px;
   border-radius: 12px;
-  background: #033d2e;
   color: #ffffff;
 }
 
-.status-dot {
+.cash-state.is-open {
+  background: linear-gradient(135deg, #0a6f1f, #0e8a28);
+}
+
+.cash-state.is-closed {
+  background: #374151;
+}
+
+.state-dot {
   width: 12px;
   height: 12px;
+  flex: 0 0 auto;
   border-radius: 999px;
   background: #10d99b;
-  box-shadow: 0 0 0 6px rgba(16, 217, 155, 0.14);
+  box-shadow: 0 0 0 6px rgba(16, 217, 155, 0.18);
 }
 
-.cash-status strong,
-.cash-title span,
-.panel-head h2,
-.top-products h3 {
-  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-weight: 900;
+.cash-state.is-closed .state-dot {
+  background: #cbd5e1;
+  box-shadow: 0 0 0 6px rgba(203, 213, 225, 0.16);
 }
 
-.cash-status strong {
+.cash-state strong {
   display: block;
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.cash-status small,
-.cash-title p,
-.summary-card small,
-.panel span,
-.panel small,
-.payment-list small {
-  color: #718074;
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-
-.cash-status small {
-  color: rgba(255, 255, 255, 0.74);
-}
-
-.cash-title span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #0a6f1f;
+.cash-state small {
+  color: rgba(255, 255, 255, 0.78);
   font-size: 0.72rem;
+  font-weight: 700;
 }
 
-.cash-title h1 {
-  margin: 6px 0 4px;
+.cash-balance > small {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #718074;
+}
+
+.cash-balance > strong {
+  display: block;
+  margin: 2px 0 8px;
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: clamp(1.12rem, 1.8vw, 1.56rem);
-  line-height: 1.1;
+  font-size: 1.9rem;
+  line-height: 1;
+  font-weight: 900;
 }
 
-.cash-title p {
-  max-width: 620px;
-  margin: 0;
-  line-height: 1.45;
-}
-
-.hero-actions {
+.cash-balance__stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
+  gap: 18px;
 }
 
-.summary-grid {
+.cash-balance__stats span {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.summary-card {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-  padding: 15px;
-}
-
-.summary-icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 13px;
-  font-size: 1.05rem;
-}
-
-.summary-icon.is-green {
-  background: #ecfdf0;
-  color: #0a6f1f;
-}
-
-.summary-icon.is-red {
-  background: #fef2f2;
-  color: #ef4444;
-}
-
-.summary-card strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 1.15rem;
+  gap: 1px;
+  font-size: 0.86rem;
   font-weight: 900;
+  color: #1c3a24;
 }
 
-.summary-card em {
-  font-size: 0.68rem;
+.cash-balance__stats em {
   font-style: normal;
-  font-weight: 900;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #718074;
 }
 
-.cash-grid {
+.cash-open-btn {
+  align-self: center;
+}
+
+/* --- 4 botones grandes --- */
+.cash-tools {
   display: grid;
-  grid-template-columns: 1.08fr 0.62fr 1.25fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
+.cash-tool {
+  display: grid;
+  gap: 6px;
+  padding: 18px 16px;
+  border: 1px solid #e7eee8;
+  border-radius: 16px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.cash-tool:hover:not(:disabled) {
+  transform: translateY(-3px);
+  border-color: #cfe3c6;
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+}
+
+.cash-tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cash-tool__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  font-size: 1.35rem;
+}
+
+.cash-tool.is-green .cash-tool__icon {
+  background: #eaf6e7;
+  color: #1c7a2c;
+}
+
+.cash-tool.is-blue .cash-tool__icon {
+  background: #e8f2ff;
+  color: #0b4a7a;
+}
+
+.cash-tool.is-amber .cash-tool__icon {
+  background: #fdf2dc;
+  color: #b9781a;
+}
+
+.cash-tool.is-slate .cash-tool__icon {
+  background: #eef1f4;
+  color: #5b6675;
+}
+
+.cash-tool strong {
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.cash-tool small {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #6b7a6f;
+  line-height: 1.35;
+}
+
+/* --- Panel de movimientos --- */
 .panel {
-  min-width: 0;
-  padding: 15px;
+  padding: 16px 18px;
 }
 
 .panel-head {
@@ -432,314 +881,336 @@ function movementClass(type: MovementType) {
   margin-bottom: 12px;
 }
 
-.panel-head h2 {
-  margin: 0;
-  font-size: 0.86rem;
+.panel-head span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #718074;
 }
 
-.close-form {
+.panel-head h2 {
+  margin: 2px 0 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.move-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.move-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: #f8fbf8;
+}
+
+.move-time {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #718074;
+}
+
+.move-main strong {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.move-main small {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #718074;
+}
+
+.move-amount {
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.move-empty {
+  justify-content: center;
+  color: #718074;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.text-emerald-700 {
+  color: #047857;
+}
+
+.text-red-600 {
+  color: #dc2626;
+}
+
+/* --- Diálogos --- */
+.cash-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.close-dialog {
+  width: min(720px, calc(100vw - 24px));
+}
+
+.dialog-form,
+.close-content,
+.report-block,
+.arqueo-block {
+  display: grid;
+  gap: 14px;
+}
+
+.dialog-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dialog-form .full,
+.dialog-form footer,
+.close-fields .full {
+  grid-column: 1 / -1;
+}
+
+.dialog-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.close-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
-.close-form label {
+.field {
   display: grid;
   gap: 6px;
 }
 
-.close-form :deep(.p-select),
-.close-form :deep(.p-inputnumber-input) {
+.field span {
+  color: #3b4a40;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.field :deep(.p-inputtext),
+.field :deep(.p-inputnumber-input),
+.field :deep(.p-select),
+.field :deep(.p-textarea) {
   width: 100%;
-  font-size: 0.78rem;
+  font-size: 0.86rem;
 }
 
-.close-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.result-panel {
+/* --- Reporte por producto --- */
+.report-totals {
   display: grid;
-  align-content: center;
-  gap: 9px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-totals div {
+  display: grid;
+  gap: 3px;
+  padding: 13px;
+  border-radius: 12px;
   background: #f3faf2;
 }
 
-.result-panel > strong {
+.report-totals small {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #718074;
+}
+
+.report-totals strong {
+  font-size: 1.3rem;
+  font-weight: 900;
+}
+
+.product-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fbf8;
+}
+
+.product-list b {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 999px;
+  background: #0a6f1f;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.product-main strong {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.product-main small {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #718074;
+}
+
+.product-total {
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+/* --- Arqueo / cierre --- */
+.arqueo-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #5c6b60;
+  line-height: 1.4;
+}
+
+.report-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.report-rows div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #f8fbf8;
+}
+
+.report-rows span {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #5c6b60;
+}
+
+.report-rows strong {
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.report-rows .strong {
+  background: #eef8f1;
+}
+
+.report-rows .is-green strong {
   color: #0a6f1f;
-  font-size: 1.9rem;
+}
+
+.report-rows .is-gold strong {
+  color: #806000;
+}
+
+.report-rows .is-red strong {
+  color: #dc2626;
+}
+
+.difference-box {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.difference-box span {
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.difference-box strong {
+  font-size: 1.6rem;
   line-height: 1;
   font-weight: 900;
 }
 
-.result-panel div {
-  display: grid;
-  gap: 6px;
+.difference-box small {
+  line-height: 1.35;
 }
 
-.result-panel small {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.chart-panel {
-  grid-row: span 2;
-}
-
-.chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-}
-
-.chart-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.chart-legend b {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-}
-
-.period-chart {
-  width: 100%;
-  min-height: 220px;
-}
-
-.grid-line {
-  fill: none;
-  stroke: #edf3ee;
-  stroke-width: 1;
-}
-
-.bar-group rect {
-  fill: #0f9e2e;
-  rx: 6;
-}
-
-.bar-group .expense-bar {
-  fill: #f97316;
-}
-
-.saldo-line {
-  fill: none;
-  stroke: #0a6f1f;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 5;
-}
-
-.period-chart circle {
-  fill: #0a6f1f;
-  stroke: #ffffff;
-  stroke-width: 3;
-}
-
-.axis-labels {
-  fill: #718074;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.methods-panel {
-  grid-row: span 2;
-}
-
-.payment-list {
-  display: grid;
-  gap: 12px;
-}
-
-.payment-list article {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 11px;
-  align-items: center;
-}
-
-.method-code {
-  display: grid;
-  width: 42px;
-  height: 28px;
-  place-items: center;
-  border-radius: 7px;
-  font-size: 0.68rem;
-  font-weight: 900;
-}
-
-.method-code.is-green {
-  background: #e8fbef;
+.difference-box.is-green {
+  border-color: #c9f4d4;
+  background: #ecfdf0;
   color: #0a6f1f;
 }
 
-.method-code.is-blue {
-  background: #e8f8ff;
-  color: #0284c7;
+.difference-box.is-gold {
+  border-color: #f8e7a1;
+  background: #fff9db;
+  color: #806000;
 }
 
-.method-code.is-violet {
-  background: #f1ecff;
-  color: #7c3aed;
+.difference-box.is-red {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
-.payment-list strong {
-  display: block;
-  font-size: 0.78rem;
-  font-weight: 900;
-}
-
-.payment-list em {
-  text-align: right;
-  font-size: 0.78rem;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.payment-list em small {
-  display: block;
-}
-
-.progress-track {
-  display: block;
-  height: 6px;
-  margin-top: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #edf2ee;
-}
-
-.progress-track b {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #0f9e2e, #74c043);
-}
-
-.activity-panel {
-  grid-column: span 2;
-}
-
-.cash-table :deep(.p-datatable-header-cell),
-.cash-table :deep(.p-datatable-tbody > tr > td) {
-  padding: 0.48rem 0.55rem;
-  font-size: 0.7rem;
-}
-
-.cash-table :deep(.p-datatable-tbody > tr),
-.cash-table :deep(.p-datatable-header-cell) {
-  background: transparent;
-}
-
-.side-panel {
-  grid-row: span 2;
-}
-
-.reconcile-list {
-  display: grid;
-  gap: 10px;
-}
-
-.reconcile-list div,
-.top-products article {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.reconcile-list strong,
-.top-products span {
-  font-size: 0.78rem;
-  font-weight: 900;
-}
-
-.top-products {
-  display: grid;
-  gap: 10px;
-}
-
-.top-products h3 {
-  margin: 0;
-  font-size: 0.82rem;
-}
-
-.top-products strong {
-  display: block;
-  font-size: 0.76rem;
-}
-
-.insight-panel {
-  grid-column: span 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 15px;
-}
-
-.insight-panel :deep(.p-message) {
-  flex: 1;
-  margin: 0;
-}
-
-@media (max-width: 1280px) {
-  .cash-hero,
-  .cash-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .cash-title,
-  .chart-panel,
-  .activity-panel,
-  .insight-panel {
-    grid-column: span 2;
-  }
-
-  .hero-actions {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 820px) {
-  .cash-hero,
-  .summary-grid,
-  .cash-grid,
-  .close-form {
+/* --- Responsivo --- */
+@media (max-width: 760px) {
+  .cash-top {
     grid-template-columns: 1fr;
   }
 
-  .cash-title,
-  .chart-panel,
-  .activity-panel,
-  .insight-panel {
-    grid-column: auto;
+  .cash-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  .insight-panel {
-    align-items: stretch;
-    flex-direction: column;
+  .cash-open-btn {
+    width: 100%;
   }
 }
 
 @media (max-width: 560px) {
-  .hero-actions,
-  .close-actions {
-    flex-direction: column;
+  .cash-tool {
+    padding: 14px 12px;
   }
 
-  .payment-list article {
-    grid-template-columns: auto minmax(0, 1fr);
+  .cash-tool__icon {
+    width: 42px;
+    height: 42px;
+    font-size: 1.2rem;
   }
 
-  .payment-list em {
-    grid-column: 2;
-    text-align: left;
+  .dialog-form,
+  .close-fields,
+  .report-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-balance > strong {
+    font-size: 1.6rem;
   }
 }
 </style>

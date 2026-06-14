@@ -29,7 +29,7 @@ const focusAreas = [
       <div v-reveal class="max-w-3xl">
         <span class="section-eyebrow"><i class="pi pi-building" />Conócenos</span>
         <h1 class="font-display mt-5 text-[clamp(2.2rem,5vw,4rem)] font-extrabold leading-tight text-[#0c1f12]">
-          IMPULSA acompaña el crecimiento de los negocios locales
+          NEXA acompaña el crecimiento de los negocios locales
         </h1>
         <p class="mt-5 text-lg font-medium leading-8 text-[#5a6b5f]">
           Somos una propuesta de plataforma web de asesoramiento empresarial digital pensada para microempresas, pequeños negocios y emprendimientos de Cobija, con proyección nacional.
@@ -70,7 +70,7 @@ const focusAreas = [
         <span class="section-eyebrow"><i class="pi pi-lightbulb" />Enfoque</span>
         <h2 class="font-display">Más que una herramienta, un apoyo empresarial</h2>
         <p>
-          IMPULSA integra gestión financiera, fortalecimiento comercial e identidad empresarial para que los negocios encuentren en un solo espacio orientación práctica y fácil de aplicar.
+          NEXA integra gestión financiera, fortalecimiento comercial e identidad empresarial para que los negocios encuentren en un solo espacio orientación práctica y fácil de aplicar.
         </p>
         <NuxtLink to="/calidad">
           Ver valores y calidad <i class="pi pi-arrow-right" aria-hidden="true" />

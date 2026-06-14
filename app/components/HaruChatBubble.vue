@@ -24,8 +24,8 @@ type MessageBlock =
     items: MessageInline[][]
   }
 
-const COLLAPSED_KEY = 'impulsa-haru-chat-collapsed'
-const CHAT_OPEN_KEY = 'impulsa-haru-chat-open'
+const COLLAPSED_KEY = 'nexa-haru-chat-collapsed'
+const CHAT_OPEN_KEY = 'nexa-haru-chat-open'
 
 const isCollapsed = ref(false)
 const isChatOpen = ref(false)

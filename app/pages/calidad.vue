@@ -7,7 +7,7 @@ const values = [
   {
     icon: 'pi pi-sparkles',
     title: 'Innovación',
-    text: 'IMPULSA promueve el uso de herramientas digitales como medio para mejorar la gestión empresarial y responder a las nuevas necesidades del mercado.',
+    text: 'NEXA promueve el uso de herramientas digitales como medio para mejorar la gestión empresarial y responder a las nuevas necesidades del mercado.',
   },
   {
     icon: 'pi pi-unlock',
@@ -17,7 +17,7 @@ const values = [
   {
     icon: 'pi pi-heart',
     title: 'Compromiso',
-    text: 'IMPULSA se orienta a apoyar el crecimiento de los usuarios, brindando herramientas y recomendaciones que contribuyan al fortalecimiento de sus negocios.',
+    text: 'NEXA se orienta a apoyar el crecimiento de los usuarios, brindando herramientas y recomendaciones que contribuyan al fortalecimiento de sus negocios.',
   },
   {
     icon: 'pi pi-shield',
@@ -32,7 +32,7 @@ const values = [
   {
     icon: 'pi pi-chart-line',
     title: 'Crecimiento',
-    text: 'IMPULSA impulsa la mejora continua de los negocios, apoyando su organización, presencia comercial y desarrollo competitivo.',
+    text: 'NEXA impulsa la mejora continua de los negocios, apoyando su organización, presencia comercial y desarrollo competitivo.',
   },
 ]
 
@@ -68,7 +68,7 @@ const standards = ['Útil para microempresas', 'Fácil de entender', 'Orientado 
       <div v-reveal class="max-w-3xl">
         <span class="section-eyebrow"><i class="pi pi-verified" />Calidad</span>
         <h1 class="font-display mt-5 text-[clamp(2.2rem,5vw,4rem)] font-extrabold leading-tight text-[#0c1f12]">
-          Calidad significa que IMPULSA sea útil, clara y aplicable
+          Calidad significa que NEXA sea útil, clara y aplicable
         </h1>
         <p class="mt-5 text-lg font-medium leading-8 text-[#5a6b5f]">
           La calidad del proyecto no se mide solo por tecnología. Se mide por su capacidad de ayudar a negocios reales a organizarse, decidir mejor y crecer sin procesos complicados.
@@ -109,7 +109,7 @@ const standards = ['Útil para microempresas', 'Fácil de entender', 'Orientado 
         <span>Enfoque</span>
         <h2 class="font-display">Criterios para evaluar la experiencia</h2>
         <p>
-          IMPULSA debe sentirse como apoyo empresarial cercano: accesible para empezar, práctico para usar y confiable para decidir.
+          NEXA debe sentirse como apoyo empresarial cercano: accesible para empezar, práctico para usar y confiable para decidir.
         </p>
       </aside>
 

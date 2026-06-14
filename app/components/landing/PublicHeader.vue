@@ -82,10 +82,10 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 
     <div class="public-mainbar">
       <div class="public-mainbar__inner">
-        <NuxtLink to="/" class="flex items-center gap-2.5" aria-label="IMPULSA inicio">
-          <img src="/impulsa-logo-color.webp" alt="" class="site-logo" aria-hidden="true">
+        <NuxtLink to="/" class="flex items-center gap-2.5" aria-label="NEXA inicio">
+          <img src="/nexa-logo-color.webp" alt="" class="site-logo" aria-hidden="true">
           <span class="leading-none">
-            <span class="font-display block text-[1.5rem] font-extrabold tracking-tight">IMPULSA</span>
+            <span class="font-display block text-[1.5rem] font-extrabold tracking-tight">NEXA</span>
             <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8a7e]">IA para tu negocio</span>
           </span>
         </NuxtLink>

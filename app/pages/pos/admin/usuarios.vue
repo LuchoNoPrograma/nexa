@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Administrar usuarios | IMPULSA',
+  title: 'Administrar usuarios | NEXA',
 })
 </script>
 

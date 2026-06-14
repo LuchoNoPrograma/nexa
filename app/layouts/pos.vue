@@ -9,8 +9,8 @@ const sidebarCollapsed = ref(false)
 const sidebarWidth = ref(250)
 const isResizingSidebar = ref(false)
 
-const SIDEBAR_KEY = 'impulsa-pos-sidebar-collapsed'
-const SIDEBAR_WIDTH_KEY = 'impulsa-pos-sidebar-width'
+const SIDEBAR_KEY = 'nexa-pos-sidebar-collapsed'
+const SIDEBAR_WIDTH_KEY = 'nexa-pos-sidebar-width'
 const SIDEBAR_DEFAULT_WIDTH = 230
 const SIDEBAR_MIN_WIDTH = 180
 const SIDEBAR_MAX_WIDTH = 360
@@ -189,6 +189,18 @@ onMounted(async () => {
     }
 
     removeRouteBeforeGuard = router.beforeEach((to, from) => {
+      // Bloqueo de onboarding: mientras el diagnóstico no esté completado, toda
+      // la app queda bloqueada y se redirige al diagnóstico (obligatorio).
+      if (
+        session.value
+        && session.value.storeId
+        && session.value.onboardingDiagnostico !== 'completado'
+        && to.path.startsWith('/pos')
+        && to.path !== '/pos/diagnostico'
+      ) {
+        return '/pos/diagnostico'
+      }
+
       const isPosNavigation = to.path.startsWith('/pos') || from.path.startsWith('/pos')
 
       if (isPosNavigation && to.fullPath !== from.fullPath) {
@@ -213,10 +225,11 @@ onMounted(async () => {
     const response = await $fetch<{ user: PosSession }>('/api/auth/session')
     session.value = response.user
 
-    // Onboarding opcional: la primera vez (estado "pendiente") llevamos al
-    // diagnóstico. Una vez completado u omitido, no se vuelve a forzar.
+    // Onboarding obligatorio: hasta que el diagnóstico esté "completado",
+    // mandamos al diagnóstico y la app permanece bloqueada (ver beforeEach).
     if (
-      response.user.onboardingDiagnostico === 'pendiente'
+      response.user.storeId
+      && response.user.onboardingDiagnostico !== 'completado'
       && route.path !== '/pos/diagnostico'
     ) {
       await navigateTo('/pos/diagnostico')
@@ -267,8 +280,8 @@ function selectModule(to?: string) {
     <Drawer v-model:visible="mobileMenuOpen" position="left" class="pos-drawer">
       <template #header>
         <div class="drawer-brand">
-          <img src="/impulsa-logo-white.webp" alt="" class="brand-logo" aria-hidden="true">
-          <strong>IMPULSA</strong>
+          <img src="/nexa-logo-white.webp" alt="" class="brand-logo" aria-hidden="true">
+          <strong>NEXA</strong>
         </div>
       </template>
 
@@ -290,8 +303,8 @@ function selectModule(to?: string) {
     <aside class="app-sidebar" aria-label="Navegación principal">
       <div class="sidebar-head">
         <div class="sidebar-brand">
-          <img src="/impulsa-logo-white.webp" alt="" class="brand-logo" aria-hidden="true">
-          <strong v-show="!sidebarCollapsed">IMPULSA</strong>
+          <img src="/nexa-logo-white.webp" alt="" class="brand-logo" aria-hidden="true">
+          <strong v-show="!sidebarCollapsed">NEXA</strong>
         </div>
         <Button
           type="button"
@@ -393,7 +406,7 @@ function selectModule(to?: string) {
           <div v-if="isRouteLoading" class="pos-route-feedback" role="status" aria-live="polite" aria-label="Cargando sección">
             <div class="pos-route-feedback__panel">
               <span class="pos-route-feedback__spinner" aria-hidden="true">
-                <img src="/impulsa-logo-color.webp" alt="">
+                <img src="/nexa-logo-color.webp" alt="">
               </span>
               <span class="pos-route-feedback__copy">Cargando sección</span>
             </div>
@@ -408,7 +421,7 @@ function selectModule(to?: string) {
       <div class="pos-loading__spinner" aria-hidden="true">
         <span class="pos-loading__ring pos-loading__ring--outer" />
         <span class="pos-loading__mark">
-          <img src="/impulsa-logo-color.webp" alt="">
+          <img src="/nexa-logo-color.webp" alt="">
         </span>
       </div>
       <p class="pos-loading__text">
@@ -837,8 +850,11 @@ function selectModule(to?: string) {
 
 .topbar-actions {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+  min-width: 0;
 }
 
 .user-chip {
@@ -1110,9 +1126,44 @@ function selectModule(to?: string) {
   }
 
   .pos-topbar {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
     padding: 12px 14px;
+  }
+
+  .topbar-title {
+    width: 100%;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* La tienda ya se ve en el subtítulo del encabezado. */
+  .topbar-location {
+    display: none;
+  }
+
+  .user-chip {
+    min-width: 0;
+  }
+
+  .user-chip__meta {
+    min-width: 0;
+  }
+
+  .user-chip__meta strong,
+  .user-chip__meta small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 420px) {
+  .user-chip__meta {
+    display: none;
   }
 }
 </style>

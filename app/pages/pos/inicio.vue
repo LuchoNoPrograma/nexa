@@ -5,63 +5,45 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Inicio | IMPULSA',
+  title: 'Inicio | NEXA',
 })
 
-const { currentWeather, weatherDays, weatherStatus } = await useCobijaWeather()
+const session = usePosSession()
 
-// Diagnóstico del negocio (alimenta la tarjeta de progreso y el CTA).
+// Diagnóstico del negocio (alimenta el CTA de onboarding).
 const { data: diagData } = await useFetch('/api/diagnostico/latest', { default: () => null })
-const diagnostico = computed(() => diagData.value?.diagnostico ?? null)
 const diagnosticoEstado = computed(() => diagData.value?.estado ?? 'pendiente')
-const saludNegocio = computed(() => diagnostico.value?.saludGeneral ?? null)
 
-// Paleta calma unificada: 3 familias en vez de 8.
-//  - verde de marca (protagonista) · ámbar cálido (acento puntual) · neutro slate.
-const toneClasses = {
-  green: 'bg-primary-50 text-primary-700',
-  emerald: 'bg-primary-50 text-primary-700',
-  mint: 'bg-primary-50 text-primary-700',
-  lime: 'bg-primary-50 text-primary-700',
-  amber: 'bg-amber-50 text-amber-700',
-  yellow: 'bg-amber-50 text-amber-700',
-  red: 'bg-amber-50 text-amber-700',
-  violet: 'bg-slate-100 text-slate-600',
-} as const
+// Primer nombre para un saludo cercano (heurística: lenguaje del mundo real).
+const firstName = computed(() => {
+  const name = session.value?.name?.trim()
+  if (!name) {
+    return 'emprendedor'
+  }
+  return name.split(/\s+/)[0]
+})
 
-type Tone = keyof typeof toneClasses
-
-const continueItems = computed<{ label: string; desc: string; icon: string; tone: Tone; progress: number; action: string; to?: string }[]>(() => [
-  {
-    label: 'Diagnóstico general',
-    desc: diagnostico.value ? 'Evaluación de tu negocio' : 'Conoce el estado de tu negocio',
-    icon: 'pi pi-chart-line',
-    tone: 'violet',
-    progress: saludNegocio.value ?? 0,
-    action: diagnostico.value ? 'Ver' : 'Iniciar',
-    to: '/pos/diagnostico',
-  },
-  { label: 'Calculadora de precios', desc: 'Define precios justos y competitivos', icon: 'pi pi-calculator', tone: 'green', progress: 42, action: 'Continuar' },
-  { label: 'Plan de marketing', desc: 'Estrategias para atraer más clientes', icon: 'pi pi-briefcase', tone: 'amber', progress: 24, action: 'Continuar' },
-])
-
-const usedTools: { label: string; desc: string; icon: string; tone: Tone; uses: string; to?: string }[] = [
-  { label: 'Calculadora de precios', desc: 'Define precios ideales para tus productos', icon: 'pi pi-calculator', tone: 'violet', uses: '12 usos', to: undefined },
-  { label: 'Control de ventas', desc: 'Lleva un registro de tus ventas diarias', icon: 'pi pi-chart-bar', tone: 'green', uses: '9 usos', to: '/pos' },
-  { label: 'Control de gastos', desc: 'Administra tus gastos e inversiones', icon: 'pi pi-wallet', tone: 'red', uses: '4 usos', to: undefined },
-  { label: 'Generador de ideas', desc: 'Ideas de negocio personalizadas', icon: 'pi pi-lightbulb', tone: 'yellow', uses: '2 usos', to: undefined },
+// Totales de caja del día. Datos demo en 0 (aún no hay módulo de ventas real),
+// con las tres monedas que maneja un negocio de la zona fronteriza.
+const cashTotals = [
+  { symbol: '$', amount: '0.00', name: 'Dólares (USD)' },
+  { symbol: 'Bs', amount: '0.00', name: 'Bolivianos (BOB)' },
+  { symbol: 'R$', amount: '0.00', name: 'Reales (BRL)' },
 ]
 
-const summaryCards = computed<{ label: string; value: string; icon: string; tone: Tone; chart?: string; bar?: number }[]>(() => [
-  { label: 'Diagnósticos realizados', value: diagnostico.value ? '1' : '0', icon: 'pi pi-briefcase', tone: 'green', chart: 'up' },
-  { label: 'Herramientas usadas', value: '27', icon: 'pi pi-wrench', tone: 'mint', chart: 'up' },
-  { label: 'Salud del negocio', value: saludNegocio.value !== null ? `${saludNegocio.value}%` : '—', icon: 'pi pi-chart-line', tone: 'lime', bar: saludNegocio.value ?? 0 },
-  { label: 'Impacto generado', value: '+18%', icon: 'pi pi-compass', tone: 'emerald', chart: 'steady' },
-])
+// Accesos rápidos: pocos, grandes y reconocibles (Nielsen: reconocer > recordar).
+const quickActions: { label: string; icon: string; to?: string }[] = [
+  { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos' },
+  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
+  { label: 'Clientes', icon: 'pi pi-users' },
+  { label: 'Proveedores', icon: 'pi pi-truck' },
+]
 
-const suggestions = [
-  { label: 'Potencia tu negocio en Pando', desc: 'Revisa tus productos estrella y prepara una campaña para WhatsApp.', image: '/pos-inicio-hero.jpg' },
-  { label: 'Mejora tus precios esta semana', desc: 'Actualiza costos y margen antes de lanzar promociones.', image: '/hero-bg.jpg' },
+// Sugerencias en forma de pregunta: lenguaje cercano para gente de 20 a 60.
+const helpCards: { title: string; desc: string; icon: string; tone: string; action: string; to?: string }[] = [
+  { title: '¿Estoy ganando o perdiendo?', desc: 'Revisa tus ingresos y gastos del mes.', icon: 'pi pi-chart-line', tone: 'green', action: 'Ver finanzas', to: '/pos/finanzas' },
+  { title: '¿Cómo consigo más clientes?', desc: 'Recibe ideas para atraer y fidelizar.', icon: 'pi pi-users', tone: 'amber', action: 'Empezar', to: '/pos/diagnostico' },
+  { title: '¿Cómo hago mis publicaciones?', desc: 'Crea contenido fácil para tus redes.', icon: 'pi pi-megaphone', tone: 'slate', action: 'Próximamente' },
 ]
 
 function go(to?: string) {
@@ -73,194 +55,252 @@ function go(to?: string) {
 
 <template>
   <div class="home">
-    <section
-      class="relative flex min-h-36 items-center overflow-hidden rounded-xl border border-[#e7eee8]/70 bg-[linear-gradient(90deg,rgba(4,12,8,0.9)_0%,rgba(5,20,10,0.72)_28%,rgba(8,38,18,0.2)_56%,rgba(4,12,8,0.04)_100%),url('/pos-inicio-hero.jpg')] bg-cover bg-center text-white shadow-lg xl:min-h-44 2xl:min-h-52 max-[700px]:min-h-32 max-[700px]:bg-[linear-gradient(90deg,rgba(4,12,8,0.92)_0%,rgba(5,20,10,0.76)_56%,rgba(4,12,8,0.14)_100%),url('/pos-inicio-hero.jpg')] max-[700px]:bg-[61%_center]"
-    >
-      <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(52%_110%_at_92%_50%,rgba(52,132,49,0.2),rgba(52,132,49,0)_64%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0))]" />
-      <div class="relative z-[1] max-w-sm px-8 py-5 max-[700px]:max-w-xs max-[700px]:px-6 max-[700px]:py-4">
-        <h1 class="m-0 font-display text-lg font-black leading-tight tracking-normal sm:text-xl">
-          Impulsamos a los emprendedores<br>de nuestra
-          <span class="inline-flex items-center gap-1 text-[#58d95b]">
-            Amazonía
-            <img class="h-5 w-5 flex-none object-contain" src="/leaf-icon.svg" alt="" aria-hidden="true">
-          </span>
-        </h1>
-        <p class="mt-3 max-w-xs text-xs font-bold leading-snug text-white/90">Herramientas inteligentes, decisiones claras<br>y crecimiento sostenible.</p>
+    <!-- Saludo: estado del sistema visible y cercano -->
+    <header class="greeting">
+      <p class="greeting__hi">¡Hola, {{ firstName }}! 👋</p>
+      <h1 class="greeting__q">¿Qué quieres hacer hoy?</h1>
+    </header>
+
+    <!-- CAJA (arriba): el dato más importante del negocio, bien grande -->
+    <section class="cash" aria-labelledby="cash-title">
+      <div class="cash__head">
+        <h2 id="cash-title"><i class="pi pi-wallet" aria-hidden="true" />Caja de hoy</h2>
+        <NuxtLink to="/pos/caja" class="cash__link">Ver caja <i class="pi pi-arrow-right" aria-hidden="true" /></NuxtLink>
+      </div>
+
+      <p class="cash__label">Total de ventas</p>
+      <div class="cash__totals">
+        <article v-for="total in cashTotals" :key="total.name">
+          <span class="cash__amount"><em>{{ total.symbol }}</em>{{ total.amount }}</span>
+          <small>{{ total.name }}</small>
+        </article>
+      </div>
+
+      <div class="cash__actions">
+        <button
+          v-for="action in quickActions"
+          :key="action.label"
+          type="button"
+          @click="go(action.to)"
+        >
+          <span class="qa-icon"><i :class="action.icon" aria-hidden="true" /></span>
+          {{ action.label }}
+        </button>
       </div>
     </section>
 
+    <!-- Diagnóstico: CTA puntual, solo si aún no lo completa -->
     <NuxtLink v-if="diagnosticoEstado !== 'completado'" to="/pos/diagnostico" class="diag-cta">
       <span class="diag-cta__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
       <div class="diag-cta__copy">
-        <strong>Haz el diagnóstico rápido de tu negocio</strong>
-        <small>Responde 10 preguntas (2-3 min) y recibe recomendaciones personalizadas de NEXA.</small>
+        <strong>Haz el diagnóstico de tu negocio</strong>
+        <small>10 preguntas (2-3 min) y recibes recomendaciones de NEXA.</small>
       </div>
       <span class="diag-cta__btn">Empezar <i class="pi pi-arrow-right" aria-hidden="true" /></span>
     </NuxtLink>
 
-    <section class="weather-card">
-      <div class="weather-main">
-        <span class="card-kicker"><i class="pi pi-map-marker" aria-hidden="true" />Ahora en Cobija, Pando</span>
-        <div class="weather-now">
-          <img :src="currentWeather.icon" class="weather-now__icon" alt="" aria-hidden="true">
-          <div>
-            <strong>{{ currentWeather.temp }}°C</strong>
-            <span>{{ currentWeather.condition }}</span>
-            <small>Sensación térmica {{ currentWeather.feelsLike }}°C · {{ weatherStatus }}</small>
-          </div>
-        </div>
-      </div>
-
-      <div class="weather-metrics">
-        <div>
-          <small>Viento</small>
-          <strong><img src="/weather/wind-icon.svg" alt="" aria-hidden="true">{{ currentWeather.wind }} km/h</strong>
-        </div>
-        <div>
-          <small>Humedad</small>
-          <strong><img src="/weather/cloud-color-icon.svg" alt="" aria-hidden="true">{{ currentWeather.humidity }}%</strong>
-        </div>
-        <div>
-          <small>Prob. de lluvia</small>
-          <strong><img src="/weather/water-drop-icon.svg" alt="" aria-hidden="true">{{ currentWeather.rain }}%</strong>
-        </div>
-      </div>
-
-      <div class="forecast-block">
-        <span class="forecast-title">Pronóstico de 5 días</span>
-        <div class="forecast">
-          <article v-for="day in weatherDays" :key="day.day" :class="{ 'is-today': day.day === 'Hoy' }">
-            <strong>{{ day.day }}</strong>
-            <img :src="day.icon" alt="" aria-hidden="true">
-            <span>{{ day.temp }}</span>
-            <small><img src="/weather/water-drop-icon.svg" alt="" aria-hidden="true">Lluvia {{ day.rain }}%</small>
-          </article>
-        </div>
+    <!-- SUGERENCIAS (abajo): preguntas frecuentes en lenguaje simple -->
+    <section class="suggest" aria-labelledby="suggest-title">
+      <h2 id="suggest-title" class="suggest__title">Sugerencias para ti</h2>
+      <div class="suggest__grid">
+        <button
+          v-for="card in helpCards"
+          :key="card.title"
+          type="button"
+          class="suggest__card"
+          :class="`is-${card.tone}`"
+          @click="go(card.to)"
+        >
+          <span class="suggest__icon"><i :class="card.icon" aria-hidden="true" /></span>
+          <strong>{{ card.title }}</strong>
+          <small>{{ card.desc }}</small>
+          <span class="suggest__cta">{{ card.action }} <i class="pi pi-arrow-right" aria-hidden="true" /></span>
+        </button>
       </div>
     </section>
 
-    <div class="home-grid">
-      <section class="panel continue-panel">
-        <header class="panel-head">
-          <h2><i class="pi pi-refresh" aria-hidden="true" />Continuar donde lo dejaste</h2>
-        </header>
-
-        <article v-for="item in continueItems" :key="item.label" class="continue-item">
-          <span class="tool-icon" :class="toneClasses[item.tone]"><i :class="item.icon" aria-hidden="true" /></span>
-          <div>
-            <strong>{{ item.label }}</strong>
-            <small>{{ item.desc }}</small>
-            <span class="progress-track"><span :style="{ width: `${item.progress}%` }" /></span>
-          </div>
-          <em>{{ item.progress }}%</em>
-          <button type="button" @click="go(item.to)">{{ item.action }}</button>
-        </article>
-
-        <a class="panel-link" href="#">Ver todo mi progreso <i class="pi pi-arrow-right" aria-hidden="true" /></a>
-      </section>
-
-      <section class="panel tools-panel">
-        <header class="panel-head">
-          <h2><i class="pi pi-bolt" aria-hidden="true" />Herramientas más usadas</h2>
-        </header>
-
-        <button
-          v-for="tool in usedTools"
-          :key="tool.label"
-          type="button"
-          class="used-tool"
-          :class="{ 'is-disabled': !tool.to }"
-          @click="go(tool.to)"
-        >
-          <span class="tool-icon" :class="toneClasses[tool.tone]"><i :class="tool.icon" aria-hidden="true" /></span>
-          <span>
-            <strong>{{ tool.label }}</strong>
-            <small>{{ tool.desc }}</small>
-          </span>
-          <em>{{ tool.uses }}</em>
-          <i class="pi pi-chevron-right" aria-hidden="true" />
-        </button>
-      </section>
-
-      <section class="panel summary-panel">
-        <header class="panel-head">
-          <h2><i class="pi pi-chart-bar" aria-hidden="true" />Resumen de tu negocio</h2>
-        </header>
-
-        <div class="summary-grid">
-          <article v-for="card in summaryCards" :key="card.label" class="summary-card">
-            <div>
-              <span class="tool-icon" :class="toneClasses[card.tone]"><i :class="card.icon" aria-hidden="true" /></span>
-              <small>{{ card.label }}</small>
-            </div>
-            <strong>{{ card.value }}</strong>
-            <span v-if="card.bar" class="progress-track"><span :style="{ width: `${card.bar}%` }" /></span>
-            <svg v-else viewBox="0 0 96 24" aria-hidden="true">
-              <path d="M2 18 C14 19 18 11 30 13 S48 20 58 12 72 4 94 7" />
-            </svg>
-          </article>
-        </div>
-      </section>
-    </div>
-
-    <div class="bottom-grid">
-      <section class="panel suggestions-panel">
-        <header class="panel-head">
-          <h2><i class="pi pi-sparkles" aria-hidden="true" />Sugerencias para ti</h2>
-        </header>
-
-        <article v-for="item in suggestions" :key="item.label" class="suggestion">
-          <img :src="item.image" alt="" aria-hidden="true">
-          <div>
-            <strong>{{ item.label }}</strong>
-            <p>{{ item.desc }}</p>
-          </div>
-        </article>
-      </section>
-
-      <section class="ai-card">
-        <div>
-          <span class="card-kicker"><i class="pi pi-comments" aria-hidden="true" />Habla con IMPULSA, tu asistente IA</span>
-          <h2>¿En qué puedo ayudarte hoy?</h2>
-          <p>Consulta ideas de venta, precios, promociones o próximos pasos para tu negocio.</p>
-        </div>
-      </section>
-    </div>
+    <!-- Naru: asistente IA -->
+    <section class="naru">
+      <div class="naru__copy">
+        <span class="naru__kicker"><i class="pi pi-sparkles" aria-hidden="true" />El asistente IA de NEXA</span>
+        <h2>Soy Naru, pregúntame lo que quieras</h2>
+        <p>Ideas de venta, precios, promociones o el siguiente paso para tu negocio.</p>
+      </div>
+      <img src="/haru.png" alt="" aria-hidden="true" class="naru__mascot">
+    </section>
   </div>
 </template>
 
 <style scoped>
 .home {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  max-width: 760px;
+  margin: 0 auto;
   color: #102016;
 }
 
-.weather-card,
-.panel,
-.ai-card {
-  border: 1px solid #e7eee8;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+/* --- Saludo --- */
+.greeting__hi {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #5c6b60;
 }
 
+.greeting__q {
+  margin: 2px 0 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+/* --- Caja (protagonista) --- */
+.cash {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #0a6f1f 0%, #0e8a28 55%, #16a534 100%);
+  box-shadow: 0 16px 34px rgba(10, 111, 32, 0.26);
+}
+
+.cash__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cash__head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.cash__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.cash__link:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.cash__label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.cash__totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cash__totals article {
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  text-align: center;
+}
+
+.cash__amount {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  font-size: 1.4rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.cash__amount em {
+  font-size: 0.85rem;
+  font-style: normal;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.cash__totals small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cash__actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cash__actions button {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 13px 6px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1c3a24;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cash__actions button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(3, 24, 9, 0.22);
+}
+
+.qa-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #eaf6e7;
+  color: #1c7a2c;
+  font-size: 1.05rem;
+}
+
+/* --- Diagnóstico CTA --- */
 .diag-cta {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 18px;
-  border-radius: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
   text-decoration: none;
-  color: #fff;
-  background: linear-gradient(120deg, #0a6f1f, #14b536);
-  box-shadow: 0 12px 26px rgba(14, 111, 32, 0.26);
+  color: #143a1f;
+  background: #f1f8ed;
+  border: 1px solid #d8ecd0;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .diag-cta:hover {
   transform: translateY(-2px);
-  box-shadow: 0 16px 32px rgba(14, 111, 32, 0.32);
+  box-shadow: 0 14px 28px rgba(14, 111, 32, 0.14);
 }
 
 .diag-cta__icon {
@@ -270,8 +310,9 @@ function go(to?: string) {
   height: 42px;
   flex: 0 0 auto;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 1.1rem;
+  background: #dcefd2;
+  color: #0e8a28;
+  font-size: 1.15rem;
 }
 
 .diag-cta__copy {
@@ -280,14 +321,14 @@ function go(to?: string) {
 }
 
 .diag-cta__copy strong {
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   font-weight: 900;
 }
 
 .diag-cta__copy small {
   font-size: 0.76rem;
   font-weight: 600;
-  opacity: 0.92;
+  color: #5c6b60;
 }
 
 .diag-cta__btn {
@@ -295,428 +336,218 @@ function go(to?: string) {
   align-items: center;
   gap: 7px;
   margin-left: auto;
-  padding: 9px 16px;
-  border-radius: 10px;
-  background: #fff;
-  color: #0a6f1f;
+  padding: 10px 16px;
+  border-radius: 11px;
+  background: linear-gradient(120deg, #0a6f1f, #14b536);
+  color: #fff;
   font-size: 0.82rem;
   font-weight: 900;
   white-space: nowrap;
 }
 
-@media (max-width: 700px) {
-  .diag-cta__btn span,
-  .diag-cta { flex-wrap: wrap; }
-}
-
-.weather-card {
-  display: grid;
-  grid-template-columns: 1.1fr 1.45fr 1.35fr;
-  gap: 20px;
-  align-items: center;
-  padding: 16px 18px;
-}
-
-.card-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.72rem;
-  font-weight: 900;
-  color: #284233;
-}
-
-.card-kicker i {
-  color: #3f8f0a;
-  font-size: 0.78rem;
-}
-
-.weather-now {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 10px;
-}
-
-.weather-now__icon {
-  width: 50px;
-  height: 50px;
-  object-fit: contain;
-}
-
-.weather-now strong {
-  display: block;
-  font-size: 2.15rem;
-  line-height: 1;
+/* --- Sugerencias --- */
+.suggest__title {
+  margin: 0 0 2px;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.05rem;
   font-weight: 900;
 }
 
-.weather-now span,
-.weather-now small,
-.weather-metrics small,
-.forecast span,
-.continue-item small,
-.used-tool small,
-.summary-card small,
-.suggestion p,
-.ai-card p {
-  color: #718074;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.weather-now small {
-  display: block;
-  margin-top: 2px;
-}
-
-.weather-metrics {
+.suggest__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
-.weather-metrics div {
+.suggest__card {
   display: grid;
-  gap: 5px;
-}
-
-.weather-metrics strong {
-  display: inline-flex;
-  align-items: center;
   gap: 6px;
-  color: #182a1d;
-  font-size: 0.88rem;
-}
-
-.weather-metrics img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
-}
-
-.forecast {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.forecast-block {
-  display: grid;
-  gap: 7px;
-}
-
-.forecast-title {
-  font-size: 0.72rem;
-  font-weight: 900;
-  color: #284233;
-}
-
-.forecast article {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  padding: 10px 6px;
-  border-radius: 10px;
-  background: #fbfdfb;
-}
-
-.forecast article.is-today {
-  background: #f1f8ed;
-}
-
-.forecast strong {
-  font-size: 0.72rem;
-}
-
-.forecast img {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-}
-
-.forecast small {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: #7d8a80;
-  font-size: 0.66rem;
-  font-weight: 800;
-}
-
-.forecast small img {
-  width: 10px;
-  height: 10px;
-}
-
-.home-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1.05fr;
-  gap: 14px;
-}
-
-.panel {
-  padding: 15px;
-}
-
-.panel-head {
-  margin-bottom: 12px;
-}
-
-.panel-head h2 {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 0.86rem;
-  font-weight: 900;
-}
-
-.panel-head i {
-  color: #3f8f0a;
-  font-size: 0.82rem;
-}
-
-.continue-item,
-.used-tool {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 11px;
-  align-items: center;
-  width: 100%;
-}
-
-.continue-item {
-  padding: 10px 0;
-  border-bottom: 1px solid #eff4ef;
-}
-
-.continue-item strong,
-.used-tool strong,
-.suggestion strong {
-  display: block;
-  font-size: 0.78rem;
-  font-weight: 900;
-}
-
-.tool-icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 10px;
-  font-size: 0.9rem;
-}
-
-.progress-track {
-  display: block;
-  height: 6px;
-  margin-top: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #edf2ee;
-}
-
-.progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #2f7d32, #74c043);
-}
-
-.continue-item em,
-.used-tool em {
-  color: #7f8b82;
-  font-size: 0.68rem;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.continue-item button {
-  border: 0;
-  border-radius: 8px;
-  background: #edf7e8;
-  color: #2d7c2f;
-  font-size: 0.68rem;
-  font-weight: 900;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
-.panel-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  color: #2d7c2f;
-  font-size: 0.72rem;
-  font-weight: 900;
-  text-decoration: none;
-}
-
-.used-tool {
-  padding: 11px 0;
-  border: 0;
-  border-bottom: 1px solid #eff4ef;
-  background: transparent;
-  cursor: pointer;
+  padding: 16px;
+  border: 1px solid #e7eee8;
+  border-radius: 16px;
+  background: #fff;
   text-align: left;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.used-tool.is-disabled {
-  cursor: default;
+.suggest__card:hover {
+  transform: translateY(-3px);
+  border-color: #cfe3c6;
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
 }
 
-.used-tool > i {
-  color: #93a096;
-  font-size: 0.7rem;
-}
-
-.summary-grid {
+.suggest__icon {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  font-size: 1.25rem;
 }
 
-.summary-card {
-  min-height: 120px;
-  padding: 13px;
-  border-radius: 12px;
-  background: #fbfdfb;
+.is-green .suggest__icon {
+  background: #eaf6e7;
+  color: #1c7a2c;
 }
 
-.summary-card > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.is-amber .suggest__icon {
+  background: #fdf2dc;
+  color: #b9781a;
 }
 
-.summary-card strong {
-  display: block;
-  margin-top: 10px;
-  font-size: 1.55rem;
-  line-height: 1;
+.is-slate .suggest__icon {
+  background: #eef1f4;
+  color: #5b6675;
+}
+
+.suggest__card strong {
+  font-size: 0.92rem;
   font-weight: 900;
+  line-height: 1.25;
 }
 
-.summary-card svg {
-  width: 100%;
-  height: 31px;
-  margin-top: 10px;
+.suggest__card small {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #6b7a6f;
+  line-height: 1.4;
 }
 
-.summary-card path {
-  fill: none;
-  stroke: #6fbd61;
-  stroke-linecap: round;
-  stroke-width: 4;
-}
-
-.bottom-grid {
-  display: grid;
-  grid-template-columns: 0.95fr 1.35fr;
-  gap: 14px;
-}
-
-.suggestion {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 12px;
+.suggest__cta {
+  display: inline-flex;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #eff4ef;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.76rem;
+  font-weight: 900;
+  color: #1c7a2c;
 }
 
-.suggestion img {
-  width: 88px;
-  height: 58px;
-  object-fit: cover;
-  border-radius: 10px;
+.is-slate .suggest__cta {
+  color: #8a93a0;
 }
 
-.suggestion p {
-  margin: 4px 0 0;
-  line-height: 1.35;
-}
-
-.ai-card {
+/* --- Naru --- */
+.naru {
   position: relative;
-  min-height: 166px;
+  min-height: 132px;
   overflow: hidden;
-  padding: 22px 24px;
-  background:
-    linear-gradient(90deg, rgba(244, 252, 241, 0.96), rgba(244, 252, 241, 0.8) 58%, rgba(244, 252, 241, 0.2)),
-    url('/pos-inicio-hero.jpg') center / cover no-repeat;
+  padding: 20px 150px 20px 22px;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #063718, #0e7a26 70%, #14a634);
+  color: #fff;
+  box-shadow: 0 16px 34px rgba(6, 55, 24, 0.26);
 }
 
-.ai-card h2 {
-  margin: 18px 0 7px;
+.naru__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: #9af29c;
+}
+
+.naru__copy h2 {
+  margin: 8px 0 5px;
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 900;
 }
 
-.ai-card p {
-  max-width: 390px;
+.naru__copy p {
   margin: 0;
+  max-width: 360px;
+  font-size: 0.8rem;
+  font-weight: 600;
   line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
 }
 
-.ai-card img {
+.naru__mascot {
   position: absolute;
-  right: 24px;
-  bottom: -26px;
-  width: 155px;
-  filter: drop-shadow(0 16px 18px rgba(19, 52, 23, 0.2));
+  right: 6px;
+  bottom: -10px;
+  width: 140px;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 18px rgba(3, 24, 9, 0.34));
+  pointer-events: none;
 }
 
-@media (max-width: 1180px) {
-  .weather-card,
-  .home-grid,
-  .bottom-grid {
+/* --- Responsivo --- */
+@media (max-width: 640px) {
+  .home {
+    gap: 14px;
+  }
+
+  .greeting__q {
+    font-size: 1.3rem;
+  }
+
+  .cash {
+    padding: 16px;
+  }
+
+  .cash__totals {
+    gap: 8px;
+  }
+
+  .cash__totals article {
+    padding: 12px 6px;
+  }
+
+  .cash__amount {
+    font-size: 1.15rem;
+  }
+
+  .cash__actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .cash__actions button {
+    padding: 11px 4px;
+    font-size: 0.68rem;
+  }
+
+  .qa-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+
+  .suggest__grid {
     grid-template-columns: 1fr;
   }
 
-  .weather-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .diag-cta {
+    flex-wrap: wrap;
+  }
+
+  .diag-cta__btn {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .naru {
+    padding: 18px 120px 18px 18px;
+  }
+
+  .naru__mascot {
+    width: 112px;
   }
 }
 
-@media (max-width: 700px) {
-  .weather-card,
-  .panel,
-  .ai-card {
-    border-radius: 12px;
+@media (max-width: 380px) {
+  .cash__amount em {
+    font-size: 0.7rem;
   }
 
-  .weather-metrics,
-  .forecast,
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .continue-item,
-  .used-tool {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .continue-item button,
-  .used-tool em {
-    display: none;
-  }
-
-  .suggestion {
-    grid-template-columns: 76px minmax(0, 1fr);
-  }
-
-  .suggestion img {
-    width: 76px;
-  }
-
-  .ai-card img {
-    right: -12px;
-    width: 128px;
+  .cash__totals small {
+    font-size: 0.62rem;
   }
 }
 </style>

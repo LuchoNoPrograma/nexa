@@ -1,4 +1,4 @@
--- Reset destructivo para volver a crear IMPULSA desde cero.
+-- Reset destructivo para volver a crear NEXA desde cero.
 -- Ejecutar antes de database/local/001_initial.sql cuando se quiera limpiar el MVP.
 
 do $$

@@ -1,4 +1,4 @@
-# Modelo de base de datos IMPULSA
+# Modelo de base de datos NEXA
 
 ## Criterios de diseño
 
@@ -15,7 +15,7 @@
 
 ### `usuario`
 
-Representa el perfil interno de una cuenta autenticada. La autenticación la maneja Supabase en `auth.users`; esta tabla guarda los datos operativos que IMPULSA sí gestiona desde la base de datos.
+Representa el perfil interno de una cuenta autenticada. La autenticación la maneja Supabase en `auth.users`; esta tabla guarda los datos operativos que NEXA sí gestiona desde la base de datos.
 
 Campos:
 
@@ -31,7 +31,7 @@ Campos:
 
 ### `tienda`
 
-Representa el negocio cliente de IMPULSA.
+Representa el negocio cliente de NEXA.
 
 Campos:
 
@@ -74,7 +74,7 @@ Restricción: `unique (tienda_id, usuario_id)`.
 
 El modelo separa dos alcances:
 
-- `plataforma`: roles de la startup IMPULSA para administrar tiendas, planes, soporte y operación interna.
+- `plataforma`: roles de la startup NEXA para administrar tiendas, planes, soporte y operación interna.
 - `tienda`: roles del negocio cliente para usar POS, caja, inventario, catálogo, Haru y reportes.
 
 ### `rol`
@@ -682,4 +682,4 @@ $$;
 
 ## Resumen técnico
 
-El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup IMPULSA como para cada tienda. El módulo POS genera ventas, pagos, compras, movimientos de inventario y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_item` al cobrar. Los mockups de ingresos y gastos son reportes calculados desde `pago` y `caja_movimiento`, no módulos contables duplicados. La calculadora y Haru IA tienen tablas propias porque son parte de la propuesta de valor de IMPULSA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en líneas de venta/compra para análisis posterior.
+El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera ventas, pagos, compras, movimientos de inventario y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_item` al cobrar. Los mockups de ingresos y gastos son reportes calculados desde `pago` y `caja_movimiento`, no módulos contables duplicados. La calculadora y Haru IA tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en líneas de venta/compra para análisis posterior.

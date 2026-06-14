@@ -1,10 +1,10 @@
-# Informe tecnico de modulos operativos IMPULSA
+# Informe tecnico de modulos operativos NEXA
 
 ## Objetivo
 
-Este informe resume las decisiones tecnicas tomadas para que IMPULSA soporte negocios futuros de cualquier rubro que vendan productos, servicios o ambos.
+Este informe resume las decisiones tecnicas tomadas para que NEXA soporte negocios futuros de cualquier rubro que vendan productos, servicios o ambos.
 
-IMPULSA no debe presentarse como un sistema de inventario puro. El inventario, POS, caja y compras son la base operativa que genera datos. Encima de esos datos se construyen los reportes, la calculadora de precios, Haru IA y el asesoramiento empresarial digital.
+NEXA no debe presentarse como un sistema de inventario puro. El inventario, POS, caja y compras son la base operativa que genera datos. Encima de esos datos se construyen los reportes, la calculadora de precios, Haru IA y el asesoramiento empresarial digital.
 
 ## Secuencia recomendada de implementacion
 

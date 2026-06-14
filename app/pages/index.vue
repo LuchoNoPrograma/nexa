@@ -22,7 +22,7 @@ const tools = [
   {
     title: 'Haru · Asesor 24/7',
     src: '/tools/haru-asesor.jpg',
-    alt: 'Haru, el jaguar asesor de IMPULSA, trabajando frente a la computadora en una oficina',
+    alt: 'Haru, el jaguar asesor de NEXA, trabajando frente a la computadora en una oficina',
   },
   {
     title: 'Finanzas',
@@ -49,7 +49,7 @@ const tools = [
     <section class="mx-auto w-[min(1240px,calc(100%-32px))] pt-6">
       <div class="hero2">
         <img
-          :src="'/hero-impulsa-digital.webp'"
+          :src="'/hero-nexa-digital.webp'"
           alt="Equipo de trabajo revisando una estrategia digital en una oficina"
           class="hero2__bg"
           loading="eager"
@@ -92,7 +92,7 @@ const tools = [
         <div class="pam-photo" v-reveal="{ variant: 'left' }">
           <img
             :src="'/haru-conoce-cta.jpg'"
-            alt="Haru, el jaguar asesor de IMPULSA, en la selva amazónica"
+            alt="Haru, el jaguar asesor de NEXA, en la selva amazónica"
             class="pam-photo__img"
             loading="lazy"
           />
@@ -108,7 +108,7 @@ const tools = [
           <div class="chat-win mt-6">
             <header class="chat-win__head">
               <span class="chat-ava chat-ava--ai">
-                <img src="/haru-chat.png" alt="Haru, el jaguar asesor de IMPULSA" />
+                <img src="/haru-chat.png" alt="Haru, el jaguar asesor de NEXA" />
               </span>
               <div>
                 <strong>Haru</strong>
@@ -126,7 +126,7 @@ const tools = [
               <!-- Respuesta de Haru -->
               <div class="flex items-start gap-2.5">
                 <span class="chat-ava chat-ava--ai">
-                  <img src="/haru-chat.png" alt="Haru, el jaguar asesor de IMPULSA" />
+                  <img src="/haru-chat.png" alt="Haru, el jaguar asesor de NEXA" />
                 </span>
                 <div class="chat-bubble-ai !max-w-[94%] !p-3.5 sm:!p-4">
                   <p class="mb-3 text-sm font-semibold text-[#1f2d23]">Revisé tu inventario y tus ventas de los últimos 30 días 👇</p>
@@ -176,7 +176,7 @@ const tools = [
             Empieza a hacer <span class="text-gradient">crecer tu negocio</span> hoy
           </h2>
           <p class="mt-4 max-w-md text-base font-medium text-[#d9f5df]">
-            Crea tu cuenta gratis y descubre todo lo que IMPULSA y Haru pueden hacer por tu negocio.
+            Crea tu cuenta gratis y descubre todo lo que NEXA y Haru pueden hacer por tu negocio.
           </p>
           <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !mt-7 !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
         </div>
@@ -188,9 +188,9 @@ const tools = [
       <div class="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-10 py-14 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <a href="#inicio" class="flex items-center gap-3">
-            <img src="/impulsa-logo-white.webp" alt="" class="site-logo site-logo--footer" aria-hidden="true" />
+            <img src="/nexa-logo-white.webp" alt="" class="site-logo site-logo--footer" aria-hidden="true" />
             <span class="leading-none">
-              <span class="font-display block text-[1.6rem] font-extrabold">IMPULSA</span>
+              <span class="font-display block text-[1.6rem] font-extrabold">NEXA</span>
               <span class="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#bfeac8]">IA para tu negocio</span>
             </span>
           </a>
@@ -222,7 +222,7 @@ const tools = [
 
       <div class="border-t border-[#16431d]">
         <div class="mx-auto w-[min(1240px,calc(100%-32px))] py-6 text-center text-xs font-semibold text-[#bfeac8]">
-          © {{ new Date().getFullYear() }} IMPULSA · Hecho con 💚 en Cobija, Pando — Bolivia
+          © {{ new Date().getFullYear() }} NEXA · Hecho con 💚 en Cobija, Pando — Bolivia
         </div>
       </div>
     </footer>

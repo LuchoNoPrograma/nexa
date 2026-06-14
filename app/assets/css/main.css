@@ -16,7 +16,7 @@
 }
 
 /* ============================================================
-   IMPULSA · Design tokens
+   NEXA · Design tokens
    ============================================================ */
 :root {
   --primary: #0f9e2e;
@@ -85,7 +85,7 @@ select {
 /* ============================================================
    Reusable bits
    ============================================================ */
-.impulsa-mark {
+.nexa-mark {
   display: grid;
   width: 46px;
   height: 46px;
@@ -98,17 +98,17 @@ select {
     0 8px 20px rgba(15, 158, 46, 0.32);
 }
 
-.impulsa-mark i {
+.nexa-mark i {
   font-size: 1.4rem;
 }
 
-.impulsa-mark.small {
+.nexa-mark.small {
   width: 34px;
   height: 34px;
   border-radius: 10px;
 }
 
-.impulsa-mark.small i {
+.nexa-mark.small i {
   font-size: 1rem;
 }
 

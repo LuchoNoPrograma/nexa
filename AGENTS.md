@@ -1,11 +1,11 @@
-# IMPULSA - Reglas de proyecto para Codex
+# NEXA - Reglas de proyecto para Codex
 
 Este es el archivo correcto para Codex. No hace falta moverlo a `CLAUDE.md`.
 Codex debe leer `AGENTS.md` como contexto operativo antes de implementar cambios.
 
 ## 1. Identidad del proyecto
 
-IMPULSA es un estudio de factibilidad y MVP academico para una plataforma web de asesoramiento empresarial digital dirigida a emprendimientos, microempresas y negocios de Cobija, Bolivia, con proyeccion nacional.
+NEXA es un estudio de factibilidad y MVP academico para una plataforma web de asesoramiento empresarial digital dirigida a emprendimientos, microempresas y negocios de Cobija, Bolivia, con proyeccion nacional.
 
 Titulo de trabajo:
 
@@ -38,7 +38,7 @@ Reglas UI:
 - La landing y Haru IA deben verse pulidas.
 - El soporte operativo puede usar PrimeVue de forma directa para velocidad.
 - Marca base: azul oscuro `#0B1F3A`, amarillo `#F2C200`, blanco, con acentos verdes/celestes para operaciones.
-- La primera pantalla debe mostrar IMPULSA y una senal visual clara del producto.
+- La primera pantalla debe mostrar NEXA y una senal visual clara del producto.
 - Evitar que el proyecto parezca sistema de inventario puro: inventario es soporte, la propuesta es consultoria digital inteligente.
 
 ## 3. Alcance funcional
@@ -49,7 +49,7 @@ Debe comunicar:
 
 - Problema de transformacion digital en microempresas de Cobija.
 - Justificacion social, economica, tecnica, tecnologica y academica de forma resumida.
-- Modulos de IMPULSA: soporte POS, marketing/branding, calculadora, Haru IA y catalogo WhatsApp.
+- Modulos de NEXA: soporte POS, marketing/branding, calculadora, Haru IA y catalogo WhatsApp.
 - Indicadores de la encuesta cuando existan: atraer clientes, branding y calculadora de precios.
 
 ### Modulo soporte

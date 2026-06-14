@@ -16,7 +16,7 @@ export type CurrentSession = {
 export async function getCurrentSession(event: Parameters<typeof getCookie>[0]): Promise<CurrentSession | null> {
   await ensureDatabase()
 
-  const token = getCookie(event, 'impulsa_session_token')
+  const token = getCookie(event, 'nexa_session_token')
 
   if (!token) {
     return null

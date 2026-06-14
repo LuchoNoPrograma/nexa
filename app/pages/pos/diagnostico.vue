@@ -10,7 +10,7 @@ definePageMeta({
   posTitle: 'Diagnóstico',
 })
 
-useHead({ title: 'Diagnóstico de tu negocio | IMPULSA' })
+useHead({ title: 'Diagnóstico de tu negocio | NEXA' })
 
 type AreaScores = { ventas: number; finanzas: number; marketing: number; inventario: number | null }
 type ResultadoView = {
@@ -26,6 +26,9 @@ type ResultadoView = {
 const session = usePosSession()
 
 const vista = ref<'intro' | 'wizard' | 'resultado'>('intro')
+// Modo onboarding obligatorio: el diagnóstico se muestra a pantalla completa
+// (cubre el sidebar/topbar) hasta que la tienda lo complete por primera vez.
+const pantallaCompleta = ref(false)
 const cargando = ref(true)
 const enviando = ref(false)
 const error = ref('')
@@ -69,9 +72,13 @@ onMounted(async () => {
       resultado.value = normalizarDesdeRow(data.diagnostico)
       vista.value = 'resultado'
       animarResultado()
+    } else {
+      // Sin diagnóstico completado → onboarding obligatorio a pantalla completa.
+      pantallaCompleta.value = true
     }
   } catch {
-    // Sin diagnóstico previo: arrancamos en la intro.
+    // Sin diagnóstico previo: arrancamos la intro a pantalla completa.
+    pantallaCompleta.value = true
   } finally {
     cargando.value = false
   }
@@ -136,6 +143,9 @@ async function enviar() {
 }
 
 const esDev = import.meta.dev
+// El reinicio está disponible en desarrollo y para super_admin en producción
+// (necesario para reiniciar la demo).
+const puedeReiniciar = computed(() => esDev || session.value?.role === 'super_admin')
 const reiniciando = ref(false)
 
 async function rehacer() {
@@ -149,24 +159,14 @@ async function rehacer() {
     if (session.value) {
       session.value = { ...session.value, onboardingDiagnostico: 'pendiente' }
     }
+    // Vuelve a quedar bloqueado a pantalla completa para rehacerlo.
+    pantallaCompleta.value = true
     vista.value = 'intro'
   } catch {
     error.value = 'No pudimos reiniciar el diagnóstico.'
   } finally {
     reiniciando.value = false
   }
-}
-
-async function omitir() {
-  try {
-    await $fetch('/api/diagnostico/omitir', { method: 'POST' })
-    if (session.value) {
-      session.value = { ...session.value, onboardingDiagnostico: 'omitido' }
-    }
-  } catch {
-    // Aunque falle, seguimos al inicio para no bloquear al usuario.
-  }
-  await navigateTo('/pos/inicio')
 }
 
 function animarResultado() {
@@ -249,7 +249,13 @@ function areaScore(key: keyof AreaScores) {
 </script>
 
 <template>
-  <div class="diag">
+  <div class="diag" :class="{ 'diag--full': pantallaCompleta }">
+    <!-- Barra de marca: solo en el onboarding a pantalla completa -->
+    <header v-if="pantallaCompleta && !cargando" class="diag-brandbar">
+      <img src="/nexa-logo-color.webp" alt="NEXA">
+      <span>Cuéntanos de tu negocio para empezar</span>
+    </header>
+
     <!-- ====================== Cargando ====================== -->
     <div v-if="cargando" class="diag-loading">
       <span class="diag-spinner" aria-hidden="true" />
@@ -278,9 +284,6 @@ function areaScore(key: keyof AreaScores) {
             <button type="button" class="diag-btn diag-btn--primary" @click="iniciar">
               <i class="pi pi-play-circle" /> Iniciar diagnóstico
             </button>
-            <button type="button" class="diag-btn diag-btn--ghost" @click="omitir">
-              Saltar por ahora
-            </button>
           </div>
         </div>
       </section>
@@ -301,7 +304,6 @@ function areaScore(key: keyof AreaScores) {
               <i :class="paso.numero < (pasoActual?.numero ?? 1) ? 'pi pi-check' : paso.icono" />
             </span>
           </div>
-          <button type="button" class="diag-skip" @click="omitir">Saltar <i class="pi pi-times" /></button>
         </header>
 
         <div class="diag-progress">
@@ -477,14 +479,14 @@ function areaScore(key: keyof AreaScores) {
           <p>¡Listo! Usa estas recomendaciones para impulsar tu negocio paso a paso.</p>
           <div class="diag-result__cta-actions">
             <button
-              v-if="esDev"
+              v-if="puedeReiniciar"
               type="button"
               class="diag-btn diag-btn--ghost"
               :disabled="reiniciando"
               @click="rehacer"
             >
               <span v-if="reiniciando" class="diag-spinner diag-spinner--sm" />
-              <i v-else class="pi pi-refresh" /> Rehacer (dev)
+              <i v-else class="pi pi-refresh" /> Reiniciar diagnóstico
             </button>
             <NuxtLink to="/pos/inicio" class="diag-btn diag-btn--primary">
               Ir a mi inicio <i class="pi pi-arrow-right" />
@@ -504,6 +506,38 @@ function areaScore(key: keyof AreaScores) {
   gap: 16px;
   color: var(--diag-ink);
   padding-bottom: 8px;
+}
+
+/* Onboarding obligatorio: cubre todo el viewport (sidebar y topbar incluidos). */
+.diag--full {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow-y: auto;
+  align-content: start;
+  justify-items: center;
+  padding: clamp(16px, 4vw, 40px);
+  background: linear-gradient(180deg, #eef7e9, #f3f4f6 38%);
+}
+
+.diag--full > * {
+  width: 100%;
+  max-width: 940px;
+}
+
+.diag-brandbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #2f4a37;
+}
+
+.diag-brandbar img {
+  height: 30px;
+  width: auto;
+  object-fit: contain;
 }
 
 .diag-card {
@@ -729,22 +763,6 @@ function areaScore(key: keyof AreaScores) {
 .diag-step.is-done {
   background: #d5f1d9;
   color: #0a6f1f;
-}
-
-.diag-skip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  color: #93a096;
-  font-size: 0.8rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.diag-skip:hover {
-  color: #5d6b61;
 }
 
 .diag-progress {

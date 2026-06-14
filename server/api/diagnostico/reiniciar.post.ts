@@ -2,14 +2,17 @@ import { createError } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { requireStoreSession } from '../../utils/posCatalog'
 
-// Rehacer diagnóstico (solo desarrollo): borra los diagnósticos de la tienda y
-// deja el onboarding como "pendiente" para volver a tomarlo desde cero.
+// Rehacer diagnóstico: borra los diagnósticos de la tienda y deja el onboarding
+// como "pendiente" para volver a tomarlo desde cero.
+// - En desarrollo siempre está disponible.
+// - En producción se permite solo a super_admin (para reiniciar la demo).
 export default defineEventHandler(async (event) => {
-  if (!import.meta.dev) {
-    throw createError({ statusCode: 403, statusMessage: 'Disponible solo en desarrollo.' })
+  const session = await requireStoreSession(event)
+
+  if (!import.meta.dev && session.role !== 'super_admin') {
+    throw createError({ statusCode: 403, statusMessage: 'No autorizado para reiniciar el diagnóstico.' })
   }
 
-  const session = await requireStoreSession(event)
   await ensureDatabase()
 
   const client = await pool.connect()

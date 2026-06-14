@@ -551,7 +551,7 @@ insert into rol (alcance, codigo, nombre, descripcion, sistema)
 select v.alcance, v.codigo, v.nombre, v.descripcion, true
 from (
   values
-    ('plataforma', 'super_admin', 'Super admin', 'Control total de la plataforma IMPULSA'),
+    ('plataforma', 'super_admin', 'Super admin', 'Control total de la plataforma NEXA'),
     ('plataforma', 'soporte', 'Soporte', 'Soporte operativo para tiendas'),
     ('plataforma', 'comercial', 'Comercial', 'Gestion comercial de tiendas y prospectos'),
     ('plataforma', 'investigador', 'Investigador', 'Consulta de datos para el estudio academico'),

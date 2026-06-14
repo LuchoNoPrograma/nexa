@@ -5,10 +5,10 @@
 -- Uso local:
 --   psql "$DATABASE_URL" -f database/demo_abarrotes_seed.sql
 --
--- Por defecto aplica a la tienda demo de IMPULSA.
+-- Por defecto aplica a la tienda demo de NEXA.
 
 select aplicar_catalogo_plantilla(id, 'minimarket_abarrotes', true)
 from tienda
-where slug = 'tienda-demo-impulsa'
+where slug = 'tienda-demo-nexa'
   and activo = true
 limit 1;

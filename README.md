@@ -1,12 +1,12 @@
-# IMPULSA
+# NEXA
 
-IMPULSA es un MVP academico para una plataforma web de asesoramiento empresarial digital dirigida a emprendimientos, microempresas y negocios de Cobija, Bolivia, con proyeccion nacional.
+NEXA es un MVP academico para una plataforma web de asesoramiento empresarial digital dirigida a emprendimientos, microempresas y negocios de Cobija, Bolivia, con proyeccion nacional.
 
 El proyecto no busca ser solo un sistema de inventario. El inventario, el POS y la caja son modulos de soporte para generar datos del negocio. La propuesta principal es ayudar a una tienda comun a entender su operacion, mejorar precios, vender mejor, ordenar su catalogo y recibir recomendaciones practicas con Haru IA.
 
 ## Enfoque del negocio
 
-IMPULSA combina cuatro capas:
+NEXA combina cuatro capas:
 
 - Landing publica para explicar el proyecto, su valor social, economico, tecnico y academico.
 - Soporte operativo tipo POS para registrar ventas, clientes, productos, servicios, compras, pagos, caja e inventario.

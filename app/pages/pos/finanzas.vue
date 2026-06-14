@@ -5,7 +5,7 @@ definePageMeta({
 })
 
 useHead({
-  title: 'Finanzas | IMPULSA',
+  title: 'Finanzas | NEXA',
 })
 
 type Tone = 'green' | 'red' | 'blue' | 'purple'

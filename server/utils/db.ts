@@ -4,13 +4,13 @@ import { hashPassword } from './password'
 
 const { Pool } = pg
 
-const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/impulsa'
+const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/nexa'
 const isProduction = process.env.NODE_ENV === 'production'
-const superAdminEmail = process.env.IMPULSA_SUPER_ADMIN_EMAIL ?? process.env.NEXA_SUPER_ADMIN_EMAIL
-const superAdminPassword = process.env.IMPULSA_SUPER_ADMIN_PASSWORD ?? process.env.NEXA_SUPER_ADMIN_PASSWORD
+const superAdminEmail = process.env.NEXA_SUPER_ADMIN_EMAIL
+const superAdminPassword = process.env.NEXA_SUPER_ADMIN_PASSWORD
 const hasAdminCredentials = Boolean(superAdminEmail && superAdminPassword)
 const seedDemo = isProduction ? hasAdminCredentials : true
-const seedDemoProducts = process.env.IMPULSA_SEED_DEMO_PRODUCTS !== 'false'
+const seedDemoProducts = process.env.NEXA_SEED_DEMO_PRODUCTS !== 'false'
 const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (isProduction ? 1 : 10))
 const useSsl =
   process.env.DATABASE_SSL !== 'false' && (
@@ -41,11 +41,11 @@ async function prepareDatabase() {
 }
 
 async function seedLocalData() {
-  const email = superAdminEmail ?? (isProduction ? undefined : 'admin@impulsa.bo')
-  const password = superAdminPassword ?? (isProduction ? undefined : 'ImpulsaAdmin2026!')
+  const email = superAdminEmail ?? (isProduction ? undefined : 'admin@nexa.bo')
+  const password = superAdminPassword ?? (isProduction ? undefined : 'NexaAdmin2026!')
 
   if (!email || !password) {
-    throw new Error('Configura IMPULSA_SUPER_ADMIN_EMAIL/IMPULSA_SUPER_ADMIN_PASSWORD o NEXA_SUPER_ADMIN_EMAIL/NEXA_SUPER_ADMIN_PASSWORD para crear la demo inicial.')
+    throw new Error('Configura NEXA_SUPER_ADMIN_EMAIL/NEXA_SUPER_ADMIN_PASSWORD para crear la demo inicial.')
   }
 
   const passwordHash = await hashPassword(password)
@@ -53,7 +53,7 @@ async function seedLocalData() {
   const userResult = await pool.query<{ id: string }>(
     `
       insert into usuario (email, nombre, password_hash, estado, ultimo_acceso_at)
-      values ($1, 'Super Admin IMPULSA', $2, 'activo', now())
+      values ($1, 'Super Admin NEXA', $2, 'activo', now())
       on conflict (email) do update
       set
         nombre = excluded.nombre,
@@ -76,10 +76,10 @@ async function seedLocalData() {
       insert into tienda (owner_id, nombre, slug, rubro, descripcion, ciudad, departamento, pais, plan, activo)
       values (
         $1,
-        'Tienda Demo IMPULSA',
-        'tienda-demo-impulsa',
+        'Tienda Demo NEXA',
+        'tienda-demo-nexa',
         'Abarrotes',
-        'Tienda base de abarrotes bolivianos para probar el punto de venta de IMPULSA.',
+        'Tienda base de abarrotes bolivianos para probar el punto de venta de NEXA.',
         'Cobija',
         'Pando',
         'Bolivia',

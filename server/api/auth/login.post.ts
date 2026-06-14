@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
 
   await pool.query('update usuario set ultimo_acceso_at = now(), updated_at = now() where id = $1', [user.id])
 
-  setCookie(event, 'impulsa_session_token', token, {
+  setCookie(event, 'nexa_session_token', token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
