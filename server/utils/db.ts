@@ -57,6 +57,7 @@ async function seedLocalData() {
       on conflict (email) do update
       set
         nombre = excluded.nombre,
+        password_hash = excluded.password_hash,
         estado = 'activo',
         updated_at = now()
       returning id
