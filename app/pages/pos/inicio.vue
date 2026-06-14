@@ -10,24 +10,40 @@ useHead({
 
 const { currentWeather, weatherDays, weatherStatus } = await useCobijaWeather()
 
+// Diagnóstico del negocio (alimenta la tarjeta de progreso y el CTA).
+const { data: diagData } = await useFetch('/api/diagnostico/latest', { default: () => null })
+const diagnostico = computed(() => diagData.value?.diagnostico ?? null)
+const diagnosticoEstado = computed(() => diagData.value?.estado ?? 'pendiente')
+const saludNegocio = computed(() => diagnostico.value?.saludGeneral ?? null)
+
+// Paleta calma unificada: 3 familias en vez de 8.
+//  - verde de marca (protagonista) · ámbar cálido (acento puntual) · neutro slate.
 const toneClasses = {
-  violet: 'bg-violet-50 text-violet-600',
   green: 'bg-primary-50 text-primary-700',
+  emerald: 'bg-primary-50 text-primary-700',
+  mint: 'bg-primary-50 text-primary-700',
+  lime: 'bg-primary-50 text-primary-700',
   amber: 'bg-amber-50 text-amber-700',
-  red: 'bg-red-50 text-red-500',
-  yellow: 'bg-yellow-50 text-yellow-600',
-  mint: 'bg-emerald-50 text-emerald-700',
-  lime: 'bg-lime-50 text-lime-700',
-  emerald: 'bg-emerald-50 text-emerald-700',
+  yellow: 'bg-amber-50 text-amber-700',
+  red: 'bg-amber-50 text-amber-700',
+  violet: 'bg-slate-100 text-slate-600',
 } as const
 
 type Tone = keyof typeof toneClasses
 
-const continueItems: { label: string; desc: string; icon: string; tone: Tone; progress: number; action: string }[] = [
-  { label: 'Diagnóstico general', desc: 'Evaluación completa de tu negocio', icon: 'pi pi-chart-line', tone: 'violet', progress: 68, action: 'Continuar' },
+const continueItems = computed<{ label: string; desc: string; icon: string; tone: Tone; progress: number; action: string; to?: string }[]>(() => [
+  {
+    label: 'Diagnóstico general',
+    desc: diagnostico.value ? 'Evaluación de tu negocio' : 'Conoce el estado de tu negocio',
+    icon: 'pi pi-chart-line',
+    tone: 'violet',
+    progress: saludNegocio.value ?? 0,
+    action: diagnostico.value ? 'Ver' : 'Iniciar',
+    to: '/pos/diagnostico',
+  },
   { label: 'Calculadora de precios', desc: 'Define precios justos y competitivos', icon: 'pi pi-calculator', tone: 'green', progress: 42, action: 'Continuar' },
   { label: 'Plan de marketing', desc: 'Estrategias para atraer más clientes', icon: 'pi pi-briefcase', tone: 'amber', progress: 24, action: 'Continuar' },
-]
+])
 
 const usedTools: { label: string; desc: string; icon: string; tone: Tone; uses: string; to?: string }[] = [
   { label: 'Calculadora de precios', desc: 'Define precios ideales para tus productos', icon: 'pi pi-calculator', tone: 'violet', uses: '12 usos', to: undefined },
@@ -36,12 +52,12 @@ const usedTools: { label: string; desc: string; icon: string; tone: Tone; uses: 
   { label: 'Generador de ideas', desc: 'Ideas de negocio personalizadas', icon: 'pi pi-lightbulb', tone: 'yellow', uses: '2 usos', to: undefined },
 ]
 
-const summaryCards: { label: string; value: string; icon: string; tone: Tone; chart?: string; bar?: number }[] = [
-  { label: 'Diagnósticos realizados', value: '12', icon: 'pi pi-briefcase', tone: 'green', chart: 'up' },
+const summaryCards = computed<{ label: string; value: string; icon: string; tone: Tone; chart?: string; bar?: number }[]>(() => [
+  { label: 'Diagnósticos realizados', value: diagnostico.value ? '1' : '0', icon: 'pi pi-briefcase', tone: 'green', chart: 'up' },
   { label: 'Herramientas usadas', value: '27', icon: 'pi pi-wrench', tone: 'mint', chart: 'up' },
-  { label: 'Tu progreso', value: '72%', icon: 'pi pi-chart-line', tone: 'lime', bar: 72 },
+  { label: 'Salud del negocio', value: saludNegocio.value !== null ? `${saludNegocio.value}%` : '—', icon: 'pi pi-chart-line', tone: 'lime', bar: saludNegocio.value ?? 0 },
   { label: 'Impacto generado', value: '+18%', icon: 'pi pi-compass', tone: 'emerald', chart: 'steady' },
-]
+])
 
 const suggestions = [
   { label: 'Potencia tu negocio en Pando', desc: 'Revisa tus productos estrella y prepara una campaña para WhatsApp.', image: '/pos-inicio-hero.jpg' },
@@ -72,6 +88,15 @@ function go(to?: string) {
         <p class="mt-3 max-w-xs text-xs font-bold leading-snug text-white/90">Herramientas inteligentes, decisiones claras<br>y crecimiento sostenible.</p>
       </div>
     </section>
+
+    <NuxtLink v-if="diagnosticoEstado !== 'completado'" to="/pos/diagnostico" class="diag-cta">
+      <span class="diag-cta__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
+      <div class="diag-cta__copy">
+        <strong>Haz el diagnóstico rápido de tu negocio</strong>
+        <small>Responde 10 preguntas (2-3 min) y recibe recomendaciones personalizadas de NEXA.</small>
+      </div>
+      <span class="diag-cta__btn">Empezar <i class="pi pi-arrow-right" aria-hidden="true" /></span>
+    </NuxtLink>
 
     <section class="weather-card">
       <div class="weather-main">
@@ -128,7 +153,7 @@ function go(to?: string) {
             <span class="progress-track"><span :style="{ width: `${item.progress}%` }" /></span>
           </div>
           <em>{{ item.progress }}%</em>
-          <button type="button">{{ item.action }}</button>
+          <button type="button" @click="go(item.to)">{{ item.action }}</button>
         </article>
 
         <a class="panel-link" href="#">Ver todo mi progreso <i class="pi pi-arrow-right" aria-hidden="true" /></a>
@@ -218,6 +243,70 @@ function go(to?: string) {
   border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.diag-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(120deg, #0a6f1f, #14b536);
+  box-shadow: 0 12px 26px rgba(14, 111, 32, 0.26);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.diag-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 32px rgba(14, 111, 32, 0.32);
+}
+
+.diag-cta__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 1.1rem;
+}
+
+.diag-cta__copy {
+  display: grid;
+  gap: 2px;
+}
+
+.diag-cta__copy strong {
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.diag-cta__copy small {
+  font-size: 0.76rem;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.diag-cta__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: #fff;
+  color: #0a6f1f;
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .diag-cta__btn span,
+  .diag-cta { flex-wrap: wrap; }
 }
 
 .weather-card {

@@ -10,6 +10,7 @@ export type CurrentSession = {
   store: string
   storeId: string | null
   defaultMargin: number | null
+  onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
 }
 
 export async function getCurrentSession(event: Parameters<typeof getCookie>[0]): Promise<CurrentSession | null> {
@@ -32,7 +33,8 @@ export async function getCurrentSession(event: Parameters<typeof getCookie>[0]):
         coalesce(platform_role.codigo, store_role.codigo, 'usuario') as "role",
         coalesce(t.nombre, 'Plataforma') as "store",
         t.id as "storeId",
-        t.margen_default::float as "defaultMargin"
+        t.margen_default::float as "defaultMargin",
+        t.onboarding_diagnostico as "onboardingDiagnostico"
       from sesion s
       join usuario u on u.id = s.usuario_id
       left join usuario_rol platform_user_role on platform_user_role.usuario_id = u.id and platform_user_role.tienda_id is null

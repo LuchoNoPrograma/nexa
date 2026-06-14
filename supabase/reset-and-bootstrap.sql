@@ -90,6 +90,7 @@ create table if not exists tienda (
   color_primario text not null default '#0B1F3A',
   margen_default numeric(5,2) not null default 20,
   plan text not null default 'free' check (plan in ('free', 'pro', 'demo')),
+  onboarding_diagnostico text not null default 'pendiente' check (onboarding_diagnostico in ('pendiente', 'completado', 'omitido')),
   activo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -483,12 +484,20 @@ create table if not exists calculo_precio (
 create table if not exists diagnostico (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tienda(id) on delete cascade,
+  usuario_id uuid references usuario(id) on delete set null,
   rubro text,
   canal_venta_principal text,
   nivel_digital text check (nivel_digital in ('bajo', 'medio', 'alto')),
   problema_principal text,
   objetivo_principal text,
+  salud_general smallint,
+  nivel text check (nivel in ('bajo', 'medio', 'alto')),
+  score_ventas smallint,
+  score_finanzas smallint,
+  score_marketing smallint,
+  score_inventario smallint,
   resultado jsonb not null default '{}'::jsonb,
+  completado_at timestamptz,
   created_at timestamptz not null default now()
 );
 

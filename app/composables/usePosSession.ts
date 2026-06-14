@@ -6,6 +6,7 @@ export type PosSession = {
   store: string
   storeId: string | null
   defaultMargin: number | null
+  onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
 }
 
 export function usePosSession() {

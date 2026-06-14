@@ -127,6 +127,7 @@ function onSidebarResizeKeydown(event: KeyboardEvent) {
 
 const sidebarItems = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
+  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico' },
   { label: 'Marketing', icon: 'pi pi-megaphone' },
   { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos' },
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
@@ -211,6 +212,16 @@ onMounted(async () => {
   try {
     const response = await $fetch<{ user: PosSession }>('/api/auth/session')
     session.value = response.user
+
+    // Onboarding opcional: la primera vez (estado "pendiente") llevamos al
+    // diagnóstico. Una vez completado u omitido, no se vuelve a forzar.
+    if (
+      response.user.onboardingDiagnostico === 'pendiente'
+      && route.path !== '/pos/diagnostico'
+    ) {
+      await navigateTo('/pos/diagnostico')
+    }
+
     isReady.value = true
   } catch {
     void navigateTo('/login')
