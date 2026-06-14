@@ -134,6 +134,7 @@ const sidebarItems = [
   { label: 'Contenido', icon: 'pi pi-file' },
   { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas' },
   { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos' },
+  { label: 'Personal', icon: 'pi pi-users', to: '/pos/sueldos' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
   { label: 'Reportes', icon: 'pi pi-chart-bar' },
   { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
@@ -364,7 +365,7 @@ function selectModule(to?: string) {
     />
 
     <section id="pos-workspace" class="pos-workspace">
-      <header class="pos-topbar">
+      <header class="pos-topbar mb-2">
         <div class="topbar-title">
           <Button
             type="button"

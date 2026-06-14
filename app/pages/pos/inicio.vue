@@ -432,9 +432,12 @@ function go(to?: string) {
 /* --- Naru --- */
 .naru {
   position: relative;
-  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 172px;
   overflow: hidden;
-  padding: 20px 150px 20px 22px;
+  padding: 20px 175px 20px 22px;
   border-radius: 18px;
   background: linear-gradient(120deg, #063718, #0e7a26 70%, #14a634);
   color: #fff;
@@ -468,10 +471,12 @@ function go(to?: string) {
 
 .naru__mascot {
   position: absolute;
-  right: 6px;
-  bottom: -10px;
-  width: 140px;
+  right: 16px;
+  bottom: 0;
+  height: 168px;
+  width: auto;
   object-fit: contain;
+  object-position: bottom;
   filter: drop-shadow(0 14px 18px rgba(3, 24, 9, 0.34));
   pointer-events: none;
 }
@@ -533,11 +538,13 @@ function go(to?: string) {
   }
 
   .naru {
-    padding: 18px 120px 18px 18px;
+    min-height: 150px;
+    padding: 18px 130px 18px 18px;
   }
 
   .naru__mascot {
-    width: 112px;
+    height: 142px;
+    right: 8px;
   }
 }
 

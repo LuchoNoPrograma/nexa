@@ -122,6 +122,7 @@ async function seedLocalData() {
 
   await assignRole(userId, 'super_admin')
   await assignRole(userId, 'propietario', storeId)
+  await seedDefaultEmployee(storeId)
 
   if (seedDemoProducts) {
     await seedProducts(storeId)
@@ -160,6 +161,63 @@ async function seedProducts(storeId: string) {
   await pool.query(
     `
       select aplicar_catalogo_plantilla($1, 'minimarket_abarrotes', true)
+    `,
+    [storeId],
+  )
+}
+
+async function seedDefaultEmployee(storeId: string) {
+  await pool.query(
+    `
+      insert into nomina_config (tienda_id, salario_minimo_mensual, horas_mensuales_referencia, semanas_por_mes)
+      values ($1, 3300, 240, 4.33)
+      on conflict (tienda_id) do update
+      set
+        salario_minimo_mensual = coalesce(nomina_config.salario_minimo_mensual, excluded.salario_minimo_mensual),
+        horas_mensuales_referencia = coalesce(nomina_config.horas_mensuales_referencia, excluded.horas_mensuales_referencia),
+        semanas_por_mes = coalesce(nomina_config.semanas_por_mes, excluded.semanas_por_mes),
+        updated_at = now()
+    `,
+    [storeId],
+  )
+
+  await pool.query(
+    `
+      with empleado_base as (
+        insert into empleado (tienda_id, nombre, puesto, color, orden)
+        select $1, 'Trabajador 1', 'Atención y caja', '#22c55e', 0
+        where not exists (
+          select 1
+          from empleado
+          where tienda_id = $1
+            and activo = true
+        )
+        returning id, tienda_id
+      ),
+      empleado_objetivo as (
+        select id, tienda_id from empleado_base
+        union all
+        select id, tienda_id
+        from empleado
+        where tienda_id = $1
+          and activo = true
+        order by id
+        limit 1
+      )
+      insert into empleado_horario (empleado_id, tienda_id, slots, horas_semanales)
+      select
+        id,
+        tienda_id,
+        '[
+          {"dia":1,"hora":14},{"dia":1,"hora":15},{"dia":1,"hora":16},{"dia":1,"hora":17},{"dia":1,"hora":18},{"dia":1,"hora":19},
+          {"dia":2,"hora":14},{"dia":2,"hora":15},{"dia":2,"hora":16},{"dia":2,"hora":17},{"dia":2,"hora":18},{"dia":2,"hora":19},
+          {"dia":3,"hora":14},{"dia":3,"hora":15},{"dia":3,"hora":16},{"dia":3,"hora":17},{"dia":3,"hora":18},{"dia":3,"hora":19},
+          {"dia":4,"hora":14},{"dia":4,"hora":15},{"dia":4,"hora":16},{"dia":4,"hora":17},{"dia":4,"hora":18},{"dia":4,"hora":19},
+          {"dia":5,"hora":14},{"dia":5,"hora":15},{"dia":5,"hora":16},{"dia":5,"hora":17},{"dia":5,"hora":18},{"dia":5,"hora":19}
+        ]'::jsonb,
+        30
+      from empleado_objetivo
+      on conflict (empleado_id) do nothing
     `,
     [storeId],
   )

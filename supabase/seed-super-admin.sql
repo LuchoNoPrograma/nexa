@@ -91,5 +91,37 @@ begin
   values (super_admin_id, rol_propietario_id, tienda_demo_id)
   on conflict do nothing;
 
+  insert into nomina_config (tienda_id, salario_minimo_mensual, horas_mensuales_referencia, semanas_por_mes)
+  values (tienda_demo_id, 3300, 240, 4.33)
+  on conflict (tienda_id) do nothing;
+
+  insert into empleado (tienda_id, nombre, puesto, color, orden)
+  select tienda_demo_id, 'Trabajador 1', 'Atención y caja', '#22c55e', 0
+  where not exists (
+    select 1
+    from empleado
+    where tienda_id = tienda_demo_id
+      and activo = true
+  );
+
+  insert into empleado_horario (empleado_id, tienda_id, slots, horas_semanales)
+  select
+    e.id,
+    e.tienda_id,
+    '[
+      {"dia":1,"hora":14},{"dia":1,"hora":15},{"dia":1,"hora":16},{"dia":1,"hora":17},{"dia":1,"hora":18},{"dia":1,"hora":19},
+      {"dia":2,"hora":14},{"dia":2,"hora":15},{"dia":2,"hora":16},{"dia":2,"hora":17},{"dia":2,"hora":18},{"dia":2,"hora":19},
+      {"dia":3,"hora":14},{"dia":3,"hora":15},{"dia":3,"hora":16},{"dia":3,"hora":17},{"dia":3,"hora":18},{"dia":3,"hora":19},
+      {"dia":4,"hora":14},{"dia":4,"hora":15},{"dia":4,"hora":16},{"dia":4,"hora":17},{"dia":4,"hora":18},{"dia":4,"hora":19},
+      {"dia":5,"hora":14},{"dia":5,"hora":15},{"dia":5,"hora":16},{"dia":5,"hora":17},{"dia":5,"hora":18},{"dia":5,"hora":19}
+    ]'::jsonb,
+    30
+  from empleado e
+  where e.tienda_id = tienda_demo_id
+    and e.activo = true
+  order by e.orden asc, e.created_at asc
+  limit 1
+  on conflict (empleado_id) do nothing;
+
   perform aplicar_catalogo_plantilla(tienda_demo_id, 'minimarket_abarrotes', true);
 end $$;

@@ -35,7 +35,7 @@ const incomeRows = [
 const expenseRows = [
   { label: 'Servicios', amount: 7250, percent: 30, color: '#0f9e2e' },
   { label: 'Compras', amount: 6380, percent: 26, color: '#ffad0a' },
-  { label: 'Sueldos', amount: 5640, percent: 23, color: '#3b82f6' },
+  { label: 'Costo laboral', amount: 5640, percent: 23, color: '#3b82f6' },
   { label: 'Transporte', amount: 2450, percent: 10, color: '#2563eb' },
   { label: 'Publicidad', amount: 2140, percent: 9, color: '#8b5cf6' },
 ]
