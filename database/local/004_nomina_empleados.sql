@@ -20,7 +20,7 @@ create table if not exists empleado (
 create table if not exists nomina_config (
   tienda_id uuid primary key references tienda(id) on delete cascade,
   salario_minimo_mensual numeric(12,2) not null default 3300,
-  horas_mensuales_referencia numeric(6,2) not null default 240,
+  horas_mensuales_referencia numeric(6,2) not null default 207.84,
   semanas_por_mes numeric(4,2) not null default 4.33,
   updated_at timestamptz not null default now(),
   check (salario_minimo_mensual >= 0),

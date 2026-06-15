@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const result = await pool.query(
     `
       insert into nomina_config (tienda_id, salario_minimo_mensual, horas_mensuales_referencia, semanas_por_mes, updated_at)
-      values ($1, $2, coalesce($3, 240), coalesce($4, 4.33), now())
+      values ($1, $2, coalesce($3, 207.84), coalesce($4, 4.33), now())
       on conflict (tienda_id) do update set
         salario_minimo_mensual = excluded.salario_minimo_mensual,
         horas_mensuales_referencia = coalesce($3, nomina_config.horas_mensuales_referencia),

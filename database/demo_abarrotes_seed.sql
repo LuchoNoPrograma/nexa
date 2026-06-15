@@ -14,7 +14,7 @@ where slug = 'tienda-demo-nexa'
 limit 1;
 
 insert into nomina_config (tienda_id, salario_minimo_mensual, horas_mensuales_referencia, semanas_por_mes)
-select id, 3300, 240, 4.33
+select id, 3300, 207.84, 4.33
 from tienda
 where slug = 'tienda-demo-nexa'
   and activo = true

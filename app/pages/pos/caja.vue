@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import type {
+  PosCashMovement as CashMovement,
+  PosCashMovementType as MovementType,
+  PosCashPaymentMethod as PaymentMethod,
+} from '~/composables/usePosCashRegister'
+
 definePageMeta({
   layout: 'pos',
   posTitle: 'Caja',
@@ -8,35 +14,26 @@ useHead({
   title: 'Caja | NEXA',
 })
 
-type CashStatus = 'abierta' | 'cerrada'
-type MovementType = 'Ingreso' | 'Egreso'
-type PaymentMethod = 'Efectivo' | 'QR' | 'Tarjeta'
-
-interface CashMovement {
-  id: number
-  time: string
-  concept: string
-  type: MovementType
-  method: PaymentMethod
-  amount: number
-  note?: string
-}
-
 const currencyFormatter = new Intl.NumberFormat('es-BO', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
 
-const cashStatus = ref<CashStatus>('abierta')
+const cashRegister = usePosCashRegister()
+const session = usePosSession()
+const cashStatus = cashRegister.cashStatus
+const movements = cashRegister.movements
+const productSales = cashRegister.productSales
 const registerName = ref('Caja principal')
 const openedBy = ref('María López')
 const openedAt = ref('08:00')
-const openingFloat = ref(300)
-const countedCash = ref(1230)
-const desiredFloat = ref(300)
+const openingFloat = ref(200)
+const countedCash = ref(200)
+const desiredFloat = ref(200)
 const closingNote = ref('')
 const closedAt = ref('')
 const lastPrintedAt = ref('')
+const cashLoadError = ref('')
 
 const openDialogVisible = ref(false)
 const movementDialogVisible = ref(false)
@@ -47,7 +44,7 @@ const closeDialogVisible = ref(false)
 const openingForm = reactive({
   registerName: 'Caja principal',
   openedBy: 'María López',
-  openingFloat: 300,
+  openingFloat: 200,
   note: '',
 })
 
@@ -59,31 +56,36 @@ const movementForm = reactive({
   note: '',
 })
 
-const movements = ref<CashMovement[]>([
-  { id: 1, time: '08:35', concept: 'Venta de mostrador', type: 'Ingreso', method: 'Efectivo', amount: 420 },
-  { id: 2, time: '09:10', concept: 'Venta con QR', type: 'Ingreso', method: 'QR', amount: 680 },
-  { id: 3, time: '10:25', concept: 'Compra de bolsas', type: 'Egreso', method: 'Efectivo', amount: 45 },
-  { id: 4, time: '11:50', concept: 'Venta de mostrador', type: 'Ingreso', method: 'Efectivo', amount: 360 },
-  { id: 5, time: '14:15', concept: 'Venta con tarjeta', type: 'Ingreso', method: 'Tarjeta', amount: 520 },
-  { id: 6, time: '15:40', concept: 'Retiro para depósito', type: 'Egreso', method: 'Efectivo', amount: 110 },
-])
-
-// Ventas por producto del turno (demo: aún no hay módulo de ventas real).
-const productSales = ref([
-  { name: 'Coca-Cola 2L', qty: 14, total: 168 },
-  { name: 'Pan de molde', qty: 9, total: 81 },
-  { name: 'Aceite 900 ml', qty: 5, total: 90 },
-  { name: 'Arroz 1 kg', qty: 7, total: 70 },
-  { name: 'Leche entera 1 L', qty: 6, total: 42 },
-])
-
 const movementTypes: MovementType[] = ['Ingreso', 'Egreso']
-const paymentMethods: PaymentMethod[] = ['Efectivo', 'QR', 'Tarjeta']
+const paymentMethods: PaymentMethod[] = ['Efectivo', 'QR']
 
 const currentTime = computed(() => {
   const now = new Date()
   return now.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
 })
+
+onMounted(async () => {
+  try {
+    await cashRegister.loadCashData()
+  } catch {
+    cashLoadError.value = 'No se pudo cargar la caja desde la base de datos.'
+  }
+})
+
+watch(() => cashRegister.cashSession.value, (session) => {
+  if (!session) {
+    return
+  }
+
+  cashStatus.value = session.status
+  openingFloat.value = session.openingFloat
+  countedCash.value = session.countedCash ?? session.openingFloat
+  desiredFloat.value = session.openingFloat
+  openedAt.value = session.openedAt
+  closedAt.value = session.closedAt ?? ''
+  openedBy.value = session.openedBy
+  closingNote.value = session.notes ?? ''
+}, { immediate: true })
 
 const cashIncome = computed(() => movements.value
   .filter((movement) => movement.type === 'Ingreso' && movement.method === 'Efectivo')
@@ -98,10 +100,11 @@ const expectedCash = computed(() => openingFloat.value + cashIncome.value - cash
 const countedDifference = computed(() => Number(countedCash.value || 0) - expectedCash.value)
 
 const totalSales = computed(() => movements.value
-  .filter((movement) => movement.type === 'Ingreso')
+  .filter((movement) => movement.type === 'Ingreso' && movement.source === 'venta')
   .reduce((sum, movement) => sum + movement.amount, 0))
 
-const movementCount = computed(() => movements.value.length)
+const salesReadyToClose = computed(() => movements.value
+  .filter((movement) => movement.source === 'venta' && movement.status === 'por_cerrar').length)
 
 const depositAmount = computed(() => Math.max(Number(countedCash.value || 0) - Number(desiredFloat.value || 0), 0))
 
@@ -111,29 +114,29 @@ const productRanking = computed(() => [...productSales.value].sort((a, b) => b.t
 
 const paymentBreakdown = computed(() => paymentMethods.map((method) => {
   const income = movements.value
-    .filter((movement) => movement.type === 'Ingreso' && movement.method === method)
+    .filter((movement) => movement.type === 'Ingreso' && movement.method === method && movement.source === 'venta')
     .reduce((sum, movement) => sum + movement.amount, 0)
 
   return {
     method,
     income,
-    count: movements.value.filter((movement) => movement.type === 'Ingreso' && movement.method === method).length,
+    count: movements.value.filter((movement) => movement.type === 'Ingreso' && movement.method === method && movement.source === 'venta').length,
   }
 }))
 
 // Los 4 accesos grandes de la caja (estilo POS profesional).
 const cashTools = computed<{ key: string; label: string; desc: string; icon: string; tone: string; action: () => void }[]>(() => [
-  { key: 'movimiento', label: 'Registrar movimiento', desc: 'Ingreso o egreso de efectivo', icon: 'pi pi-plus-circle', tone: 'green', action: () => openMovementDialog('Ingreso') },
+  { key: 'movimiento', label: 'Entrada / salida', desc: 'Dinero que entra o sale', icon: 'pi pi-plus-circle', tone: 'green', action: () => openMovementDialog('Ingreso') },
   { key: 'producto', label: 'Reporte por producto', desc: 'Qué y cuánto se vendió hoy', icon: 'pi pi-box', tone: 'blue', action: () => { productDialogVisible.value = true } },
   { key: 'arqueo', label: 'Arqueo de caja', desc: 'Cuenta el efectivo físico', icon: 'pi pi-calculator', tone: 'amber', action: () => { arqueoDialogVisible.value = true } },
-  { key: 'cierre', label: 'Reporte de cierre', desc: 'Cuadra e imprime el turno', icon: 'pi pi-file-check', tone: 'slate', action: () => { closeDialogVisible.value = true } },
+  { key: 'cierre', label: 'Cerrar turno', desc: 'Revisa y termina caja', icon: 'pi pi-file-check', tone: 'slate', action: () => { closeDialogVisible.value = true } },
 ])
 
 const closeReportRows = computed(() => [
   { label: 'Fondo inicial', value: money(openingFloat.value) },
-  { label: 'Ingresos en efectivo', value: money(cashIncome.value) },
-  { label: 'Egresos en efectivo', value: money(cashOutcome.value) },
-  { label: 'Efectivo esperado', value: money(expectedCash.value), strong: true },
+  { label: 'Ventas y entradas en efectivo', value: money(cashIncome.value) },
+  { label: 'Salidas en efectivo', value: money(cashOutcome.value) },
+  { label: 'Dinero esperado en caja', value: money(expectedCash.value), strong: true },
   { label: 'Efectivo contado', value: money(Number(countedCash.value || 0)), strong: true },
   { label: 'Diferencia', value: money(countedDifference.value), strong: true, tone: differenceTone.value },
   { label: 'Dejar en caja', value: money(Number(desiredFloat.value || 0)) },
@@ -195,6 +198,14 @@ function movementSign(type: MovementType) {
   return type === 'Ingreso' ? '+' : '-'
 }
 
+function movementStatusLabel(movement: CashMovement) {
+  if (movement.status === 'cerrado') {
+    return 'Cerrado'
+  }
+
+  return movement.source === 'venta' ? 'Por cerrar' : 'En turno'
+}
+
 function resetMovementForm() {
   movementForm.type = 'Ingreso'
   movementForm.method = 'Efectivo'
@@ -203,7 +214,7 @@ function resetMovementForm() {
   movementForm.note = ''
 }
 
-function openCashSession() {
+async function openCashSession() {
   registerName.value = openingForm.registerName.trim() || 'Caja principal'
   openedBy.value = openingForm.openedBy.trim() || 'Responsable de caja'
   openingFloat.value = Number(openingForm.openingFloat || 0)
@@ -212,8 +223,7 @@ function openCashSession() {
   openedAt.value = currentTime.value
   closedAt.value = ''
   closingNote.value = openingForm.note.trim()
-  movements.value = []
-  cashStatus.value = 'abierta'
+  await cashRegister.openTurn(openingFloat.value || 200, closingNote.value)
   openDialogVisible.value = false
 }
 
@@ -223,14 +233,12 @@ function openMovementDialog(type: MovementType) {
   movementDialogVisible.value = true
 }
 
-function saveMovement() {
+async function saveMovement() {
   if (!movementForm.concept.trim() || Number(movementForm.amount || 0) <= 0) {
     return
   }
 
-  movements.value.unshift({
-    id: Date.now(),
-    time: currentTime.value,
+  await cashRegister.addManualMovement({
     concept: movementForm.concept.trim(),
     type: movementForm.type,
     method: movementForm.method,
@@ -242,8 +250,8 @@ function saveMovement() {
   resetMovementForm()
 }
 
-function closeCashSession(printAfterClose = false) {
-  cashStatus.value = 'cerrada'
+async function closeCashSession(printAfterClose = false) {
+  await cashRegister.closeTurn(Number(countedCash.value || 0), closingNote.value)
   closedAt.value = currentTime.value
   closeDialogVisible.value = false
 
@@ -252,7 +260,7 @@ function closeCashSession(printAfterClose = false) {
   }
 }
 
-function reopenForDemo() {
+function reopenCashSession() {
   openingForm.registerName = registerName.value
   openingForm.openedBy = openedBy.value
   openingForm.openingFloat = Number(desiredFloat.value || openingFloat.value || 0)
@@ -269,111 +277,234 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#039;')
 }
 
-function printClosureReport() {
+function storeReportName() {
+  return session.value?.store || registerName.value || 'Mi tienda'
+}
+
+function reportLongDate() {
+  const formatted = new Date().toLocaleDateString('es-BO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+}
+
+function reportShortDate() {
+  return new Date().toLocaleDateString('es-BO', { day: 'numeric', month: 'numeric', year: 'numeric' })
+}
+
+// CSS común para tickets de 80mm (mismo estilo que el comprobante de venta).
+function thermalCss() {
+  return `
+    @page { size: 80mm auto; margin: 4mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
+    .ticket { width: 72mm; margin: 0 auto; padding: 2mm 0; }
+    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 5px; }
+    h1 { margin: 0; font-size: 14px; font-weight: 900; }
+    header p { margin: 2px 0 0; font-size: 9px; }
+    .doc { margin: 6px 0; padding: 5px; border: 1px solid #000; text-align: center; }
+    .doc span { display: block; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, monospace; }
+    .doc small { display: block; margin-top: 2px; font-size: 8px; }
+    .section-title { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
+    table.rpt { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    table.rpt td, table.rpt th { padding: 2px 0; font-size: 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    table.rpt th { font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 3px; }
+    table.rpt td small, table.rpt .sub { display: block; font-size: 8px; }
+    table.rpt .amt { text-align: right; font: 900 10px ui-monospace, monospace; white-space: nowrap; width: 22mm; }
+    table.rpt th.amt { font-size: 8px; }
+    table.rpt .qty { text-align: right; font: 900 10px ui-monospace, monospace; width: 9mm; }
+    table.rpt .time { font: 900 9px ui-monospace, monospace; width: 13mm; }
+    table.rpt tr.line td { border-bottom: 1px dashed #000; }
+    table.rpt tr.strong td { border-top: 1px solid #000; font-weight: 900; padding-top: 4px; }
+    table.rpt tr.strong .amt { font-size: 11px; }
+    .grand { margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 900; }
+    .grand b { font: 900 12px ui-monospace, monospace; }
+    .sign { margin-top: 24px; text-align: center; }
+    .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+    footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #000; text-align: center; font-size: 9px; }
+    footer strong { display: block; margin-top: 3px; }
+    @media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }
+  `
+}
+
+function openThermalReport(name: string, title: string, bodyHtml: string) {
   if (!import.meta.client) {
     return
   }
 
-  lastPrintedAt.value = currentTime.value
-
-  const rows = closeReportRows.value.map((row) => `
-    <tr class="${row.strong ? 'strong' : ''}">
-      <td>${escapeHtml(row.label)}</td>
-      <td>${escapeHtml(row.value)}</td>
-    </tr>
-  `).join('')
-
-  const payments = paymentBreakdown.value.map((item) => `
-    <tr>
-      <td>${escapeHtml(item.method)}</td>
-      <td>${item.count}</td>
-      <td>${escapeHtml(money(item.income))}</td>
-    </tr>
-  `).join('')
-
-  const activity = movements.value.map((movement) => `
-    <tr>
-      <td>${escapeHtml(movement.time)}</td>
-      <td>${escapeHtml(movement.concept)}</td>
-      <td>${escapeHtml(movement.type)}</td>
-      <td>${escapeHtml(movement.method)}</td>
-      <td>${escapeHtml(`${movementSign(movement.type)} ${money(movement.amount)}`)}</td>
-    </tr>
-  `).join('')
-
-  const reportWindow = window.open('', 'nexa-cierre-caja', 'width=820,height=900')
+  const reportWindow = window.open('', name, 'width=420,height=720')
 
   if (!reportWindow) {
     window.print()
     return
   }
 
-  reportWindow.document.write(`
-    <!doctype html>
-    <html lang="es">
-      <head>
-        <meta charset="utf-8">
-        <title>Reporte de cierre de caja - NEXA</title>
-        <style>
-          body { margin: 0; padding: 28px; color: #111827; font-family: Arial, sans-serif; }
-          header { border-bottom: 2px solid #0B1F3A; padding-bottom: 14px; margin-bottom: 18px; }
-          h1 { margin: 0; color: #0B1F3A; font-size: 22px; }
-          p { margin: 4px 0; color: #4b5563; font-size: 12px; }
-          section { margin-top: 18px; }
-          h2 { margin: 0 0 8px; color: #0B1F3A; font-size: 14px; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          td, th { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
-          th { background: #f3f4f6; }
-          td:last-child, th:last-child { text-align: right; }
-          .strong td { font-weight: 700; background: #f8fafc; }
-          .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 42px; }
-          .signature { border-top: 1px solid #111827; padding-top: 8px; text-align: center; }
-          @media print { body { padding: 18px; } }
-        </style>
-      </head>
-      <body>
-        <header>
-          <h1>NEXA - Reporte de cierre de caja</h1>
-          <p>${escapeHtml(registerName.value)} · Responsable: ${escapeHtml(openedBy.value)}</p>
-          <p>Turno: ${escapeHtml(sessionDuration.value)} · Impreso: ${escapeHtml(lastPrintedAt.value)}</p>
-        </header>
-
-        <section>
-          <h2>Arqueo</h2>
-          <table><tbody>${rows}</tbody></table>
-        </section>
-
-        <section>
-          <h2>Ventas por método de pago</h2>
-          <table>
-            <thead><tr><th>Método</th><th>Operaciones</th><th>Total</th></tr></thead>
-            <tbody>${payments}</tbody>
-          </table>
-        </section>
-
-        <section>
-          <h2>Movimientos del turno</h2>
-          <table>
-            <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Método</th><th>Monto</th></tr></thead>
-            <tbody>${activity}</tbody>
-          </table>
-        </section>
-
-        <section>
-          <h2>Observación</h2>
-          <p>${escapeHtml(closingNote.value || 'Sin observaciones.')}</p>
-        </section>
-
-        <div class="signatures">
-          <div class="signature">Responsable de caja</div>
-          <div class="signature">Supervisor / propietario</div>
-        </div>
-
-        <script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>
-      </body>
-    </html>
-  `)
+  // document.open() reinicia el documento: si la ventana (por su nombre) ya
+  // existía de una impresión previa, sin esto el evento load no vuelve a
+  // dispararse y no se imprime.
+  reportWindow.document.open()
+  reportWindow.document.write(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)}</title>
+  <style>${thermalCss()}</style>
+</head>
+<body>
+  <main class="ticket">${bodyHtml}</main>
+</body>
+</html>`)
   reportWindow.document.close()
+  reportWindow.focus()
+
+  // Imprimimos desde la ventana padre (no desde un script inline) para que
+  // funcione también cuando la ventana se reutiliza entre impresiones.
+  setTimeout(() => {
+    try {
+      reportWindow.print()
+    } catch {
+      reportWindow.focus()
+    }
+  }, 300)
+}
+
+// Totales auxiliares que comparten arqueo y cierre.
+function reportTotals() {
+  const otrosIngresos = movements.value
+    .filter((movement) => movement.type === 'Ingreso' && movement.source === 'manual')
+    .reduce((sum, movement) => sum + movement.amount, 0)
+
+  const egresos = movements.value
+    .filter((movement) => movement.type === 'Egreso')
+    .reduce((sum, movement) => sum + movement.amount, 0)
+
+  return {
+    otrosIngresos,
+    egresos,
+    totalMovimiento: totalSales.value + otrosIngresos - egresos,
+  }
+}
+
+function reportHeaderHtml(docTitle: string, docSubtitle: string) {
+  return `
+    <header>
+      <h1>${escapeHtml(storeReportName())}</h1>
+      <p>${escapeHtml(registerName.value)}</p>
+      <p>Responsable: ${escapeHtml(openedBy.value)}</p>
+    </header>
+    <section class="doc">
+      <span>${escapeHtml(docTitle)}</span>
+      <strong>${escapeHtml(reportShortDate())}</strong>
+      <small>${escapeHtml(docSubtitle)}</small>
+    </section>`
+}
+
+// Arqueo de caja: resumen financiero en tabla (Ingresos / Egresos / Totales).
+function printArqueoReport() {
+  if (!import.meta.client) {
+    return
+  }
+
+  lastPrintedAt.value = currentTime.value
+  const { otrosIngresos, egresos, totalMovimiento } = reportTotals()
+
+  const ventaRows = paymentBreakdown.value
+    .map((item) => `<tr><td>${escapeHtml(item.method)}</td><td class="amt">${escapeHtml(money(item.income))}</td></tr>`)
+    .join('')
+
+  const body = `
+    ${reportHeaderHtml('Arqueo de caja', 'Expresado en bolivianos')}
+
+    <div class="section-title">Ingresos</div>
+    <table class="rpt">
+      ${ventaRows}
+      <tr class="strong"><td>Total ventas</td><td class="amt">${escapeHtml(money(totalSales.value))}</td></tr>
+    </table>
+
+    <div class="section-title">Otros ingresos</div>
+    <table class="rpt">
+      <tr><td>Ingresos</td><td class="amt">${escapeHtml(money(otrosIngresos))}</td></tr>
+    </table>
+
+    <div class="section-title">Egresos</div>
+    <table class="rpt">
+      <tr><td>Egresos</td><td class="amt">${escapeHtml(money(egresos))}</td></tr>
+    </table>
+
+    <div class="grand"><span>Total efectivo en caja</span><b>${escapeHtml(money(expectedCash.value))}</b></div>
+    <div class="grand"><span>Total movimiento en caja</span><b>${escapeHtml(money(totalMovimiento))}</b></div>
+
+    <div class="sign"><div class="line">Firma y sello cajero</div></div>
+    <footer>
+      <em>Turno: ${escapeHtml(sessionDuration.value)} · Impreso: ${escapeHtml(lastPrintedAt.value)}</em>
+      <strong>${escapeHtml(reportLongDate())}</strong>
+    </footer>
+  `
+
+  openThermalReport('nexa-arqueo-caja', 'Arqueo de caja - NEXA', body)
+}
+
+// Cierre de caja: bitácora de movimientos (Hora / Detalle / Total) + resumen.
+function printClosureReport() {
+  if (!import.meta.client) {
+    return
+  }
+
+  lastPrintedAt.value = currentTime.value
+  const { otrosIngresos, egresos, totalMovimiento } = reportTotals()
+
+  // Movimientos del más reciente al más antiguo, como en el ticket de ejemplo.
+  const ordered = [...movements.value].reverse()
+  const cierreRow = cashStatus.value === 'cerrada'
+    ? `<tr class="line"><td class="time">${escapeHtml(closedAt.value || lastPrintedAt.value)}</td><td>Se generó el cierre</td><td class="amt"></td></tr>`
+    : ''
+
+  const movRows = ordered.length
+    ? ordered.map((movement) => `
+        <tr class="line">
+          <td class="time">${escapeHtml(movement.time)}</td>
+          <td>${escapeHtml(movement.concept)}<span class="sub">${escapeHtml(movement.method)} · ${escapeHtml(movementStatusLabel(movement))}</span></td>
+          <td class="amt">${escapeHtml(`${movementSign(movement.type)} ${money(movement.amount)}`)}</td>
+        </tr>
+      `).join('')
+    : '<tr class="line"><td colspan="3">Sin movimientos en el turno.</td></tr>'
+
+  const body = `
+    ${reportHeaderHtml('Cierre de caja', 'Detalle de movimientos del turno')}
+
+    <table class="rpt">
+      <thead><tr><th class="time">Hora</th><th>Detalle</th><th class="amt">Total Bs</th></tr></thead>
+      <tbody>
+        ${cierreRow}
+        ${movRows}
+      </tbody>
+    </table>
+
+    <div class="section-title">Resumen</div>
+    <table class="rpt">
+      <tr><td>Total ventas</td><td class="amt">${escapeHtml(money(totalSales.value))}</td></tr>
+      <tr><td>Otros ingresos</td><td class="amt">${escapeHtml(money(otrosIngresos))}</td></tr>
+      <tr><td>Egresos</td><td class="amt">${escapeHtml(money(egresos))}</td></tr>
+      <tr class="strong"><td>Total movimiento en caja</td><td class="amt">${escapeHtml(money(totalMovimiento))}</td></tr>
+      <tr class="strong"><td>Total efectivo en caja</td><td class="amt">${escapeHtml(money(expectedCash.value))}</td></tr>
+    </table>
+
+    <div class="section-title">Observación</div>
+    <table class="rpt"><tr><td colspan="3">${escapeHtml(closingNote.value || 'Sin observaciones.')}</td></tr></table>
+
+    <div class="sign"><div class="line">Firma y sello cajero</div></div>
+    <footer>
+      <em>Turno: ${escapeHtml(sessionDuration.value)} · Impreso: ${escapeHtml(lastPrintedAt.value)}</em>
+      <strong>¡Buena suerte!</strong>
+    </footer>
+  `
+
+  openThermalReport('nexa-cierre-caja', 'Cierre de caja - NEXA', body)
 }
 
 function printProductReport() {
@@ -381,57 +512,32 @@ function printProductReport() {
     return
   }
 
-  const rows = productRanking.value.map((item) => `
-    <tr>
-      <td>${escapeHtml(item.name)}</td>
-      <td>${item.qty}</td>
-      <td>${escapeHtml(money(item.total))}</td>
-    </tr>
-  `).join('')
+  const rows = productRanking.value.length
+    ? productRanking.value.map((item) => `
+        <tr class="line">
+          <td>${escapeHtml(item.name)}</td>
+          <td class="qty">${item.qty}</td>
+          <td class="amt">${escapeHtml(money(item.total))}</td>
+        </tr>
+      `).join('')
+    : '<tr class="line"><td colspan="3">Sin ventas registradas.</td></tr>'
 
-  const reportWindow = window.open('', 'nexa-reporte-productos', 'width=720,height=900')
+  const body = `
+    ${reportHeaderHtml('Reporte por producto', 'Total mercadería vendida')}
 
-  if (!reportWindow) {
-    window.print()
-    return
-  }
+    <table class="rpt">
+      <thead><tr><th>Detalle</th><th class="qty">C.</th><th class="amt">Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tr class="strong"><td>Total (${productUnits.value} u.)</td><td class="qty"></td><td class="amt">${escapeHtml(money(productTotal.value))}</td></tr>
+    </table>
 
-  reportWindow.document.write(`
-    <!doctype html>
-    <html lang="es">
-      <head>
-        <meta charset="utf-8">
-        <title>Reporte por producto - NEXA</title>
-        <style>
-          body { margin: 0; padding: 28px; color: #111827; font-family: Arial, sans-serif; }
-          header { border-bottom: 2px solid #0B1F3A; padding-bottom: 14px; margin-bottom: 18px; }
-          h1 { margin: 0; color: #0B1F3A; font-size: 22px; }
-          p { margin: 4px 0; color: #4b5563; font-size: 12px; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
-          td, th { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
-          th { background: #f3f4f6; }
-          td:nth-child(2), th:nth-child(2), td:last-child, th:last-child { text-align: right; }
-          tfoot td { font-weight: 700; background: #f8fafc; }
-          @media print { body { padding: 18px; } }
-        </style>
-      </head>
-      <body>
-        <header>
-          <h1>NEXA - Reporte por producto</h1>
-          <p>${escapeHtml(registerName.value)} · Turno: ${escapeHtml(sessionDuration.value)}</p>
-        </header>
-        <table>
-          <thead><tr><th>Producto</th><th>Unidades</th><th>Total</th></tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot>
-            <tr><td>Total</td><td>${productUnits.value}</td><td>${escapeHtml(money(productTotal.value))}</td></tr>
-          </tfoot>
-        </table>
-        <script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>
-      </body>
-    </html>
-  `)
-  reportWindow.document.close()
+    <footer>
+      <em>Turno: ${escapeHtml(sessionDuration.value)}</em>
+      <strong>${escapeHtml(reportLongDate())}</strong>
+    </footer>
+  `
+
+  openThermalReport('nexa-reporte-productos', 'Reporte por producto - NEXA', body)
 }
 </script>
 
@@ -451,8 +557,8 @@ function printProductReport() {
         <small>Ventas del turno</small>
         <strong>{{ money(totalSales) }}</strong>
         <div class="cash-balance__stats">
-          <span><em>Efectivo esperado</em>{{ money(expectedCash) }}</span>
-          <span><em>Movimientos</em>{{ movementCount }}</span>
+          <span><em>Dinero esperado</em>{{ money(expectedCash) }}</span>
+          <span><em>Ventas por cerrar</em>{{ salesReadyToClose }}</span>
         </div>
       </div>
 
@@ -463,7 +569,7 @@ function printProductReport() {
         label="Abrir caja"
         severity="success"
         class="cash-open-btn"
-        @click="reopenForDemo"
+        @click="reopenCashSession"
       />
     </section>
 
@@ -483,6 +589,14 @@ function printProductReport() {
         <small>{{ tool.desc }}</small>
       </button>
     </section>
+
+    <Message v-if="salesReadyToClose > 0 && cashStatus === 'abierta'" severity="info" size="small" icon="pi pi-info-circle">
+      Hay {{ salesReadyToClose }} venta{{ salesReadyToClose === 1 ? '' : 's' }} lista{{ salesReadyToClose === 1 ? '' : 's' }} para revisar y cerrar al final del turno.
+    </Message>
+
+    <Message v-if="cashLoadError" severity="error" size="small" icon="pi pi-exclamation-triangle">
+      {{ cashLoadError }}
+    </Message>
 
     <!-- Movimientos del día: lista simple y legible -->
     <section class="panel moves-panel">
@@ -507,7 +621,7 @@ function printProductReport() {
           <span class="move-time">{{ movement.time }}</span>
           <span class="move-main">
             <strong>{{ movement.concept }}</strong>
-            <small>{{ movement.method }}</small>
+            <small>{{ movement.method }} · {{ movementStatusLabel(movement) }}</small>
           </span>
           <strong class="move-amount" :class="movementClass(movement.type)">
             {{ movementSign(movement.type) }} {{ money(movement.amount) }}
@@ -545,7 +659,7 @@ function printProductReport() {
     </Dialog>
 
     <!-- Diálogo: registrar movimiento -->
-    <Dialog v-model:visible="movementDialogVisible" modal header="Registrar movimiento" class="cash-dialog">
+    <Dialog v-model:visible="movementDialogVisible" modal header="Registrar entrada o salida" class="cash-dialog">
       <form class="dialog-form" @submit.prevent="saveMovement">
         <label class="field">
           <span>Tipo</span>
@@ -569,12 +683,12 @@ function printProductReport() {
         </label>
 
         <Message v-if="movementForm.method !== 'Efectivo'" severity="info" size="small" icon="pi pi-info-circle">
-          Este movimiento aparecerá en el reporte, pero no cambia el efectivo físico esperado.
+          Se guardará para el cierre, pero no cambia el efectivo que cuentas en la caja.
         </Message>
 
         <footer>
           <Button type="button" label="Cancelar" outlined severity="secondary" @click="movementDialogVisible = false" />
-          <Button type="submit" label="Guardar movimiento" icon="pi pi-check" :disabled="!movementForm.concept.trim() || Number(movementForm.amount || 0) <= 0" />
+          <Button type="submit" label="Guardar" icon="pi pi-check" :disabled="!movementForm.concept.trim() || Number(movementForm.amount || 0) <= 0" />
         </footer>
       </form>
     </Dialog>
@@ -622,7 +736,7 @@ function printProductReport() {
         </label>
 
         <div class="report-rows">
-          <div><span>Efectivo esperado</span><strong>{{ money(expectedCash) }}</strong></div>
+          <div><span>Dinero esperado</span><strong>{{ money(expectedCash) }}</strong></div>
           <div><span>Efectivo contado</span><strong>{{ money(Number(countedCash || 0)) }}</strong></div>
         </div>
 
@@ -635,15 +749,16 @@ function printProductReport() {
 
       <template #footer>
         <Button type="button" label="Cerrar" outlined severity="secondary" @click="arqueoDialogVisible = false" />
+        <Button type="button" label="Imprimir arqueo" icon="pi pi-print" outlined @click="printArqueoReport" />
         <Button type="button" label="Continuar al cierre" icon="pi pi-arrow-right" severity="danger" :disabled="cashStatus === 'cerrada'" @click="arqueoDialogVisible = false; closeDialogVisible = true" />
       </template>
     </Dialog>
 
     <!-- Diálogo: reporte de cierre -->
-    <Dialog v-model:visible="closeDialogVisible" modal header="Reporte de cierre de caja" class="cash-dialog close-dialog">
+    <Dialog v-model:visible="closeDialogVisible" modal header="Cerrar caja" class="cash-dialog close-dialog">
       <div class="close-content">
         <Message severity="warn" icon="pi pi-exclamation-triangle">
-          Al cerrar, el turno queda finalizado para revisión. Revisa el efectivo contado antes de imprimir.
+          Revisa el dinero contado antes de cerrar. Luego el turno quedará guardado.
         </Message>
 
         <div class="close-fields">
@@ -656,7 +771,7 @@ function printProductReport() {
             <InputNumber v-model="desiredFloat" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
           </label>
           <label class="field full">
-            <span>Observación del cierre</span>
+            <span>Nota para recordar</span>
             <Textarea v-model="closingNote" rows="3" auto-resize placeholder="Ej. Faltan Bs. 2 por cambio entregado sin moneda exacta." />
           </label>
         </div>
@@ -675,7 +790,7 @@ function printProductReport() {
 
       <template #footer>
         <Button type="button" label="Cancelar" outlined severity="secondary" @click="closeDialogVisible = false" />
-        <Button type="button" label="Solo cerrar" severity="danger" outlined @click="closeCashSession(false)" />
+        <Button type="button" label="Cerrar turno" severity="danger" outlined @click="closeCashSession(false)" />
         <Button type="button" label="Cerrar e imprimir" icon="pi pi-print" severity="danger" @click="closeCashSession(true)" />
       </template>
     </Dialog>

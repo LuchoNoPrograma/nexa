@@ -5,6 +5,9 @@ import {
   DIAS_SEMANA,
   HORAS_DIA,
   COLORES_EMPLEADO,
+  HORAS_MENSUALES_REFERENCIA,
+  SEMANAS_POR_MES,
+  JORNADA_SEMANAL_LEGAL,
   slotKey,
   calcularSueldo,
   valorHora,
@@ -13,10 +16,10 @@ import {
 
 definePageMeta({
   layout: 'pos',
-  posTitle: 'Personal',
+  posTitle: 'Planilla',
 })
 
-useHead({ title: 'Turnos y costo laboral | NEXA' })
+useHead({ title: 'Planilla | NEXA' })
 
 type Empleado = {
   id: string
@@ -32,8 +35,8 @@ const guardadoMsg = ref('')
 
 const config = reactive<NominaConfig>({
   salarioMinimoMensual: 3300,
-  horasMensualesReferencia: 240,
-  semanasPorMes: 4.33,
+  horasMensualesReferencia: HORAS_MENSUALES_REFERENCIA,
+  semanasPorMes: SEMANAS_POR_MES,
 })
 
 const empleados = ref<Empleado[]>([])
@@ -207,6 +210,10 @@ onMounted(async () => {
     const data = await $fetch<{ config: NominaConfig; empleados: any[] }>('/api/pos/nomina')
     if (data.config) {
       Object.assign(config, data.config)
+      // Las horas de referencia se derivan de la jornada legal (48 h/semana),
+      // no del valor histórico que pudiera tener la BD (p. ej. 240).
+      config.horasMensualesReferencia = HORAS_MENSUALES_REFERENCIA
+      config.semanasPorMes = SEMANAS_POR_MES
     }
     empleados.value = (data.empleados ?? []).map(aEmpleado)
 
@@ -377,8 +384,12 @@ function flash(msg: string) {
     <!-- Encabezado -->
     <header class="su-header">
       <div>
-        <NuxtLink to="/pos/inicio" class="su-back"><i class="pi pi-arrow-left" /> Volver</NuxtLink>
-        <h1>Turnos y costo laboral estimado</h1>
+        <nav class="su-crumbs" aria-label="Ruta de planilla">
+          <NuxtLink to="/pos/inicio">Inicio</NuxtLink>
+          <i class="pi pi-angle-right" aria-hidden="true" />
+          <strong>Planilla</strong>
+        </nav>
+        <h1>Planilla de turnos y costo laboral</h1>
         <p>Planifica horarios de trabajo y estima el costo mensual del personal para entender mejor la rentabilidad del negocio.</p>
       </div>
 
@@ -445,6 +456,13 @@ function flash(msg: string) {
               <strong :style="{ color: emp.color }">{{ emp.slots.size }} h</strong>
             </footer>
           </article>
+
+          <!-- Tarjeta para agregar un nuevo trabajador (estilo Google) -->
+          <button type="button" class="su-card su-card--add" @click="agregarEmpleado()">
+            <span class="su-card-add__icon"><i class="pi pi-plus" /></span>
+            <strong>Agregar trabajador</strong>
+            <small>Crea una nueva planilla de turnos</small>
+          </button>
         </div>
 
         <p class="su-hint"><i class="pi pi-info-circle" /> Selecciona una celda o arrastra un rango sobre la hoja para marcar o borrar horas planificadas.</p>
@@ -466,7 +484,7 @@ function flash(msg: string) {
               <span>Horas mensuales de referencia</span>
               <b>{{ config.horasMensualesReferencia }} h</b>
             </div>
-            <small>(8 h × 30 días)</small>
+            <small>({{ JORNADA_SEMANAL_LEGAL }} h/semana × {{ config.semanasPorMes }} semanas — jornada completa)</small>
             <div class="su-ref__row su-ref__row--hl">
               <span>Valor hora</span>
               <b>{{ money(valorHoraActual) }}</b>
@@ -534,23 +552,36 @@ function flash(msg: string) {
 /* ---------- Encabezado ---------- */
 .su-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
   gap: 18px;
   align-items: start;
 }
 
-.su-back {
+.su-crumbs {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: #5d6b61;
   font-size: 0.8rem;
   font-weight: 800;
+}
+
+.su-crumbs a {
+  color: inherit;
   text-decoration: none;
 }
 
-.su-back:hover {
+.su-crumbs a:hover {
   color: #0a6f1f;
+}
+
+.su-crumbs i {
+  color: #9aa8a0;
+  font-size: 0.7rem;
+}
+
+.su-crumbs strong {
+  color: #0f172a;
 }
 
 .su-header h1 {
@@ -658,6 +689,55 @@ function flash(msg: string) {
   background: #fff;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
   overflow: hidden;
+}
+
+/* Tarjeta "+ Agregar trabajador": ocupa el hueco libre del grid. */
+.su-card--add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 200px;
+  padding: 24px;
+  border: 2px dashed #cfe3c6;
+  background: #f7fbf6;
+  box-shadow: none;
+  color: #1c7a2c;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.su-card--add:hover {
+  background: #eaf6e7;
+  border-color: #14b536;
+}
+
+.su-card-add__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eaf6e7;
+  color: #1c7a2c;
+  font-size: 1.2rem;
+}
+
+.su-card--add:hover .su-card-add__icon {
+  background: #fff;
+}
+
+.su-card--add strong {
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.su-card--add small {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #6b7a6f;
 }
 
 .su-card__head {
@@ -1025,10 +1105,37 @@ function flash(msg: string) {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
+  /* La tarjeta de base salarial pasa a ancho completo, debajo del título. */
   .su-header,
   .su-grid,
   .su-summary__body {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .sueldos {
+    gap: 18px;
+  }
+
+  /* Encabezado de sección: el botón "Agregar trabajador" baja y se estira. */
+  .su-section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .su-add {
+    justify-content: center;
+  }
+
+  /* Acciones del pie a ancho completo y apiladas. */
+  .su-actions__btns {
+    width: 100%;
+  }
+
+  .su-actions__btns .su-btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 

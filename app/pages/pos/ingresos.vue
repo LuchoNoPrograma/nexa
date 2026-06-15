@@ -11,7 +11,7 @@ useHead({
 
 type PeriodKey = 'today' | 'week' | 'month'
 type Tone = 'green' | 'blue' | 'gold' | 'orange'
-type PaymentMethod = 'Efectivo' | 'QR' | 'Tarjeta'
+type PaymentMethod = 'Efectivo' | 'QR'
 
 interface MetricCard {
   label: string
@@ -60,10 +60,10 @@ const todaySales: SaleRow[] = [
   { time: '10:30', product: 'Bowl Açaí', category: 'Bebidas', qty: 2, unitPrice: 35, total: 70, method: 'QR' },
   { time: '11:20', product: 'Batido Açaí', category: 'Bebidas', qty: 1, unitPrice: 16, total: 16, method: 'Efectivo' },
   { time: '12:10', product: 'Cono Soft', category: 'Helados', qty: 2, unitPrice: 7, total: 14, method: 'Efectivo' },
-  { time: '13:45', product: 'Café Frío', category: 'Bebidas', qty: 1, unitPrice: 12, total: 12, method: 'Tarjeta' },
+  { time: '13:45', product: 'Café Frío', category: 'Bebidas', qty: 1, unitPrice: 12, total: 12, method: 'QR' },
   { time: '15:30', product: 'Bowl Açaí', category: 'Bebidas', qty: 2, unitPrice: 35, total: 70, method: 'Efectivo' },
   { time: '16:15', product: 'Cono Soft', category: 'Helados', qty: 4, unitPrice: 7, total: 28, method: 'Efectivo' },
-  { time: '17:20', product: 'Batido Açaí', category: 'Bebidas', qty: 1, unitPrice: 16, total: 16, method: 'Tarjeta' },
+  { time: '17:20', product: 'Batido Açaí', category: 'Bebidas', qty: 1, unitPrice: 16, total: 16, method: 'QR' },
 ]
 
 const weekRows: TrendRow[] = [
@@ -203,7 +203,7 @@ const visibleSales = computed(() => {
 })
 
 const paymentSummary = computed(() => {
-  const methods: PaymentMethod[] = ['Efectivo', 'QR', 'Tarjeta']
+  const methods: PaymentMethod[] = ['Efectivo', 'QR']
   return methods.map((method) => {
     const total = todaySales
       .filter((row) => row.method === method)
@@ -224,7 +224,7 @@ const sideSummary = computed(() => {
       ...paymentSummary.value.map((item) => ({
         label: `Ventas con ${item.method}`,
         value: `${money(item.total)} (${item.percent}%)`,
-        icon: item.method === 'Efectivo' ? 'pi pi-money-bill' : item.method === 'QR' ? 'pi pi-qrcode' : 'pi pi-credit-card',
+        icon: item.method === 'Efectivo' ? 'pi pi-money-bill' : 'pi pi-qrcode',
         tone: item.method === 'Efectivo' ? 'green' : 'blue',
       })),
     ]

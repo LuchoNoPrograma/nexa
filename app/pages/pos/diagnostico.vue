@@ -169,6 +169,12 @@ async function rehacer() {
   }
 }
 
+// "Solo visualización": registramos la elección; el flujo de pago se conecta luego.
+const planElegido = ref('')
+function onElegirPlan(codigo: string) {
+  planElegido.value = codigo
+}
+
 function animarResultado() {
   const inicio = performance.now()
   const duracion = 1100
@@ -369,8 +375,13 @@ function areaScore(key: keyof AreaScores) {
       <!-- ====================== Resultado ====================== -->
       <section v-else-if="!cargando && vista === 'resultado' && resultado" key="resultado" class="diag-result">
         <header class="diag-result__title">
-          <h1>Tu diagnóstico está listo</h1>
-          <p>{{ resultado.mensajeNivel }}</p>
+          <div class="diag-result__title-text">
+            <h1>Tu diagnóstico está listo</h1>
+            <p>{{ resultado.mensajeNivel }}</p>
+          </div>
+          <NuxtLink to="/pos/inicio" class="diag-btn diag-btn--primary diag-result__start">
+            <i class="pi pi-rocket" /> Iniciar mi negocio
+          </NuxtLink>
         </header>
 
         <div class="diag-result__top">
@@ -484,6 +495,15 @@ function areaScore(key: keyof AreaScores) {
           </div>
         </div>
 
+        <section class="diag-card diag-planes">
+          <header class="diag-planes__head">
+            <span class="diag-kicker"><i class="pi pi-bolt" /> Elige tu plan</span>
+            <h3>Lleva tu negocio al siguiente nivel</h3>
+            <p>Estas herramientas te ayudarán a crecer más rápido. Empieza gratis y mejora cuando quieras.</p>
+          </header>
+          <PosPlanSelector cta-label="Comenzar ahora" @seleccionar="onElegirPlan" />
+        </section>
+
         <div class="diag-result__cta">
           <MascotJaguar variant="head" class="diag-result__cta-avatar" />
           <p>¡Listo! Usa estas recomendaciones para impulsar tu negocio paso a paso.</p>
@@ -499,7 +519,7 @@ function areaScore(key: keyof AreaScores) {
               <i v-else class="pi pi-refresh" /> Reiniciar diagnóstico
             </button>
             <NuxtLink to="/pos/inicio" class="diag-btn diag-btn--primary">
-              Ir a mi inicio <i class="pi pi-arrow-right" />
+              Iniciar mi negocion <i class="pi pi-arrow-right" />
             </NuxtLink>
           </div>
         </div>
@@ -944,9 +964,21 @@ function areaScore(key: keyof AreaScores) {
 }
 
 .diag-result__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  animation: diag-rise 0.5s ease both;
+}
+
+.diag-result__title-text {
   display: grid;
   gap: 5px;
-  animation: diag-rise 0.5s ease both;
+}
+
+.diag-result__start {
+  flex: 0 0 auto;
 }
 
 .diag-result__title h1 {
@@ -1258,6 +1290,37 @@ function areaScore(key: keyof AreaScores) {
   font-weight: 900;
 }
 
+/* ----- Bloque de planes dentro del resultado ----- */
+.diag-planes {
+  display: grid;
+  gap: 18px;
+  padding: clamp(18px, 2.4vw, 28px);
+  animation: diag-rise 0.5s ease both;
+}
+
+.diag-planes__head {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.diag-planes__head h3 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #102016;
+}
+
+.diag-planes__head p {
+  margin: 0;
+  color: #5d6b61;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .diag-result__cta {
   display: flex;
   flex-wrap: wrap;
@@ -1347,6 +1410,8 @@ function areaScore(key: keyof AreaScores) {
 }
 
 @media (max-width: 640px) {
+  .diag-result__title { flex-direction: column; align-items: stretch; }
+  .diag-result__start { width: 100%; }
   .diag-wizard__foot { grid-template-columns: 1fr 1fr; }
   .diag-jaguar-tip { grid-column: 1 / -1; order: -1; }
   .diag-areas__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

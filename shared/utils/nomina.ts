@@ -15,6 +15,17 @@ export const DIAS_SEMANA: DiaSemana[] = [
   { idx: 0, corto: 'DOM', largo: 'Domingo' },
 ]
 
+// Jornada laboral máxima legal en Bolivia: 8 h/día y 48 h/semana (Art. 46,
+// Ley General del Trabajo). Una jornada completa = 48 h/semana, y es la base
+// que hace que un trabajador a tiempo completo alcance el salario mínimo.
+export const JORNADA_SEMANAL_LEGAL = 48
+export const SEMANAS_POR_MES = 4.33
+
+// Horas mensuales de referencia = jornada legal completa proyectada al mes.
+// 48 h/semana × 4.33 semanas = 207.84 h/mes. Debe ser consistente con la base
+// semanal del cálculo (de lo contrario el costo nunca cuadra con el mínimo).
+export const HORAS_MENSUALES_REFERENCIA = Math.round(JORNADA_SEMANAL_LEGAL * SEMANAS_POR_MES * 100) / 100
+
 // Horas mostradas en la cuadrícula: 08:00 a 23:00 (16 filas). Cada celda = 1 hora.
 export const HORA_INICIO = 8
 export const HORA_FIN = 23
@@ -36,8 +47,8 @@ export type NominaConfig = {
 
 export const NOMINA_CONFIG_DEFAULT: NominaConfig = {
   salarioMinimoMensual: 3300,
-  horasMensualesReferencia: 240,
-  semanasPorMes: 4.33,
+  horasMensualesReferencia: HORAS_MENSUALES_REFERENCIA,
+  semanasPorMes: SEMANAS_POR_MES,
 }
 
 export function slotKey(dia: number, hora: number) {

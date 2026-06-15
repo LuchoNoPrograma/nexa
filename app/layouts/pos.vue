@@ -127,16 +127,16 @@ function onSidebarResizeKeydown(event: KeyboardEvent) {
 
 const sidebarItems = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
-  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico' },
-  { label: 'Marketing', icon: 'pi pi-megaphone' },
-  { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos' },
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
-  { label: 'Contenido', icon: 'pi pi-file' },
+  { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos' },
+  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing' },
   { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas' },
   { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos' },
-  { label: 'Personal', icon: 'pi pi-users', to: '/pos/sueldos' },
+  { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
   { label: 'Reportes', icon: 'pi pi-chart-bar' },
+  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes' },
+  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico' },
   { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
 ]
 

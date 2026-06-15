@@ -26,7 +26,6 @@ const firstName = computed(() => {
 // Totales de caja del día. Datos demo en 0 (aún no hay módulo de ventas real),
 // con las tres monedas que maneja un negocio de la zona fronteriza.
 const cashTotals = [
-  { symbol: '$', amount: '0.00', name: 'Dólares (USD)' },
   { symbol: 'Bs', amount: '0.00', name: 'Bolivianos (BOB)' },
   { symbol: 'R$', amount: '0.00', name: 'Reales (BRL)' },
 ]
@@ -35,15 +34,15 @@ const cashTotals = [
 const quickActions: { label: string; icon: string; to?: string }[] = [
   { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
-  { label: 'Clientes', icon: 'pi pi-users' },
+  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
   { label: 'Proveedores', icon: 'pi pi-truck' },
 ]
 
 // Sugerencias en forma de pregunta: lenguaje cercano para gente de 20 a 60.
 const helpCards: { title: string; desc: string; icon: string; tone: string; action: string; to?: string }[] = [
   { title: '¿Estoy ganando o perdiendo?', desc: 'Revisa tus ingresos y gastos del mes.', icon: 'pi pi-chart-line', tone: 'green', action: 'Ver finanzas', to: '/pos/finanzas' },
-  { title: '¿Cómo consigo más clientes?', desc: 'Recibe ideas para atraer y fidelizar.', icon: 'pi pi-users', tone: 'amber', action: 'Empezar', to: '/pos/diagnostico' },
-  { title: '¿Cómo hago mis publicaciones?', desc: 'Crea contenido fácil para tus redes.', icon: 'pi pi-megaphone', tone: 'slate', action: 'Próximamente' },
+  { title: '¿Cómo vendo más?', desc: 'Recibe ideas para atraer compradores.', icon: 'pi pi-users', tone: 'amber', action: 'Empezar', to: '/pos/diagnostico' },
+  { title: '¿Qué publico en mis redes?', desc: 'Haru te crea publicaciones listas para compartir.', icon: 'pi pi-megaphone', tone: 'green', action: 'Crear publicación', to: '/pos/marketing' },
 ]
 
 function go(to?: string) {
@@ -119,11 +118,11 @@ function go(to?: string) {
       </div>
     </section>
 
-    <!-- Naru: asistente IA -->
+    <!-- Haru: asistente IA -->
     <section class="naru">
       <div class="naru__copy">
         <span class="naru__kicker"><i class="pi pi-sparkles" aria-hidden="true" />El asistente IA de NEXA</span>
-        <h2>Soy Naru, pregúntame lo que quieras</h2>
+        <h2>Soy Haru, pregúntame lo que quieras</h2>
         <p>Ideas de venta, precios, promociones o el siguiente paso para tu negocio.</p>
       </div>
       <img src="/haru.png" alt="" aria-hidden="true" class="naru__mascot">
@@ -211,7 +210,7 @@ function go(to?: string) {
 
 .cash__totals {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -429,7 +428,7 @@ function go(to?: string) {
   color: #8a93a0;
 }
 
-/* --- Naru --- */
+/* --- Haru --- */
 .naru {
   position: relative;
   display: flex;

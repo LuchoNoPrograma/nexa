@@ -127,6 +127,8 @@ async function seedLocalData() {
   if (seedDemoProducts) {
     await seedProducts(storeId)
   }
+
+  await seedInitialCashData(storeId, userId)
 }
 
 async function assignRole(userId: string, roleCode: string, storeId: string | null = null) {
@@ -170,7 +172,7 @@ async function seedDefaultEmployee(storeId: string) {
   await pool.query(
     `
       insert into nomina_config (tienda_id, salario_minimo_mensual, horas_mensuales_referencia, semanas_por_mes)
-      values ($1, 3300, 240, 4.33)
+      values ($1, 3300, 207.84, 4.33)
       on conflict (tienda_id) do update
       set
         salario_minimo_mensual = coalesce(nomina_config.salario_minimo_mensual, excluded.salario_minimo_mensual),
@@ -221,4 +223,218 @@ async function seedDefaultEmployee(storeId: string) {
     `,
     [storeId],
   )
+}
+
+async function seedInitialCashData(storeId: string, userId: string) {
+  const client = await pool.connect()
+
+  try {
+    await client.query('begin')
+
+    const openSessionResult = await client.query<{ id: string }>(
+      `
+        select id
+        from caja_sesion
+        where tienda_id = $1
+          and estado = 'abierta'
+        order by abierta_at desc
+        limit 1
+      `,
+      [storeId],
+    )
+
+    let cashSessionId = openSessionResult.rows[0]?.id
+
+    if (!cashSessionId) {
+      const createdSession = await client.query<{ id: string }>(
+        `
+          insert into caja_sesion (tienda_id, usuario_id, saldo_inicial, saldo_esperado, notas)
+          values ($1, $2, 200, 200, 'Caja abierta para ventas del turno')
+          returning id
+        `,
+        [storeId, userId],
+      )
+
+      cashSessionId = createdSession.rows[0].id
+    }
+
+    const seededResult = await client.query(
+      `
+        select 1
+        from caja_movimiento
+        where tienda_id = $1
+          and caja_sesion_id = $2
+          and concepto in ('Venta C1 09:15', 'Venta C2 09:40')
+        limit 1
+      `,
+      [storeId, cashSessionId],
+    )
+
+    if (seededResult.rowCount) {
+      await client.query('commit')
+      return
+    }
+
+    type SeedProduct = {
+      id: string
+      name: string
+      kind: string
+      cost: number
+      price: number
+      stock: number
+    }
+
+    const productResult = await client.query<SeedProduct>(
+      `
+        select
+          id,
+          nombre as name,
+          tipo as kind,
+          costo_unitario::float as cost,
+          precio_venta::float as price,
+          stock_actual::float as stock
+        from producto
+        where tienda_id = $1
+          and visible_pos = true
+          and activo = true
+        order by orden_catalogo asc, nombre asc
+        limit 5
+      `,
+      [storeId],
+    )
+
+    if (!productResult.rowCount) {
+      await client.query('commit')
+      return
+    }
+
+    const firstProduct = productResult.rows[0]!
+
+    async function insertInitialSale(cashCode: string, saleTime: string, paymentMethod: 'efectivo' | 'qr', items: Array<{ product: SeedProduct; quantity: number }>) {
+      const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+      const saleNumber = `${cashCode}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
+      const cashSaleCode = `${cashCode} ${saleTime}`
+      const saleResult = await client.query<{ id: string }>(
+        `
+          insert into venta (
+            tienda_id,
+            usuario_id,
+            caja_sesion_id,
+            numero,
+            canal,
+            estado,
+            subtotal,
+            descuento,
+            total,
+            fecha,
+            notas
+          )
+          values ($1, $2, $3, $4, 'pos', 'pagada', $5, 0, $5, date_trunc('day', now()) + $6::time, 'Venta de mostrador')
+          returning id
+        `,
+        [storeId, userId, cashSessionId, saleNumber, subtotal, saleTime],
+      )
+
+      const saleId = saleResult.rows[0].id
+
+      for (const item of items) {
+        const lineSubtotal = item.product.price * item.quantity
+
+        await client.query(
+          `
+            insert into venta_item (
+              venta_id,
+              producto_id,
+              nombre_producto,
+              tipo_producto,
+              cantidad,
+              costo_unitario,
+              precio_unitario,
+              subtotal
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8)
+          `,
+          [saleId, item.product.id, item.product.name, item.product.kind, item.quantity, item.product.cost, item.product.price, lineSubtotal],
+        )
+      }
+
+      const paymentResult = await client.query<{ id: string }>(
+        `
+          insert into pago (
+            tienda_id,
+            venta_id,
+            caja_sesion_id,
+            usuario_id,
+            tipo,
+            metodo,
+            estado,
+            monto,
+            fecha,
+            notas
+          )
+          values ($1, $2, $3, $4, 'ingreso', $5, 'confirmado', $6, date_trunc('day', now()) + $7::time, $8)
+          returning id
+        `,
+        [storeId, saleId, cashSessionId, userId, paymentMethod, subtotal, saleTime, `Cobro ${cashSaleCode}`],
+      )
+
+      await client.query(
+        `
+          insert into caja_movimiento (
+            tienda_id,
+            caja_sesion_id,
+            pago_id,
+            venta_id,
+            usuario_id,
+            tipo,
+            categoria,
+            concepto,
+            metodo,
+            monto,
+            estado,
+            fecha,
+            notas
+          )
+          values ($1, $2, $3, $4, $5, 'ingreso', 'venta', $6, $7, $8, 'pendiente', date_trunc('day', now()) + $9::time, 'Listo para revisar al cerrar caja')
+        `,
+        [storeId, cashSessionId, paymentResult.rows[0].id, saleId, userId, `Venta ${cashSaleCode}`, paymentMethod, subtotal, saleTime],
+      )
+    }
+
+    await insertInitialSale('C1', '09:15', 'efectivo', [
+      { product: firstProduct, quantity: 2 },
+      { product: productResult.rows[1] ?? firstProduct, quantity: 1 },
+    ])
+
+    await insertInitialSale('C2', '09:40', 'qr', [
+      { product: productResult.rows[2] ?? firstProduct, quantity: 3 },
+    ])
+
+    await client.query(
+      `
+        insert into caja_movimiento (
+          tienda_id,
+          caja_sesion_id,
+          usuario_id,
+          tipo,
+          categoria,
+          concepto,
+          metodo,
+          monto,
+          estado,
+          fecha,
+          notas
+        )
+        values ($1, $2, $3, 'egreso', 'manual', 'Compra de bolsas', 'efectivo', 45, 'pendiente', date_trunc('day', now()) + '10:25'::time, 'Salida registrada en el turno')
+      `,
+      [storeId, cashSessionId, userId],
+    )
+
+    await client.query('commit')
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 }

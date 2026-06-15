@@ -43,6 +43,19 @@
   --night: #04200d;
   --night-2: #062c11;
 
+  /* Superficie de acento suave (tarjetas POS: "Idea de video", avisos)
+     verde NEXA poco saturado, con texto oscuro para buena legibilidad */
+  --brand-soft: #f1f8ed;          /* fondo de tarjeta */
+  --brand-soft-tint: #eaf6e7;     /* relleno de íconos pequeños / hover */
+  --brand-soft-2: #d8efd0;        /* relleno de íconos */
+  --brand-soft-line: #cfe3c6;     /* borde */
+  --brand-soft-divider: #c7e0bb;  /* divisor punteado */
+  --brand-deep: #155e23;          /* títulos sobre verde claro */
+  --brand-deepest: #14491f;       /* énfasis */
+  --brand-text-soft: #41544a;     /* texto secundario legible */
+  --brand-accent: #1c7a2c;        /* íconos / acentos */
+  --brand-fill: #16a534;          /* relleno sólido (números, checks) */
+
   color: var(--ink);
   font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   background: #ffffff;

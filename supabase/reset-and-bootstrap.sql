@@ -523,7 +523,7 @@ create table if not exists empleado (
 create table if not exists nomina_config (
   tienda_id uuid primary key references tienda(id) on delete cascade,
   salario_minimo_mensual numeric(12,2) not null default 3300,
-  horas_mensuales_referencia numeric(6,2) not null default 240,
+  horas_mensuales_referencia numeric(6,2) not null default 207.84,
   semanas_por_mes numeric(4,2) not null default 4.33,
   updated_at timestamptz not null default now(),
   check (salario_minimo_mensual >= 0),
@@ -630,6 +630,27 @@ create table if not exists contacto_mensaje (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists marketing_publicacion (
+  id uuid primary key default gen_random_uuid(),
+  tienda_id uuid not null references tienda(id) on delete cascade,
+  usuario_id uuid references usuario(id) on delete set null,
+  producto_id uuid references producto(id) on delete set null,
+  producto_nombre text,
+  titulo text not null,
+  texto text not null,
+  hashtags jsonb not null default '[]'::jsonb,
+  idea_video text,
+  mejor_hora text,
+  audiencia text,
+  objetivo text,
+  impacto smallint not null default 4 check (impacto between 1 and 5),
+  imagen_url text,
+  estado text not null default 'sugerida' check (estado in ('sugerida', 'publicada', 'descartada')),
+  publicado_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists sesion (
   id uuid primary key default gen_random_uuid(),
   usuario_id uuid not null references usuario(id) on delete cascade,
@@ -681,6 +702,7 @@ create index if not exists haru_mensaje_conversacion_idx on haru_mensaje (conver
 create index if not exists haru_chat_config_tienda_idx on haru_chat_config (tienda_id, activo);
 create index if not exists contacto_mensaje_estado_idx on contacto_mensaje (estado, created_at desc);
 create index if not exists contacto_mensaje_created_at_idx on contacto_mensaje (created_at desc);
+create index if not exists marketing_publicacion_tienda_idx on marketing_publicacion (tienda_id, estado, created_at desc);
 create index if not exists sesion_token_hash_idx on sesion (token_hash);
 create index if not exists sesion_usuario_idx on sesion (usuario_id, expires_at desc);
 

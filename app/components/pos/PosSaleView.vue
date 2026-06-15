@@ -22,7 +22,7 @@ type CartFlyFeedback = {
 }
 
 type SaleMode = 'venta' | 'cotizacion'
-type PaymentMethod = 'efectivo' | 'qr' | 'tarjeta'
+type PaymentMethod = 'efectivo' | 'qr'
 type DiscountMode = 'percent' | 'amount'
 type ReceiptPaymentLine = {
   label: string
@@ -32,7 +32,6 @@ type SaleReceipt = {
   number: string
   date: Date
   mode: SaleMode
-  customer: string
   seller: string
   items: CartLine[]
   subtotal: number
@@ -43,6 +42,7 @@ type SaleReceipt = {
 }
 
 const session = usePosSession()
+const cashRegister = usePosCashRegister()
 const search = ref('')
 const discount = ref(0)
 const catalogView = ref<'grid' | 'table'>('grid')
@@ -60,7 +60,6 @@ const primaryPaymentAmount = ref<number | null>(null)
 const secondPaymentAmount = ref<number | null>(null)
 const includeShipping = ref(false)
 const receivedAmount = ref<number | null>(null)
-const customerSearch = ref('')
 const checkoutScroll = ref<HTMLElement | null>(null)
 const cartPanelEl = ref<HTMLElement | null>(null)
 const configuredDiscountSelected = ref(false)
@@ -71,6 +70,7 @@ const appliedDiscountLabel = ref('')
 const lastReceipt = ref<SaleReceipt | null>(null)
 const products = ref<Product[]>([])
 const cart = ref<CartLine[]>([])
+const saleSaveError = ref('')
 const recentAddedProductId = ref('')
 const cartLineFeedback = ref<{ id: number, productId: string, label: string } | null>(null)
 const cartPulse = ref(false)
@@ -82,8 +82,7 @@ let cartLineFeedbackId = 0
 let cartFlyId = 0
 const paymentOptions: Array<{ id: PaymentMethod, icon: string, label: string, detail: string }> = [
   { id: 'efectivo', icon: 'pi pi-money-bill', label: 'Efectivo', detail: 'Bolivianos en mano' },
-  { id: 'qr', icon: 'pi pi-mobile', label: 'QR / Transferencia', detail: 'Mostrá el QR al cliente' },
-  { id: 'tarjeta', icon: 'pi pi-credit-card', label: 'Tarjeta', detail: 'Débito o crédito' },
+  { id: 'qr', icon: 'pi pi-mobile', label: 'QR / Transferencia', detail: 'Mostrar QR de pago' },
 ]
 
 const filteredProducts = computed(() => {
@@ -98,6 +97,15 @@ const filteredProducts = computed(() => {
 const subtotal = computed(() => cart.value.reduce((sum, line) => sum + line.price * line.quantity, 0))
 const total = computed(() => Math.max(subtotal.value - discount.value, 0))
 const productCount = computed(() => cart.value.reduce((sum, line) => sum + line.quantity, 0))
+const isCashClosed = computed(() => cashRegister.cashStatus.value === 'cerrada')
+const canCharge = computed(() => cart.value.length > 0 && !isCashClosed.value && !cashRegister.isLoading.value)
+const chargeButtonLabel = computed(() => {
+  if (isCashClosed.value) {
+    return 'Abre caja para vender'
+  }
+
+  return `Cobrar Bs ${money(total.value)}`
+})
 const secondPaymentOptions = computed(() => paymentOptions.filter((option) => option.id !== paymentMethod.value))
 const splitPaymentTotal = computed(() => Math.max((primaryPaymentAmount.value ?? 0) + (secondPaymentAmount.value ?? 0), 0))
 const splitPaymentInvalid = computed(() => splitPayment.value && ((primaryPaymentAmount.value ?? 0) <= 0 || (secondPaymentAmount.value ?? 0) <= 0))
@@ -144,7 +152,16 @@ const discountPreviewAmount = computed(() => {
   return 0
 })
 const discountPreviewTotal = computed(() => Math.max(subtotal.value - discountPreviewAmount.value, 0))
-onMounted(loadProducts)
+onMounted(async () => {
+  if (import.meta.client && window.matchMedia('(max-width: 760px)').matches) {
+    catalogView.value = 'table'
+  }
+
+  await Promise.all([
+    loadProducts(),
+    cashRegister.loadCashData().catch(() => null),
+  ])
+})
 
 onBeforeUnmount(() => {
   if (cartPulseTimer) {
@@ -228,7 +245,7 @@ function clearSale() {
 }
 
 function chargeSale() {
-  if (!cart.value.length) {
+  if (!canCharge.value) {
     return
   }
 
@@ -238,12 +255,28 @@ function chargeSale() {
   nextTick(() => checkoutScroll.value?.scrollTo({ top: 0 }))
 }
 
-function confirmCharge() {
+async function confirmCharge() {
   if (checkoutInvalid.value) {
     return
   }
 
-  lastReceipt.value = buildSaleReceipt()
+  let receipt = buildSaleReceipt()
+  saleSaveError.value = ''
+
+  if (receipt.mode === 'venta') {
+    try {
+      const saleResult = await cashRegister.registerSale(receipt)
+      receipt = {
+        ...receipt,
+        number: saleResult.saleNumber ?? receipt.number,
+      }
+    } catch {
+      saleSaveError.value = 'No se pudo guardar la venta. Revisa la conexión e intenta nuevamente.'
+      return
+    }
+  }
+
+  lastReceipt.value = receipt
   checkoutOpen.value = false
   clearSale()
   receiptOpen.value = true
@@ -256,7 +289,6 @@ function resetCheckout() {
   clearSplitPayment()
   includeShipping.value = false
   receivedAmount.value = null
-  customerSearch.value = ''
 }
 
 function resetSplitPayment() {
@@ -298,8 +330,7 @@ function buildSaleReceipt(): SaleReceipt {
     number: `NV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
     date: new Date(),
     mode: saleMode.value,
-    customer: customerSearch.value.trim() || 'Cliente general',
-    seller: 'Dueño Demo',
+    seller: session.value?.name || 'Responsable de caja',
     items: cart.value.map((line) => ({ ...line })),
     subtotal: subtotal.value,
     discount: discount.value,
@@ -412,18 +443,17 @@ function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false) {
 </head>
 <body>
   <main class="ticket">
-    <header>
-      <h1>MI TIENDA DEMO</h1>
-      <p>Av. Principal #123, Zona Central</p>
-      <p>Tel. 70000000</p>
-    </header>
+        <header>
+          <h1>${escapeHtml(storeReceiptName())}</h1>
+          <p>Av. Principal #123, Zona Central</p>
+          <p>Tel. 70000000</p>
+        </header>
     <section class="doc">
       <span>${receipt.mode === 'venta' ? 'Nota de venta' : 'Cotización'}</span>
       <strong>${escapeHtml(receipt.number)}</strong>
       <small>${receiptDate(receipt.date)}</small>
     </section>
     <section class="meta">
-      <div><span>Cliente</span><b>${escapeHtml(receipt.customer)}</b></div>
       <div><span>Atendió</span><b>${escapeHtml(receipt.seller)}</b></div>
     </section>
     <div class="section-title">Detalle</div>
@@ -456,6 +486,10 @@ function escapeHtml(value: string) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
+}
+
+function storeReceiptName() {
+  return session.value?.store || 'Mi tienda'
 }
 
 function openDiscountDialog() {
@@ -555,10 +589,6 @@ function productModeLabel(product: Product) {
 function paymentLabel(method: PaymentMethod) {
   if (method === 'qr') {
     return 'QR / Transferencia'
-  }
-
-  if (method === 'tarjeta') {
-    return 'Tarjeta'
   }
 
   return 'Efectivo'
@@ -731,7 +761,16 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             <span></span>
           </div>
 
-          <article v-for="product in filteredProducts" :key="product.id" class="product-row">
+          <article
+            v-for="product in filteredProducts"
+            :key="product.id"
+            role="button"
+            tabindex="0"
+            class="product-row"
+            :class="{ 'is-recently-added': recentAddedProductId === product.id }"
+            @click="addProduct(product, $event)"
+            @keydown="handleProductCardKeydown($event, product)"
+          >
             <span class="product-row__icon" :class="{ 'is-combo': product.kind === 'combo' }">
               <i :class="product.kind === 'combo' ? 'pi pi-clone' : 'pi pi-cube'" aria-hidden="true" />
             </span>
@@ -742,7 +781,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
                 <span v-if="product.variablePrice" class="product-row__tag">Var</span>
                 <span v-if="product.kind === 'combo'" class="product-row__tag is-combo">Combo</span>
               </strong>
-              <button type="button" @click="openProductInfo(product)">Ver info</button>
+              <button type="button" @click.stop="openProductInfo(product)">Ver info</button>
             </div>
 
             <span class="product-row__price">Bs <b>{{ money(product.price) }}</b></span>
@@ -754,7 +793,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
               icon="pi pi-plus"
               label="Agregar"
               size="small"
-              @click="addProduct(product, $event)"
+              @click.stop="addProduct(product, $event)"
             />
           </article>
         </section>
@@ -875,11 +914,15 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
           <span>Descuento aplicado (- Bs {{ money(discount) }})</span>
         </div>
 
+        <Message v-if="isCashClosed" severity="warn" size="small" icon="pi pi-lock">
+          La caja está cerrada. Abre un turno para cobrar.
+        </Message>
+
         <Button
           type="button"
           class="charge-button"
-          :disabled="!cart.length"
-          :label="`Cobrar Bs ${money(total)}`"
+          :disabled="!canCharge"
+          :label="chargeButtonLabel"
           @click="chargeSale"
         />
       </footer>
@@ -1019,7 +1062,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         <header class="checkout-header">
           <div>
             <span>Cobro de venta</span>
-            <h3>Cobrar al cliente</h3>
+            <h3>Cobrar venta</h3>
           </div>
 
           <button type="button" aria-label="Cerrar cobro" @click="checkoutOpen = false">
@@ -1039,7 +1082,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             </span>
             <span>
               <strong>Nota de Venta</strong>
-              <small>Cobra y descuenta stock</small>
+              <small>Queda lista para cerrar caja</small>
             </span>
           </button>
 
@@ -1064,7 +1107,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             <span>Total a cobrar</span>
             <div class="checkout-total-card__chips">
               <Badge :value="saleMode === 'venta' ? 'Venta' : 'Cotización'" severity="success" />
-              <Badge value="Consumidor final" severity="secondary" />
             </div>
           </div>
           <strong><span>Bs</span>{{ money(total) }}</strong>
@@ -1080,6 +1122,14 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             <small>{{ appliedDiscountLabel || 'Descuento manual' }} <b>- Bs {{ money(discount) }}</b></small>
           </section>
         </section>
+
+        <Message v-if="saleMode === 'venta'" severity="info" size="small" icon="pi pi-wallet" class="cash-close-note">
+          Esta venta quedará guardada en el turno. En Caja podrás revisar el dinero esperado y cerrar cuando termine la atención.
+        </Message>
+
+        <Message v-if="saleSaveError" severity="error" size="small" icon="pi pi-exclamation-triangle">
+          {{ saleSaveError }}
+        </Message>
 
         <div class="checkout-grid">
           <section class="checkout-box">
@@ -1211,20 +1261,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
               </div>
             </label>
 
-            <section class="customer-box">
-              <header>
-                <i class="pi pi-user" aria-hidden="true" />
-                <strong>Cliente</strong>
-              </header>
-              <div class="customer-box__search">
-                <IconField>
-                  <InputIcon class="pi pi-search" />
-                  <InputText v-model="customerSearch" placeholder="Buscar cliente..." />
-                </IconField>
-                <Button type="button" icon="pi pi-plus" label="Nuevo" outlined size="small" />
-              </div>
-            </section>
-
             <label class="checkout-toggle is-shipping">
               <ToggleSwitch v-model="includeShipping" />
               <i class="pi pi-truck" aria-hidden="true" />
@@ -1238,7 +1274,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         <Button type="button" label="Cancelar" outlined severity="secondary" @click="checkoutOpen = false" />
         <Button
           type="button"
-          :label="saleMode === 'venta' ? 'Confirmar cobro' : 'Guardar cotización'"
+          :label="saleMode === 'venta' ? 'Cobrar y guardar' : 'Guardar cotización'"
           :disabled="checkoutInvalid"
           @click="confirmCharge"
         />
@@ -1262,7 +1298,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         <header class="receipt-actions__header">
           <span>
             <i class="pi pi-check" aria-hidden="true" />
-            {{ lastReceipt.mode === 'venta' ? 'Venta registrada' : 'Cotización guardada' }}
+            {{ lastReceipt.mode === 'venta' ? 'Venta lista para caja' : 'Cotización guardada' }}
           </span>
         </header>
 
@@ -1281,7 +1317,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
       <article class="thermal-ticket" aria-label="Comprobante de venta">
         <header>
-          <h3>MI TIENDA DEMO</h3>
+          <h3>{{ storeReceiptName() }}</h3>
           <p>Av. Principal #123, Zona Central</p>
           <p>Tel. 70000000</p>
         </header>
@@ -1293,10 +1329,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         </section>
 
         <section class="thermal-ticket__meta">
-          <div>
-            <span>Cliente</span>
-            <strong>{{ lastReceipt.customer }}</strong>
-          </div>
           <div>
             <span>Atendió</span>
             <strong>{{ lastReceipt.seller }}</strong>
@@ -3094,12 +3126,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   --payment-tint: rgba(59, 130, 246, 0.1);
 }
 
-.payment-option.is-tarjeta {
-  --payment-color: #8b5cf6;
-  --payment-strong: #6d42e6;
-  --payment-tint: rgba(139, 92, 246, 0.1);
-}
-
 .payment-option.is-active {
   border: 2px solid var(--payment-color);
   background: var(--payment-tint);
@@ -3253,12 +3279,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   --payment-color: #3b82f6;
   --payment-strong: #1d4ed8;
   --payment-tint: rgba(59, 130, 246, 0.1);
-}
-
-.second-payment-option.is-tarjeta {
-  --payment-color: #8b5cf6;
-  --payment-strong: #6d42e6;
-  --payment-tint: rgba(139, 92, 246, 0.1);
 }
 
 .second-payment-option.is-active {
@@ -3432,44 +3452,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .cash-status.is-change > i {
   background: var(--primary-500);
-}
-
-.customer-box {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: #f8fafc;
-}
-
-.customer-box header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #0f172a;
-  font-size: 0.92rem;
-  font-weight: 900;
-}
-
-.customer-box header i {
-  color: #64748b;
-}
-
-.customer-box__search {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 7px;
-  align-items: center;
-}
-
-.customer-box__search :deep(.p-iconfield),
-.customer-box__search :deep(.p-inputtext) {
-  width: 100%;
-}
-
-.customer-box__search :deep(.p-inputtext) {
-  min-height: 40px;
 }
 
 .checkout-footer {
@@ -3862,16 +3844,59 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   }
 
   .product-grid {
-    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
 
   .catalog-scroll.is-table {
-    overflow-x: auto;
+    overflow-x: hidden;
   }
 
-  .product-table__head,
+  .product-table__head {
+    display: none;
+  }
+
   .product-row {
-    min-width: 620px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px;
+  }
+
+  .product-row__icon {
+    flex: 0 0 auto;
+  }
+
+  .product-row__info {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .product-row__info strong {
+    white-space: normal;
+  }
+
+  .product-row__price {
+    flex: 0 0 auto;
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .product-row__stock {
+    display: none;
+  }
+
+  .product-row__add {
+    display: none;
+  }
+
+  .product-row {
+    cursor: pointer;
+  }
+
+  .product-row.is-recently-added {
+    background: var(--primary-50);
   }
 
   .product-info__body {
@@ -3922,10 +3947,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 @media (max-width: 440px) {
-  .product-grid {
-    grid-template-columns: 1fr;
-  }
-
   .cart-line__actions {
     grid-template-columns: minmax(0, 1fr) auto 32px;
   }
@@ -3966,7 +3987,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
     white-space: normal;
   }
 
-  .customer-box__search,
   .checkout-footer {
     grid-template-columns: 1fr;
   }
