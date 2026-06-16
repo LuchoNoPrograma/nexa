@@ -22,6 +22,7 @@ const socials = [
 ]
 
 const scrolled = ref(false)
+const mobileOpen = ref(false)
 
 function onScroll() {
   scrolled.value = window.scrollY > 20
@@ -38,6 +39,10 @@ function isMainActive(item: { to: string, exact?: boolean }) {
 
   return route.fullPath === item.to
 }
+
+watch(() => route.fullPath, () => {
+  mobileOpen.value = false
+})
 
 onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
@@ -105,20 +110,101 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
         <div class="flex items-center gap-3">
           <NuxtLink
             to="/login"
-            class="hidden text-sm font-semibold text-[#1f2d23] hover:text-primary-600 sm:inline-flex sm:items-center sm:gap-2"
+            class="hidden text-sm font-semibold text-[#1f2d23] hover:text-primary-600 lg:inline-flex lg:items-center lg:gap-2"
           >
             <i class="pi pi-sign-in" />Iniciar sesión
           </NuxtLink>
+          <NuxtLink to="/login" class="hidden lg:inline-flex">
+            <Button
+              label="Comenzar gratis"
+              icon="pi pi-arrow-right"
+              icon-pos="right"
+              class="btn-shine !rounded-full !border-0 !bg-primary-500 !px-5 !py-2.5 !font-bold !text-white"
+            />
+          </NuxtLink>
+          <Button
+            icon="pi pi-bars"
+            text
+            rounded
+            class="!text-primary-700 lg:!hidden"
+            aria-label="Abrir menú"
+            @click="mobileOpen = true"
+          />
+        </div>
+      </div>
+    </div>
+
+    <Drawer
+      v-model:visible="mobileOpen"
+      position="right"
+      class="public-mobile-drawer !w-[min(86vw,360px)]"
+      :pt="{ root: { class: 'lg:!hidden' } }"
+    >
+      <template #header>
+        <NuxtLink to="/" class="flex items-center gap-2.5" aria-label="NEXA inicio" @click="mobileOpen = false">
+          <img src="/nexa-logo-color.webp" alt="" class="h-9 w-9 object-contain" aria-hidden="true">
+          <span class="font-display text-[1.25rem] font-extrabold tracking-tight text-[#1f2d23]">NEXA</span>
+        </NuxtLink>
+      </template>
+
+      <nav class="flex flex-col gap-1" aria-label="Navegación principal">
+        <NuxtLink
+          v-for="item in mainMenu"
+          :key="item.label"
+          :to="item.to"
+          class="mobile-nav-link"
+          :class="{ 'is-active': isMainActive(item) }"
+          @click="mobileOpen = false"
+        >
+          {{ item.label }}
+        </NuxtLink>
+
+        <span class="mt-4 mb-1 px-3 text-[0.7rem] font-bold uppercase tracking-[0.12em] text-[#9aa89e]">
+          Institucional
+        </span>
+        <NuxtLink
+          v-for="item in topMenu"
+          :key="item.label"
+          :to="item.to"
+          class="mobile-nav-link"
+          :class="{ 'is-active': isTopActive(item.to) }"
+          @click="mobileOpen = false"
+        >
+          {{ item.label }}
+        </NuxtLink>
+      </nav>
+
+      <div class="mt-6 flex flex-col gap-3 border-t border-[#eef1ee] pt-6">
+        <NuxtLink to="/login" class="block" @click="mobileOpen = false">
+          <Button
+            label="Iniciar sesión"
+            icon="pi pi-sign-in"
+            outlined
+            class="!w-full !justify-center !rounded-full !border-primary-500 !py-2.5 !font-bold !text-primary-700"
+          />
+        </NuxtLink>
+        <NuxtLink to="/login" class="block" @click="mobileOpen = false">
           <Button
             label="Comenzar gratis"
             icon="pi pi-arrow-right"
             icon-pos="right"
-            class="btn-shine !rounded-full !border-0 !bg-primary-500 !px-5 !py-2.5 !font-bold !text-white"
+            class="btn-shine !w-full !justify-center !rounded-full !border-0 !bg-primary-500 !py-2.5 !font-bold !text-white"
           />
-          <Button icon="pi pi-bars" text rounded class="!text-primary-700 lg:!hidden" aria-label="Abrir menú" />
-        </div>
+        </NuxtLink>
       </div>
-    </div>
+
+      <div class="mt-6 flex items-center gap-2 border-t border-[#eef1ee] pt-6">
+        <a
+          v-for="social in socials"
+          :key="social.label"
+          :href="social.href"
+          class="grid h-10 w-10 place-items-center rounded-full bg-[#f3f6f3] text-primary-700 transition hover:bg-primary-50"
+          :aria-label="social.label"
+        >
+          <i :class="social.icon" />
+        </a>
+      </div>
+    </Drawer>
   </header>
 </template>
 
@@ -221,6 +307,28 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
   height: 42px;
   flex: 0 0 auto;
   object-fit: contain;
+}
+
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0.7rem 0.75rem;
+  border-radius: 12px;
+  color: #1f2d23;
+  font-size: 0.95rem;
+  font-weight: 700;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.mobile-nav-link:hover {
+  background: #f3f6f3;
+}
+
+.mobile-nav-link.is-active {
+  background: var(--p-primary-50, #ecfdf3);
+  color: var(--p-primary-700, #1f7a3d);
 }
 
 @media (max-width: 640px) {

@@ -181,6 +181,13 @@ const storeName = computed(() => session.value?.store ?? 'Tu negocio')
 const storeInitial = computed(() => storeName.value.trim().charAt(0).toUpperCase() || 'N')
 const storeUser = computed(() => storeName.value.toLowerCase().replace(/\s+/g, '').slice(0, 20) || 'tunegocio')
 
+// Contacto para pedir marketing personalizado (por ahora va a un WhatsApp fijo).
+const WHATSAPP_NUMERO = '59171117696'
+const whatsappUrl = computed(() => {
+  const mensaje = `Hola, quiero marketing personalizado para ${storeName.value}.`
+  return `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(mensaje)}`
+})
+
 // Red activa: define qué mockup de preview se muestra (y a dónde se publica).
 const redActivaId = ref<RedSocial['id']>('instagram')
 const redActiva = computed(() => REDES_SOCIALES.find((r) => r.id === redActivaId.value) ?? REDES_SOCIALES[0]!)
@@ -410,7 +417,7 @@ async function publicarEn(red: RedSocial) {
               </header>
               <div class="pv__media pv__media--square">
                 <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                <div v-else class="pv__ph"><i class="pi pi-image" aria-hidden="true" /></div>
+                <div v-else class="pv__ph" />
               </div>
               <div class="ig__acts">
                 <i class="pi pi-heart" aria-hidden="true" />
@@ -434,7 +441,7 @@ async function publicarEn(red: RedSocial) {
               <p class="fb__text">{{ textoVista }}</p>
               <div class="pv__media pv__media--wide">
                 <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                <div v-else class="pv__ph"><i class="pi pi-image" aria-hidden="true" /></div>
+                <div v-else class="pv__ph" />
               </div>
               <div class="fb__acts">
                 <span><i class="pi pi-thumbs-up" aria-hidden="true" />Me gusta</span>
@@ -447,7 +454,7 @@ async function publicarEn(red: RedSocial) {
             <article v-else-if="redActivaId === 'tiktok'" class="tt">
               <div class="pv__media pv__media--tall">
                 <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                <div v-else class="pv__ph pv__ph--dark"><i class="pi pi-image" aria-hidden="true" /></div>
+                <div v-else class="pv__ph pv__ph--dark" />
               </div>
               <div class="tt__rail">
                 <span class="tt__ava">{{ storeInitial }}</span>
@@ -468,7 +475,7 @@ async function publicarEn(red: RedSocial) {
               <div class="wa__bubble">
                 <div class="pv__media pv__media--square wa__media">
                   <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                  <div v-else class="pv__ph"><i class="pi pi-image" aria-hidden="true" /></div>
+                  <div v-else class="pv__ph" />
                 </div>
                 <p class="wa__text">{{ textoVista }}</p>
                 <span class="wa__time">{{ post.mejorHora || '11:30' }} <i class="pi pi-check" aria-hidden="true" /></span>
@@ -500,6 +507,8 @@ async function publicarEn(red: RedSocial) {
           </div>
         </section>
 
+        <!-- Columna derecha: idea de video + cuadro de marketing personalizado -->
+        <div class="layout__side">
         <!-- Tarjeta 2: idea de video + guía para grabar -->
         <section class="card video">
           <div class="video__lead">
@@ -529,6 +538,20 @@ async function publicarEn(red: RedSocial) {
             </li>
           </ul>
         </section>
+
+          <!-- Cuadro: marketing personalizado por WhatsApp -->
+          <section class="contacto">
+            <div class="contacto__body">
+              <span class="contacto__icon"><i class="pi pi-comments" aria-hidden="true" /></span>
+              <strong>¿Quieres algo más personalizado?</strong>
+              <p>Cuéntanos qué necesitas y armamos una estrategia de marketing a la medida de tu negocio.</p>
+              <a class="contacto__btn" :href="whatsappUrl" target="_blank" rel="noopener">
+                <i class="pi pi-whatsapp" aria-hidden="true" />
+                Enviar mensaje
+              </a>
+            </div>
+          </section>
+        </div>
       </div>
     </template>
 
@@ -976,19 +999,25 @@ async function publicarEn(red: RedSocial) {
 .pv__media--wide { aspect-ratio: 4 / 3; }
 .pv__media--tall { aspect-ratio: 9 / 16; }
 
+/* Placeholder: el ícono va como imagen de fondo, centrado, sobre el degradado */
 .pv__ph {
-  display: grid;
-  place-items: center;
   width: 100%;
   height: 100%;
-  color: #9fb0a4;
-  background: linear-gradient(135deg, #eef4ec, #e4efe1);
-  font-size: 1.8rem;
+  background-color: #e7efe3;
+  background-image: url("/img-placeholder.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 46%;
 }
 
 .pv__ph--dark {
-  color: #5a5a5a;
-  background: linear-gradient(135deg, #2a2a2a, #161616);
+  background-color: #1d1d1d;
+  opacity: 0.9;
+}
+
+/* En formato vertical (TikTok) el ícono más chico para que no domine */
+.pv__media--tall .pv__ph {
+  background-size: 34%;
 }
 
 /* Instagram */
@@ -1526,6 +1555,91 @@ async function publicarEn(red: RedSocial) {
 .flash-leave-to {
   opacity: 0;
   transform: translate(-50%, 10px);
+}
+
+/* --- Columna derecha (bento: video + cuadro personalizado) --- */
+.layout__side {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+/* --- Cuadro de marketing personalizado --- */
+.contacto {
+  position: relative;
+  overflow: hidden;
+  padding: 22px;
+  border-radius: 18px;
+  background: #0a6f1f url("/haru-asesor-bg.jpg") 135% center / cover no-repeat;
+  box-shadow: 0 12px 28px rgba(10, 111, 32, 0.22);
+}
+
+/* Velo verde para que el texto se lea y Haru quede más suave al fondo */
+.contacto::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(7, 64, 20, 0.92) 0%, rgba(7, 64, 20, 0.78) 48%, rgba(7, 64, 20, 0.62) 78%, rgba(7, 64, 20, 0.55) 100%);
+}
+
+.contacto__body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  max-width: calc(100% - 88px);
+}
+
+.contacto__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 4px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 1.3rem;
+}
+
+.contacto strong {
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #fff;
+}
+
+.contacto p {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.45;
+}
+
+.contacto__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: 12px;
+  background: #fff;
+  color: #0a6f1f;
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.contacto__btn i {
+  font-size: 1.05rem;
+}
+
+.contacto__btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.18);
 }
 
 /* --- Responsivo --- */
