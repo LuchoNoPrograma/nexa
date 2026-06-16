@@ -4,6 +4,7 @@ import { assertLoginAllowed, clearLoginFailures, getLoginRateLimitKey, recordLog
 import { createSessionToken, hashSessionToken, verifyPassword } from '../../utils/password'
 
 type LoginBody = {
+  identificador?: string
   email?: string
   password?: string
   remember?: boolean
@@ -13,14 +14,15 @@ export default defineEventHandler(async (event) => {
   await ensureDatabase()
 
   const body = await readBody<LoginBody>(event)
-  const email = body.email?.trim().toLowerCase()
+  // Se acepta correo o carnet de identidad (CI) como identificador de acceso.
+  const identificador = (body.identificador ?? body.email ?? '').trim()
   const password = body.password ?? ''
 
-  if (!email || !password) {
-    throw createError({ statusCode: 400, statusMessage: 'Correo y contraseña son requeridos.' })
+  if (!identificador || !password) {
+    throw createError({ statusCode: 400, statusMessage: 'Correo/CI y contraseña son requeridos.' })
   }
 
-  const rateLimitKey = getLoginRateLimitKey(event, email)
+  const rateLimitKey = getLoginRateLimitKey(event, identificador.toLowerCase())
   assertLoginAllowed(rateLimitKey)
 
   const userResult = await pool.query<{
@@ -32,11 +34,11 @@ export default defineEventHandler(async (event) => {
     `
       select id, email, nombre as name, password_hash
       from usuario
-      where lower(email) = lower($1)
+      where (lower(email) = lower($1) or ci = $1)
         and estado = 'activo'
       limit 1
     `,
-    [email],
+    [identificador],
   )
 
   const user = userResult.rows[0]

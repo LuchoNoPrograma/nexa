@@ -21,16 +21,24 @@ definePageMeta({
 
 useHead({ title: 'Planilla | NEXA' })
 
+type Rol = 'cajero' | 'administrador'
+
 type Empleado = {
   id: string
+  numero: number
   nombre: string
   puesto: string | null
   color: string
+  celular: string | null
+  fechaNacimiento: string | null
+  direccion: string | null
+  rol: Rol | null
+  ci: string | null
+  tieneLogin: boolean
   slots: Set<string>
 }
 
 const cargando = ref(true)
-const guardando = ref(false)
 const guardadoMsg = ref('')
 
 const config = reactive<NominaConfig>({
@@ -53,7 +61,20 @@ function aEmpleado(row: any): Empleado {
   const slots = new Set<string>(
     Array.isArray(row.slots) ? row.slots.map((s: any) => slotKey(Number(s.dia), Number(s.hora))) : [],
   )
-  return { id: row.id, nombre: row.nombre ?? '', puesto: row.puesto ?? null, color: row.color || COLORES_EMPLEADO[0], slots }
+  return {
+    id: row.id,
+    numero: Number(row.numero) || 0,
+    nombre: row.nombre ?? '',
+    puesto: row.puesto ?? null,
+    color: row.color || COLORES_EMPLEADO[0],
+    celular: row.celular ?? null,
+    fechaNacimiento: row.fechaNacimiento ?? null,
+    direccion: row.direccion ?? null,
+    rol: (row.rol as Rol) ?? null,
+    ci: row.ci ?? null,
+    tieneLogin: Boolean(row.tieneLogin),
+    slots,
+  }
 }
 
 // ---------- jspreadsheet (hoja de cálculo por trabajador) ----------
@@ -249,11 +270,11 @@ onBeforeUnmount(() => {
 const valorHoraActual = computed(() => valorHora(config))
 
 const filas = computed(() =>
-  empleados.value.map((emp, i) => {
+  empleados.value.map((emp) => {
     const calc = calcularSueldo(emp.slots.size, config)
     return {
       id: emp.id,
-      etiqueta: `Trabajador ${i + 1}`,
+      etiqueta: `Empleado ${emp.numero}`,
       nombre: emp.nombre,
       color: emp.color,
       horasSemanales: calc.horasSemanales,
@@ -304,18 +325,18 @@ async function agregarEmpleado(notify = true) {
       construirGrid(emp)
     }
     if (notify) {
-      flash('Trabajador agregado')
+      flash('Empleado agregado')
     }
   } catch {
     if (notify) {
-      flash('No se pudo agregar el trabajador')
+      flash('No se pudo agregar el empleado')
     }
   }
 }
 
 async function eliminarEmpleado(emp: Empleado) {
   const ok = await confirmarAccion({
-    titulo: `¿Eliminar a ${emp.nombre || 'este trabajador'}?`,
+    titulo: `¿Eliminar a ${emp.nombre || 'este empleado'}?`,
     texto: 'Se borrará su planilla de horas. Esta acción no se puede deshacer.',
     confirmar: 'Sí, eliminar',
     cancelar: 'Cancelar',
@@ -336,37 +357,125 @@ async function limpiarEmpleado(emp: Empleado) {
   flash('Horas limpiadas')
 }
 
-async function limpiarTablas() {
-  const ok = await confirmarAccion({
-    titulo: '¿Limpiar todas las tablas?',
-    texto: 'Se borrarán las horas marcadas de todos los trabajadores.',
-    confirmar: 'Sí, limpiar',
-    cancelar: 'Cancelar',
-    peligro: true,
-  })
-  if (!ok) {
-    return
-  }
-  for (const emp of empleados.value) {
-    emp.slots.clear()
-    repintar(emp)
-    await guardarHorario(emp)
-  }
-  flash('Tablas limpiadas')
+// ---------- Modal: editar info de contacto + acceso (rol) ----------
+const editVisible = ref(false)
+const editEmp = ref<Empleado | null>(null)
+const guardandoInfo = ref(false)
+const infoError = ref('')
+
+const ROLES_OPCIONES = [
+  { label: 'Sin acceso', value: '' },
+  { label: 'Cajero (Caja y Vender)', value: 'cajero' },
+  { label: 'Administrador (acceso completo)', value: 'administrador' },
+]
+
+const editForm = reactive({
+  nombre: '',
+  puesto: '',
+  celular: '',
+  fechaNacimiento: '',
+  direccion: '',
+  rol: '' as '' | Rol,
+  ci: '',
+  password: '',
+})
+
+// ¿El rol elegido necesita credenciales nuevas? (empleado sin login aún)
+const requiereCredenciales = computed(() => Boolean(editForm.rol) && !editEmp.value?.tieneLogin)
+
+function abrirEditar(emp: Empleado) {
+  editEmp.value = emp
+  infoError.value = ''
+  editForm.nombre = emp.nombre
+  editForm.puesto = emp.puesto ?? ''
+  editForm.celular = emp.celular ?? ''
+  editForm.fechaNacimiento = emp.fechaNacimiento ?? ''
+  editForm.direccion = emp.direccion ?? ''
+  editForm.rol = emp.rol ?? ''
+  editForm.ci = emp.ci ?? ''
+  editForm.password = ''
+  editVisible.value = true
 }
 
-async function guardarTodo() {
-  guardando.value = true
-  try {
-    await $fetch('/api/pos/nomina/config', { method: 'PUT', body: { salarioMinimoMensual: config.salarioMinimoMensual } }).catch(() => null)
-    for (const emp of empleados.value) {
-      await guardarHorario(emp)
-    }
-    flash('Guardado correctamente')
-    document.getElementById('resumen')?.scrollIntoView({ behavior: 'smooth' })
-  } finally {
-    guardando.value = false
+async function guardarInfo() {
+  const emp = editEmp.value
+  if (!emp) {
+    return
   }
+
+  infoError.value = ''
+
+  // Validación de credenciales cuando se asigna acceso por primera vez.
+  if (requiereCredenciales.value) {
+    if (!editForm.ci.trim()) {
+      infoError.value = 'Ingresa el CI para crear el acceso del empleado.'
+      return
+    }
+    if (editForm.password.trim().length < 4) {
+      infoError.value = 'La contraseña debe tener al menos 4 caracteres.'
+      return
+    }
+  }
+
+  guardandoInfo.value = true
+
+  try {
+    // 1) Datos de contacto.
+    const { empleado: actualizado } = await $fetch<{ empleado: any }>(`/api/pos/nomina/empleados/${emp.id}`, {
+      method: 'PUT',
+      body: {
+        nombre: editForm.nombre.trim(),
+        puesto: editForm.puesto.trim(),
+        celular: editForm.celular.trim(),
+        fechaNacimiento: editForm.fechaNacimiento.trim(),
+        direccion: editForm.direccion.trim(),
+      },
+    })
+
+    emp.nombre = actualizado.nombre ?? emp.nombre
+    emp.puesto = actualizado.puesto ?? null
+    emp.celular = actualizado.celular ?? null
+    emp.fechaNacimiento = actualizado.fechaNacimiento ?? null
+    emp.direccion = actualizado.direccion ?? null
+
+    // 2) Acceso (rol + login), solo si cambió el rol o se enviaron credenciales.
+    const rolCambio = (editForm.rol || '') !== (emp.rol ?? '')
+    const credencialesNuevas = Boolean(editForm.rol) && (editForm.password.trim() || editForm.ci.trim() !== (emp.ci ?? ''))
+
+    if (rolCambio || credencialesNuevas) {
+      const acceso = await $fetch<{ rol: Rol | null; ci: string | null; tieneLogin: boolean }>(
+        `/api/pos/nomina/empleados/${emp.id}/acceso`,
+        {
+          method: 'PUT',
+          body: {
+            rol: editForm.rol || null,
+            ci: editForm.ci.trim() || undefined,
+            password: editForm.password.trim() || undefined,
+          },
+        },
+      )
+      emp.rol = acceso.rol
+      emp.ci = acceso.ci
+      emp.tieneLogin = acceso.tieneLogin
+    }
+
+    editVisible.value = false
+    flash('Datos guardados')
+  } catch (error: any) {
+    infoError.value = error?.statusMessage || error?.data?.statusMessage || 'No se pudieron guardar los datos.'
+  } finally {
+    guardandoInfo.value = false
+  }
+}
+
+function rolLabel(rol: Rol | null) {
+  if (rol === 'cajero') {
+    return 'Cajero'
+  }
+  if (rol === 'administrador') {
+    return 'Administrador'
+  }
+  return null
 }
 
 function flash(msg: string) {
@@ -424,7 +533,7 @@ function flash(msg: string) {
         <div class="su-section-head">
         <h2>1. Define turnos semanales</h2>
           <button type="button" class="su-add" @click="agregarEmpleado()">
-            <i class="pi pi-plus" /> Agregar trabajador
+            <i class="pi pi-plus" /> Agregar empleado
           </button>
         </div>
         <p class="su-section-sub">Haz clic y arrastra sobre la hoja para marcar las horas planificadas de cada persona.</p>
@@ -437,8 +546,11 @@ function flash(msg: string) {
             :style="{ '--c': emp.color }"
           >
             <header class="su-card__head">
-              <span class="su-card__tag">Trabajador {{ i + 1 }}</span>
-              <input v-model="emp.nombre" class="su-card__name" placeholder="Nombre del trabajador" @input="onNombre(emp)">
+              <span class="su-card__tag">Empleado {{ emp.numero }}</span>
+              <input v-model="emp.nombre" class="su-card__name" placeholder="Nombre del empleado" @input="onNombre(emp)">
+              <button type="button" class="su-card__edit" title="Editar datos y acceso" @click="abrirEditar(emp)">
+                <i class="pi pi-user-edit" />
+              </button>
               <button type="button" class="su-card__clear" title="Limpiar horas" @click="limpiarEmpleado(emp)">
                 <i class="pi pi-eraser" />
               </button>
@@ -446,6 +558,16 @@ function flash(msg: string) {
                 <i class="pi pi-trash" />
               </button>
             </header>
+
+            <div v-if="emp.rol || emp.celular" class="su-card__meta">
+              <span v-if="rolLabel(emp.rol)" class="su-badge" :class="`su-badge--${emp.rol}`">
+                <i class="pi pi-id-card" /> {{ rolLabel(emp.rol) }}
+                <small v-if="emp.ci">· CI {{ emp.ci }}</small>
+              </span>
+              <span v-if="emp.celular" class="su-badge su-badge--muted">
+                <i class="pi pi-phone" /> {{ emp.celular }}
+              </span>
+            </div>
 
             <div class="su-jss-wrap">
               <div :ref="el => setGridEl(emp.id, el)" class="su-jss" />
@@ -460,7 +582,7 @@ function flash(msg: string) {
           <!-- Tarjeta para agregar un nuevo trabajador (estilo Google) -->
           <button type="button" class="su-card su-card--add" @click="agregarEmpleado()">
             <span class="su-card-add__icon"><i class="pi pi-plus" /></span>
-            <strong>Agregar trabajador</strong>
+            <strong>Agregar empleado</strong>
             <small>Crea una nueva planilla de turnos</small>
           </button>
         </div>
@@ -496,7 +618,7 @@ function flash(msg: string) {
             <table class="su-table">
               <thead>
                 <tr>
-                  <th>Trabajador</th>
+                  <th>Empleado</th>
                   <th class="num">Total horas semanales</th>
                   <th class="num">Total horas mensuales<small>(aprox. {{ config.semanasPorMes }} semanas)</small></th>
                   <th class="num">Costo mensual estimado</th>
@@ -524,19 +646,95 @@ function flash(msg: string) {
         </div>
       </section>
 
-      <!-- Acciones -->
-      <footer class="su-actions">
-        <p class="su-important"><i class="pi pi-lightbulb" /> Los cálculos son aproximados. No reemplazan una planilla legal de nómina.</p>
-        <div class="su-actions__btns">
-          <span v-if="guardadoMsg" class="su-saved"><i class="pi pi-check-circle" /> {{ guardadoMsg }}</span>
-          <button type="button" class="su-btn su-btn--ghost" @click="limpiarTablas"><i class="pi pi-trash" /> Limpiar tablas</button>
-          <button type="button" class="su-btn su-btn--primary" :disabled="guardando" @click="guardarTodo">
-            <span v-if="guardando" class="su-spinner su-spinner--sm" />
-            <i v-else class="pi pi-save" /> Guardar y ver resumen
-          </button>
-        </div>
-      </footer>
+      <!-- Nota: los cambios se guardan automáticamente; el resumen es en vivo. -->
+      <p class="su-note">
+        <i class="pi pi-lightbulb" /> Los cambios se guardan solos y el resumen se actualiza al instante.
+        Los cálculos son aproximados: no reemplazan una planilla legal de nómina.
+      </p>
     </template>
+
+    <!-- Aviso flotante de guardado/acciones -->
+    <Transition name="su-toast">
+      <div v-if="guardadoMsg" class="su-toast"><i class="pi pi-check-circle" /> {{ guardadoMsg }}</div>
+    </Transition>
+
+    <!-- Modal: datos de contacto + acceso (rol) del empleado -->
+    <Dialog
+      v-model:visible="editVisible"
+      modal
+      :header="editEmp ? `Empleado ${editEmp.numero}` : 'Empleado'"
+      class="su-dialog"
+      :style="{ width: '480px' }"
+    >
+      <div class="su-form">
+        <p class="su-form__section">Datos de contacto</p>
+
+        <div class="su-form__field">
+          <label>Nombre</label>
+          <InputText v-model="editForm.nombre" placeholder="Nombre completo" fluid />
+        </div>
+
+        <div class="su-form__row">
+          <div class="su-form__field">
+            <label>Celular</label>
+            <InputText v-model="editForm.celular" placeholder="Ej. 70012345" fluid />
+          </div>
+          <div class="su-form__field">
+            <label>Fecha de nacimiento</label>
+            <input v-model="editForm.fechaNacimiento" type="date" class="su-date">
+          </div>
+        </div>
+
+        <div class="su-form__field">
+          <label>Dirección</label>
+          <InputText v-model="editForm.direccion" placeholder="Calle, zona, referencia" fluid />
+        </div>
+
+        <div class="su-form__field">
+          <label>Puesto</label>
+          <InputText v-model="editForm.puesto" placeholder="Ej. Atención y caja" fluid />
+        </div>
+
+        <p class="su-form__section">Acceso al sistema</p>
+        <p class="su-form__hint">
+          Asigna un rol para que el empleado inicie sesión con su <strong>CI</strong> y una contraseña.
+          Un cajero solo accede a <strong>Caja</strong> y <strong>Vender</strong>.
+        </p>
+
+        <div class="su-form__field">
+          <label>Rol</label>
+          <Select v-model="editForm.rol" :options="ROLES_OPCIONES" option-label="label" option-value="value" fluid />
+        </div>
+
+        <template v-if="editForm.rol">
+          <div class="su-form__row">
+            <div class="su-form__field">
+              <label>CI (carnet de identidad)</label>
+              <InputText v-model="editForm.ci" placeholder="Ej. 1234567" fluid />
+            </div>
+            <div class="su-form__field">
+              <label>{{ editEmp?.tieneLogin ? 'Nueva contraseña' : 'Contraseña' }}</label>
+              <InputText
+                v-model="editForm.password"
+                type="password"
+                :placeholder="editEmp?.tieneLogin ? 'Dejar vacío para no cambiar' : 'Mínimo 4 caracteres'"
+                fluid
+              />
+            </div>
+          </div>
+          <p v-if="editEmp?.tieneLogin" class="su-form__hint su-form__hint--ok">
+            <i class="pi pi-check-circle" /> Este empleado ya tiene acceso. Solo cambia lo necesario.
+          </p>
+        </template>
+
+        <p v-if="infoError" class="su-form__error"><i class="pi pi-exclamation-triangle" /> {{ infoError }}</p>
+      </div>
+
+      <template #footer>
+        <Button type="button" label="Cancelar" outlined severity="secondary" @click="editVisible = false" />
+        <Button type="button" label="Guardar" :loading="guardandoInfo" @click="guardarInfo" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -691,7 +889,7 @@ function flash(msg: string) {
   overflow: hidden;
 }
 
-/* Tarjeta "+ Agregar trabajador": ocupa el hueco libre del grid. */
+/* Tarjeta "+ Agregar empleado": ocupa el hueco libre del grid. */
 .su-card--add {
   display: flex;
   flex-direction: column;
@@ -771,7 +969,8 @@ function flash(msg: string) {
 }
 
 .su-card__del,
-.su-card__clear {
+.su-card__clear,
+.su-card__edit {
   display: grid;
   place-items: center;
   width: 32px;
@@ -782,6 +981,11 @@ function flash(msg: string) {
   cursor: pointer;
 }
 
+.su-card__edit {
+  background: #eef2fb;
+  color: #2f5fd0;
+}
+
 .su-card__clear {
   background: #eaf6e7;
   color: #1c7a2c;
@@ -790,6 +994,120 @@ function flash(msg: string) {
 .su-card__del {
   background: #fde8e8;
   color: #dc2626;
+}
+
+/* Chips de rol/contacto debajo de la cabecera de la tarjeta. */
+.su-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 4px;
+}
+
+.su-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.su-badge small {
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.su-badge--cajero {
+  background: #eef2fb;
+  color: #2f5fd0;
+}
+
+.su-badge--administrador {
+  background: #f3eafe;
+  color: #7c3aed;
+}
+
+.su-badge--muted {
+  background: #f1f5f1;
+  color: #5d6b61;
+}
+
+/* ---------- Formulario del modal ---------- */
+.su-form {
+  display: grid;
+  gap: 12px;
+}
+
+.su-form__section {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: #0d2b5e;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.su-form__hint {
+  margin: -4px 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #6b7a6f;
+  line-height: 1.4;
+}
+
+.su-form__hint--ok {
+  color: #0a6f1f;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.su-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.su-form__field {
+  display: grid;
+  gap: 5px;
+}
+
+.su-form__field label {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #41617f;
+}
+
+.su-date {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #102016;
+}
+
+.su-form__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: #fde8e8;
+  color: #b91c1c;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .su-form__row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .su-jss-wrap {
@@ -876,8 +1194,52 @@ function flash(msg: string) {
 }
 
 .su-hint i,
-.su-important i {
+.su-note i {
   color: #3b82f6;
+}
+
+/* Nota informativa al pie (autosave + resumen en vivo). */
+.su-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f7fbf6;
+  border: 1px solid #e7eee8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #5d6b61;
+}
+
+/* Aviso flotante de guardado (reemplaza el chip del antiguo footer). */
+.su-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  background: #0a6f1f;
+  color: #fff;
+  font-size: 0.84rem;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgba(10, 111, 31, 0.28);
+}
+
+.su-toast-enter-active,
+.su-toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.su-toast-enter-from,
+.su-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 /* ---------- Resumen ---------- */
@@ -998,79 +1360,6 @@ function flash(msg: string) {
   font-size: 1.05rem;
 }
 
-/* ---------- Acciones ---------- */
-.su-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: #f7fbf6;
-  border: 1px solid #e7eee8;
-}
-
-.su-important {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  max-width: 54ch;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #5d6b61;
-}
-
-.su-actions__btns {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.su-saved {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #0a6f1f;
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.su-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 18px;
-  border: 0;
-  border-radius: 11px;
-  font-size: 0.86rem;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.su-btn--ghost {
-  background: #fff;
-  border: 1px solid #d6e6d6;
-  color: #4a5a4f;
-}
-
-.su-btn--ghost:hover {
-  background: #f1f5f1;
-}
-
-.su-btn--primary {
-  color: #fff;
-  background: linear-gradient(150deg, #0b6f38, #0a6f1f);
-  box-shadow: 0 12px 24px rgba(14, 111, 32, 0.24);
-}
-
-.su-btn--primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* ---------- Loading ---------- */
 .su-loading {
   display: flex;
@@ -1089,14 +1378,6 @@ function flash(msg: string) {
   border: 3px solid #d9ead9;
   border-top-color: #0b6f38;
   animation: su-spin 0.8s linear infinite;
-}
-
-.su-spinner--sm {
-  width: 16px;
-  height: 16px;
-  border-width: 2px;
-  border-color: rgba(255, 255, 255, 0.5);
-  border-top-color: #fff;
 }
 
 @keyframes su-spin {
@@ -1118,23 +1399,13 @@ function flash(msg: string) {
     gap: 18px;
   }
 
-  /* Encabezado de sección: el botón "Agregar trabajador" baja y se estira. */
+  /* Encabezado de sección: el botón "Agregar empleado" baja y se estira. */
   .su-section-head {
     flex-direction: column;
     align-items: stretch;
   }
 
   .su-add {
-    justify-content: center;
-  }
-
-  /* Acciones del pie a ancho completo y apiladas. */
-  .su-actions__btns {
-    width: 100%;
-  }
-
-  .su-actions__btns .su-btn {
-    flex: 1;
     justify-content: center;
   }
 }

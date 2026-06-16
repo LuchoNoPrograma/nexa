@@ -7,6 +7,8 @@ export type PosSession = {
   storeId: string | null
   defaultMargin: number | null
   onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
+  roles: string[]
+  permisos: string[]
 }
 
 export function usePosSession() {

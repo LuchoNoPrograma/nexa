@@ -10,7 +10,7 @@ useHead({
 })
 
 const form = reactive({
-  email: 'admin@nexa.bo',
+  identificador: 'admin@nexa.bo',
   password: 'NexaAdmin2026!',
   remember: false,
 })
@@ -27,7 +27,7 @@ async function onSubmit() {
     await $fetch('/api/auth/login', {
       method: 'POST',
       body: {
-        email: form.email,
+        identificador: form.identificador,
         password: form.password,
         remember: form.remember,
       },
@@ -35,7 +35,7 @@ async function onSubmit() {
 
     void navigateTo('/pos/inicio')
   } catch {
-    authError.value = 'Credenciales inválidas. Verifica tu correo y contraseña.'
+    authError.value = 'Credenciales inválidas. Verifica tu correo/CI y contraseña.'
   } finally {
     loading.value = false
   }
@@ -91,16 +91,16 @@ async function onSubmit() {
 
         <form class="login-form" @submit.prevent="onSubmit">
           <div class="login-field">
-            <label for="email">Correo electrónico</label>
+            <label for="identificador">Correo o carnet (CI)</label>
             <span class="login-input">
-              <i class="pi pi-envelope" aria-hidden="true" />
+              <i class="pi pi-user" aria-hidden="true" />
               <input
-                id="email"
-                v-model="form.email"
-                type="email"
-                name="email"
-                placeholder="ejemplo@correo.com"
-                autocomplete="email"
+                id="identificador"
+                v-model="form.identificador"
+                type="text"
+                name="identificador"
+                placeholder="ejemplo@correo.com o tu CI"
+                autocomplete="username"
                 required
               >
             </span>

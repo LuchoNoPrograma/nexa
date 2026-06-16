@@ -186,8 +186,8 @@ async function seedDefaultEmployee(storeId: string) {
   await pool.query(
     `
       with empleado_base as (
-        insert into empleado (tienda_id, nombre, puesto, color, orden)
-        select $1, 'Trabajador 1', 'Atención y caja', '#22c55e', 0
+        insert into empleado (tienda_id, nombre, puesto, color, orden, numero)
+        select $1, 'Empleado 1', 'Atención y caja', '#22c55e', 0, 1
         where not exists (
           select 1
           from empleado

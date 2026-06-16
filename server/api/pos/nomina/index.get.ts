@@ -29,10 +29,20 @@ export default defineEventHandler(async (event) => {
         e.puesto,
         e.color,
         e.orden,
+        e.numero,
+        e.celular,
+        to_char(e.fecha_nacimiento, 'YYYY-MM-DD') as "fechaNacimiento",
+        e.direccion,
+        u.ci,
+        (u.id is not null) as "tieneLogin",
+        r.codigo as rol,
         coalesce(h.slots, '[]'::jsonb) as slots,
         coalesce(h.horas_semanales, 0)::float as "horasSemanales"
       from empleado e
       left join empleado_horario h on h.empleado_id = e.id
+      left join usuario u on u.id = e.usuario_id and u.estado = 'activo'
+      left join usuario_rol ur on ur.usuario_id = e.usuario_id and ur.tienda_id = e.tienda_id
+      left join rol r on r.id = ur.rol_id and r.alcance = 'tienda' and r.activo = true
       where e.tienda_id = $1 and e.activo = true
       order by e.orden asc, e.created_at asc
     `,

@@ -2,6 +2,7 @@
 const route = useRoute()
 const router = useRouter()
 const session = usePosSession()
+const { puede } = useAcceso()
 const isReady = ref(false)
 const isRouteLoading = ref(false)
 const mobileMenuOpen = ref(false)
@@ -125,21 +126,43 @@ function onSidebarResizeKeydown(event: KeyboardEvent) {
   action()
 }
 
+// `acceso` es una expresión que evalúa `tieneAcceso`. Un cajero solo cumple
+// CAJA y VENDER, así que ve únicamente esos módulos (más Inicio, sin gating).
 const sidebarItems = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
-  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
-  { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos' },
-  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing' },
-  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
-  { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas' },
-  { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos' },
-  { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos' },
-  { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos' },
-  { label: 'Reportes', icon: 'pi pi-chart-bar' },
-  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico' },
-  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes' },
-  { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
+  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA' },
+  { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER' },
+  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
+  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO' },
+  { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
+  { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE' },
+  { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE' },
+  { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG' },
+  { label: 'Reportes', icon: 'pi pi-chart-bar', acceso: 'REPORTE' },
+  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG' },
+  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes', acceso: 'CONFIG' },
+  { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', acceso: 'CONFIG', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
 ]
+
+// Módulos visibles según el rol/permiso de la sesión.
+const visibleSidebarItems = computed(() => sidebarItems.filter(item => puede(item.acceso)))
+
+// Acceso requerido por ruta, para bloquear navegación directa (URL) a un módulo
+// sin permiso. Incluye la ruta principal y sus `activePaths`.
+const accesoPorRuta = new Map<string, string | undefined>()
+for (const item of sidebarItems) {
+  if (item.to) {
+    accesoPorRuta.set(item.to, item.acceso)
+  }
+  for (const path of item.activePaths ?? []) {
+    accesoPorRuta.set(path, item.acceso)
+  }
+}
+
+function rutaPermitida(path: string) {
+  const acceso = accesoPorRuta.get(path)
+  return acceso ? puede(acceso) : true
+}
 
 const activeTitle = computed(() => String(route.meta.posTitle ?? 'Vender'))
 
@@ -201,6 +224,12 @@ onMounted(async () => {
         && to.path !== '/pos/diagnostico'
       ) {
         return '/pos/diagnostico'
+      }
+
+      // Bloqueo por rol/permiso: si el módulo destino requiere un acceso que la
+      // sesión no cumple, se redirige a Inicio (siempre accesible).
+      if (session.value && to.path.startsWith('/pos') && !rutaPermitida(to.path)) {
+        return '/pos/inicio'
       }
 
       const isPosNavigation = to.path.startsWith('/pos') || from.path.startsWith('/pos')
@@ -289,7 +318,7 @@ function selectModule(to?: string) {
 
       <nav class="drawer-nav" aria-label="Navegación móvil del POS">
         <Button
-          v-for="item in sidebarItems"
+          v-for="item in visibleSidebarItems"
           :key="item.label"
           type="button"
           text
@@ -322,7 +351,7 @@ function selectModule(to?: string) {
 
       <nav class="sidebar-nav">
         <Button
-          v-for="item in sidebarItems"
+          v-for="item in visibleSidebarItems"
           :key="item.label"
           type="button"
           text
