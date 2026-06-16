@@ -124,7 +124,7 @@ function onSeleccionar(codigo: string) {
 }
 
 .planes-aviso i {
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
 .planes-aviso strong {

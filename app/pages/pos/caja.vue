@@ -25,11 +25,11 @@ const cashStatus = cashRegister.cashStatus
 const movements = cashRegister.movements
 const productSales = cashRegister.productSales
 const registerName = ref('Caja principal')
-const openedBy = ref('María López')
-const openedAt = ref('08:00')
-const openingFloat = ref(200)
-const countedCash = ref(200)
-const desiredFloat = ref(200)
+const openedBy = ref('Responsable de caja')
+const openedAt = ref('')
+const openingFloat = ref(0)
+const countedCash = ref(0)
+const desiredFloat = ref(0)
 const closingNote = ref('')
 const closedAt = ref('')
 const lastPrintedAt = ref('')
@@ -43,8 +43,8 @@ const closeDialogVisible = ref(false)
 
 const openingForm = reactive({
   registerName: 'Caja principal',
-  openedBy: 'María López',
-  openingFloat: 200,
+  openedBy: 'Responsable de caja',
+  openingFloat: 0,
   note: '',
 })
 
@@ -65,6 +65,11 @@ const currentTime = computed(() => {
 })
 
 onMounted(async () => {
+  registerName.value = session.value?.store?.trim() || 'Caja principal'
+  openedBy.value = session.value?.name?.trim() || 'Responsable de caja'
+  openingForm.registerName = registerName.value
+  openingForm.openedBy = openedBy.value
+
   try {
     await cashRegister.loadCashData()
   } catch {
@@ -72,19 +77,28 @@ onMounted(async () => {
   }
 })
 
-watch(() => cashRegister.cashSession.value, (session) => {
-  if (!session) {
+watch(() => cashRegister.cashSession.value, (cashSession) => {
+  if (!cashSession) {
+    cashStatus.value = 'cerrada'
+    registerName.value = session.value?.store?.trim() || registerName.value || 'Caja principal'
+    openedBy.value = session.value?.name?.trim() || 'Responsable de caja'
+    openedAt.value = ''
+    openingFloat.value = 0
+    countedCash.value = 0
+    desiredFloat.value = 0
+    closedAt.value = ''
+    closingNote.value = ''
     return
   }
 
-  cashStatus.value = session.status
-  openingFloat.value = session.openingFloat
-  countedCash.value = session.countedCash ?? session.openingFloat
-  desiredFloat.value = session.openingFloat
-  openedAt.value = session.openedAt
-  closedAt.value = session.closedAt ?? ''
-  openedBy.value = session.openedBy
-  closingNote.value = session.notes ?? ''
+  cashStatus.value = cashSession.status
+  openingFloat.value = cashSession.openingFloat
+  countedCash.value = cashSession.countedCash ?? (cashSession.status === 'cerrada' ? cashSession.expectedCash : cashSession.openingFloat)
+  desiredFloat.value = cashSession.openingFloat
+  openedAt.value = cashSession.openedAt
+  closedAt.value = cashSession.closedAt ?? ''
+  openedBy.value = cashSession.openedBy
+  closingNote.value = cashSession.notes ?? ''
 }, { immediate: true })
 
 const cashIncome = computed(() => movements.value
@@ -95,7 +109,14 @@ const cashOutcome = computed(() => movements.value
   .filter((movement) => movement.type === 'Egreso' && movement.method === 'Efectivo')
   .reduce((sum, movement) => sum + movement.amount, 0))
 
-const expectedCash = computed(() => openingFloat.value + cashIncome.value - cashOutcome.value)
+const expectedCash = computed(() => {
+  const dbSession = cashRegister.cashSession.value
+  if (dbSession?.status === 'cerrada') {
+    return Number(dbSession.expectedCash || 0)
+  }
+
+  return openingFloat.value + cashIncome.value - cashOutcome.value
+})
 
 const countedDifference = computed(() => Number(countedCash.value || 0) - expectedCash.value)
 
@@ -143,7 +164,13 @@ const closeReportRows = computed(() => [
   { label: 'Retirar / depositar', value: money(depositAmount.value) },
 ])
 
-const sessionDuration = computed(() => `${openedAt.value} - ${cashStatus.value === 'cerrada' ? closedAt.value : 'en curso'}`)
+const sessionDuration = computed(() => {
+  if (!cashRegister.cashSession.value) {
+    return 'Sin turno abierto'
+  }
+
+  return `${openedAt.value} - ${cashStatus.value === 'cerrada' ? closedAt.value : 'en curso'}`
+})
 
 const differenceTone = computed(() => {
   const absDifference = Math.abs(countedDifference.value)
@@ -223,7 +250,7 @@ async function openCashSession() {
   openedAt.value = currentTime.value
   closedAt.value = ''
   closingNote.value = openingForm.note.trim()
-  await cashRegister.openTurn(openingFloat.value || 200, closingNote.value)
+  await cashRegister.openTurn(openingFloat.value, closingNote.value)
   openDialogVisible.value = false
 }
 
@@ -261,9 +288,9 @@ async function closeCashSession(printAfterClose = false) {
 }
 
 function reopenCashSession() {
-  openingForm.registerName = registerName.value
-  openingForm.openedBy = openedBy.value
-  openingForm.openingFloat = Number(desiredFloat.value || openingFloat.value || 0)
+  openingForm.registerName = session.value?.store?.trim() || registerName.value || 'Caja principal'
+  openingForm.openedBy = session.value?.name?.trim() || openedBy.value || 'Responsable de caja'
+  openingForm.openingFloat = Number(desiredFloat.value || 0)
   openingForm.note = ''
   openDialogVisible.value = true
 }
@@ -567,7 +594,6 @@ function printProductReport() {
         type="button"
         icon="pi pi-unlock"
         label="Abrir caja"
-        severity="success"
         class="cash-open-btn"
         @click="reopenCashSession"
       />
@@ -610,7 +636,6 @@ function printProductReport() {
           icon="pi pi-plus"
           label="Movimiento"
           size="small"
-          severity="success"
           :disabled="cashStatus === 'cerrada'"
           @click="openMovementDialog('Ingreso')"
         />
@@ -653,7 +678,7 @@ function printProductReport() {
 
         <footer>
           <Button type="button" label="Cancelar" outlined severity="secondary" @click="openDialogVisible = false" />
-          <Button type="submit" label="Abrir caja" icon="pi pi-unlock" severity="success" />
+          <Button type="submit" label="Abrir caja" icon="pi pi-unlock" />
         </footer>
       </form>
     </Dialog>

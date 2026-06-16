@@ -613,7 +613,7 @@ async function publicarEn(red: RedSocial) {
   padding: 13px 22px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(120deg, #0a6f1f, #14b536);
+  background: linear-gradient(120deg, #0a6f1f, #0b6f38);
   color: #fff;
   font-size: 0.9rem;
   font-weight: 900;
@@ -762,7 +762,7 @@ async function publicarEn(red: RedSocial) {
 }
 
 .obj.is-active {
-  border-color: #16a534;
+  border-color: #0b6f38;
   background: var(--brand-soft);
   box-shadow: 0 10px 22px rgba(14, 111, 32, 0.14);
 }
@@ -785,7 +785,7 @@ async function publicarEn(red: RedSocial) {
 }
 
 .obj.is-active .obj__icon {
-  background: #16a534;
+  background: #0b6f38;
   color: #fff;
 }
 

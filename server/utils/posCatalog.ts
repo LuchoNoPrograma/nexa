@@ -9,6 +9,7 @@ export type StoreSession = Awaited<ReturnType<typeof requireSession>> & {
 }
 
 const productKinds = ['producto', 'servicio', 'combo'] as const
+const productCostingTypes = ['reventa', 'produccion', 'servicio'] as const
 
 export async function requireStoreSession(event: H3Event): Promise<StoreSession> {
   const session = await requireSession(event)
@@ -106,6 +107,22 @@ export function booleanOrDefault(value: unknown, fallback: boolean) {
 
 export function productKind(value: unknown): typeof productKinds[number] {
   return productKinds.includes(value as typeof productKinds[number]) ? value as typeof productKinds[number] : 'producto'
+}
+
+export function productCostingType(value: unknown, kind: ReturnType<typeof productKind> = 'producto'): typeof productCostingTypes[number] {
+  if (productCostingTypes.includes(value as typeof productCostingTypes[number])) {
+    return value as typeof productCostingTypes[number]
+  }
+
+  if (kind === 'servicio') {
+    return 'servicio'
+  }
+
+  if (kind === 'combo') {
+    return 'produccion'
+  }
+
+  return 'reventa'
 }
 
 export async function assertCategoryBelongsToStore(categoryId: unknown, storeId: string) {

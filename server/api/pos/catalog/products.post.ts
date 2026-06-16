@@ -10,6 +10,7 @@ import {
   nullableText,
   numberOrZero,
   parseVariants,
+  productCostingType,
   productKind,
   replaceProductVariants,
   requireStoreSession,
@@ -22,6 +23,7 @@ type ProductBody = {
   name?: string
   description?: string | null
   kind?: string
+  costingType?: string
   unit?: string
   cost?: number
   price?: number
@@ -45,6 +47,7 @@ export default defineEventHandler(async (event) => {
   const categoryId = await assertCategoryBelongsToStore(body.categoryId, session.storeId)
   const name = ensureProductName(body.name)
   const kind = productKind(body.kind)
+  const costingType = productCostingType(body.costingType, kind)
   const initialStock = kind === 'servicio' ? 0 : numberOrZero(body.stock)
   const variants = parseVariants(body.variants)
 
@@ -63,6 +66,7 @@ export default defineEventHandler(async (event) => {
           nombre,
           descripcion,
           tipo,
+          tipo_costeo,
           unidad,
           costo_unitario,
           precio_venta,
@@ -77,7 +81,7 @@ export default defineEventHandler(async (event) => {
           visible_pos,
           activo
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, true)
         returning id
       `,
       [
@@ -88,6 +92,7 @@ export default defineEventHandler(async (event) => {
         name,
         nullableText(body.description),
         kind,
+        costingType,
         cleanText(body.unit, 'unidad') || 'unidad',
         numberOrZero(body.cost),
         numberOrZero(body.price),

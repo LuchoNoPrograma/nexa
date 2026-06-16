@@ -10,6 +10,7 @@ import {
   nullableText,
   numberOrZero,
   parseVariants,
+  productCostingType,
   productKind,
   replaceProductVariants,
   requireStoreSession,
@@ -22,6 +23,7 @@ type ProductBody = {
   name?: string
   description?: string | null
   kind?: string
+  costingType?: string
   unit?: string
   cost?: number
   price?: number
@@ -45,6 +47,8 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<ProductBody>(event)
   const categoryId = await assertCategoryBelongsToStore(body.categoryId, session.storeId)
   const name = ensureProductName(body.name)
+  const kind = productKind(body.kind)
+  const costingType = productCostingType(body.costingType, kind)
   const variants = parseVariants(body.variants)
 
   const client = await pool.connect()
@@ -62,18 +66,19 @@ export default defineEventHandler(async (event) => {
           nombre = $6,
           descripcion = $7,
           tipo = $8,
-          unidad = $9,
-          costo_unitario = $10,
-          precio_venta = $11,
-          stock_minimo = $12,
-          stock_maximo = $13,
-          margen_minimo = $14,
-          imagen_url = $15,
-          icono = $16,
-          precio_variable = $17,
-          visible_catalogo = $18,
-          visible_pos = $19,
-          activo = $20,
+          tipo_costeo = $9,
+          unidad = $10,
+          costo_unitario = $11,
+          precio_venta = $12,
+          stock_minimo = $13,
+          stock_maximo = $14,
+          margen_minimo = $15,
+          imagen_url = $16,
+          icono = $17,
+          precio_variable = $18,
+          visible_catalogo = $19,
+          visible_pos = $20,
+          activo = $21,
           updated_at = now()
         where id = $1
           and tienda_id = $2
@@ -87,7 +92,8 @@ export default defineEventHandler(async (event) => {
         nullableText(body.barcode),
         name,
         nullableText(body.description),
-        productKind(body.kind),
+        kind,
+        costingType,
         cleanText(body.unit, 'unidad') || 'unidad',
         numberOrZero(body.cost),
         numberOrZero(body.price),

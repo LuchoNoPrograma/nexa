@@ -141,7 +141,7 @@ function equivalente(plan: Plan): string | null {
 }
 
 .plan-card.is-selected {
-  border-color: #0f9e2e;
+  border-color: #0b6f38;
   box-shadow: 0 14px 28px rgba(15, 158, 46, 0.18);
 }
 
@@ -150,7 +150,7 @@ function equivalente(plan: Plan): string | null {
 }
 
 .plan-card.is-featured.is-selected {
-  border-color: #0f9e2e;
+  border-color: #0b6f38;
 }
 
 .plan-card__badge {
@@ -162,7 +162,7 @@ function equivalente(plan: Plan): string | null {
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  background: linear-gradient(150deg, #14b536, #0a6f1f);
+  background: linear-gradient(150deg, #0b6f38, #0a6f1f);
   color: #fff;
   font-size: 0.68rem;
   font-weight: 900;
@@ -194,8 +194,8 @@ function equivalente(plan: Plan): string | null {
 }
 
 .plan-card.is-selected .plan-card__radio {
-  border-color: #0f9e2e;
-  background: #0f9e2e;
+  border-color: #0b6f38;
+  background: #0b6f38;
   color: #fff;
 }
 
@@ -273,7 +273,7 @@ function equivalente(plan: Plan): string | null {
 
 .plan-card__benefits i {
   margin-top: 2px;
-  color: #0f9e2e;
+  color: #0b6f38;
   font-size: 0.72rem;
 }
 
@@ -287,7 +287,7 @@ function equivalente(plan: Plan): string | null {
   border: 0;
   border-radius: 14px;
   color: #fff;
-  background: linear-gradient(150deg, #14b536, #0a6f1f);
+  background: linear-gradient(150deg, #0b6f38, #0a6f1f);
   font-size: 1rem;
   font-weight: 900;
   cursor: pointer;
@@ -312,7 +312,7 @@ function equivalente(plan: Plan): string | null {
 }
 
 .plan-foot i {
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
 @keyframes plan-rise {

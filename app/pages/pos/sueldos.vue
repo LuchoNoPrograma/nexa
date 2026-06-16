@@ -711,7 +711,7 @@ function flash(msg: string) {
 
 .su-card--add:hover {
   background: #eaf6e7;
-  border-color: #14b536;
+  border-color: #0b6f38;
 }
 
 .su-card-add__icon {
@@ -1062,7 +1062,7 @@ function flash(msg: string) {
 
 .su-btn--primary {
   color: #fff;
-  background: linear-gradient(150deg, #14b536, #0a6f1f);
+  background: linear-gradient(150deg, #0b6f38, #0a6f1f);
   box-shadow: 0 12px 24px rgba(14, 111, 32, 0.24);
 }
 
@@ -1087,7 +1087,7 @@ function flash(msg: string) {
   height: 26px;
   border-radius: 50%;
   border: 3px solid #d9ead9;
-  border-top-color: #0f9e2e;
+  border-top-color: #0b6f38;
   animation: su-spin 0.8s linear infinite;
 }
 

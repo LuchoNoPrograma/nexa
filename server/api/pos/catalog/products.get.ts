@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
         p.nombre as name,
         p.descripcion as description,
         p.tipo as kind,
+        coalesce(p.tipo_costeo, case when p.tipo = 'servicio' then 'servicio' when p.tipo = 'combo' then 'produccion' else 'reventa' end) as "costingType",
         p.unidad as unit,
         p.costo_unitario::float as cost,
         p.precio_venta::float as price,

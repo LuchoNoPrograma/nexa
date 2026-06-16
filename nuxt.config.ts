@@ -5,17 +5,17 @@ import tailwindcss from '@tailwindcss/vite'
 const NexaPrimePreset = definePreset(Aura, {
   semantic: {
     primary: {
-      50: '#ecfdf0',
-      100: '#d5f8dc',
-      200: '#aef0bd',
-      300: '#75e592',
-      400: '#35d35c',
-      500: '#0f9e2e',
-      600: '#0c8a28',
-      700: '#0a6f1f',
-      800: '#09581b',
-      900: '#084818',
-      950: '#04270c',
+      50: '#e8f6ee',
+      100: '#ccebd8',
+      200: '#98d3b0',
+      300: '#74d28f',
+      400: '#2fb452',
+      500: '#0b982f',
+      600: '#087a28',
+      700: '#066322',
+      800: '#022c14',
+      900: '#021f0f',
+      950: '#011408',
     },
   },
 })
@@ -44,7 +44,7 @@ export default defineNuxtConfig({
           content:
             'NEXA es tu asistente inteligente que te ayuda a vender más, atraer clientes y poner precios justos. Hecho en la Amazonía boliviana.',
         },
-        { name: 'theme-color', content: '#0f9e2e' },
+        { name: 'theme-color', content: '#0b982f' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

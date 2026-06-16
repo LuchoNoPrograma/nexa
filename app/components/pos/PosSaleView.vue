@@ -62,6 +62,8 @@ const includeShipping = ref(false)
 const receivedAmount = ref<number | null>(null)
 const checkoutScroll = ref<HTMLElement | null>(null)
 const cartPanelEl = ref<HTMLElement | null>(null)
+const mobileCartBarEl = ref<HTMLElement | null>(null)
+const cartOpen = ref(false)
 const configuredDiscountSelected = ref(false)
 const manualDiscountEnabled = ref(false)
 const manualDiscountMode = ref<DiscountMode>('amount')
@@ -175,6 +177,17 @@ onBeforeUnmount(() => {
   if (cartFlyTimer) {
     window.clearTimeout(cartFlyTimer)
   }
+
+  if (import.meta.client) {
+    document.body.classList.remove('pos-cart-sheet-open')
+  }
+})
+
+// Bloquea el scroll del fondo mientras la hoja del carrito está abierta (solo móvil).
+watch(cartOpen, (open) => {
+  if (import.meta.client) {
+    document.body.classList.toggle('pos-cart-sheet-open', open)
+  }
 })
 
 watch(splitPayment, (enabled) => {
@@ -242,6 +255,15 @@ function clearSale() {
   discount.value = 0
   appliedDiscountLabel.value = ''
   resetCheckout()
+  cartOpen.value = false
+}
+
+function openCart() {
+  cartOpen.value = true
+}
+
+function closeCart() {
+  cartOpen.value = false
 }
 
 function chargeSale() {
@@ -630,7 +652,10 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   }, 1200)
 
   const source = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
-  const target = cartPanelEl.value?.querySelector('.cart-header') ?? cartPanelEl.value
+  const isMobile = window.matchMedia('(max-width: 760px)').matches
+  const target = isMobile && mobileCartBarEl.value
+    ? mobileCartBarEl.value
+    : (cartPanelEl.value?.querySelector('.cart-header') ?? cartPanelEl.value)
 
   if (!source || !(target instanceof HTMLElement) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return
@@ -801,13 +826,17 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
     </section>
 
-    <aside ref="cartPanelEl" class="cart-panel" :class="{ 'is-pulsing': cartPulse }">
+    <aside ref="cartPanelEl" class="cart-panel" :class="{ 'is-pulsing': cartPulse, 'is-open': cartOpen }">
+      <span class="cart-sheet-handle" aria-hidden="true" />
       <header class="cart-header">
         <div class="flex gap-1 items-center">
           <i class="pi pi-shopping-cart" aria-hidden="true" />
           <strong>Carrito</strong>
           <Badge :value="productCount" severity="success" />
         </div>
+        <button type="button" class="cart-sheet-close" aria-label="Cerrar carrito" @click="closeCart">
+          <i class="pi pi-chevron-down" aria-hidden="true" />
+        </button>
       </header>
 
       <section v-if="cart.length" class="cart-lines" aria-label="Productos en carrito">
@@ -927,6 +956,38 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         />
       </footer>
     </aside>
+
+    <Transition name="cart-scrim">
+      <div
+        v-if="cartOpen"
+        class="cart-sheet-scrim"
+        aria-hidden="true"
+        @click="closeCart"
+      />
+    </Transition>
+
+    <button
+      ref="mobileCartBarEl"
+      type="button"
+      class="mobile-cart-bar"
+      :class="{ 'is-empty': !cart.length }"
+      :aria-label="cart.length ? `Ver carrito, ${productCount} artículos, total Bs ${money(total)}` : 'Carrito vacío'"
+      @click="openCart"
+    >
+      <span class="mobile-cart-bar__icon">
+        <i class="pi pi-shopping-cart" aria-hidden="true" />
+        <span v-if="productCount" class="mobile-cart-bar__count">{{ productCount }}</span>
+      </span>
+      <span class="mobile-cart-bar__copy">
+        <strong>{{ cart.length ? 'Ver carrito' : 'Carrito vacío' }}</strong>
+        <small>{{ cart.length ? `${productCount} ${productCount === 1 ? 'artículo' : 'artículos'}` : 'Agrega productos del catálogo' }}</small>
+      </span>
+      <span class="mobile-cart-bar__total">
+        <small>Total</small>
+        <strong>Bs {{ money(total) }}</strong>
+      </span>
+      <i class="pi pi-chevron-up mobile-cart-bar__chevron" aria-hidden="true" />
+    </button>
   </div>
 
   <Transition name="cart-fly">
@@ -1582,7 +1643,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .view-switch button.is-active {
   color: #ffffff;
-  background: #111827;
+  background: #0b6f38;
 }
 
 .view-switch button:focus-visible,
@@ -1881,6 +1942,14 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .cart-panel.is-pulsing {
   animation: cart-panel-pulse 1200ms ease both;
+}
+
+/* Elementos exclusivos de la hoja inferior móvil: ocultos en escritorio. */
+.cart-sheet-handle,
+.cart-sheet-close,
+.mobile-cart-bar,
+.cart-sheet-scrim {
+  display: none;
 }
 
 .cart-header,
@@ -3742,6 +3811,22 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   }
 }
 
+/* Fundido del fondo oscuro (scrim) de la hoja del carrito en móvil. */
+.cart-scrim-enter-active,
+.cart-scrim-leave-active {
+  transition: opacity 0.28s ease;
+}
+
+.cart-scrim-enter-from,
+.cart-scrim-leave-to {
+  opacity: 0;
+}
+
+/* Bloquea el scroll del fondo mientras la hoja del carrito está abierta. */
+:global(body.pos-cart-sheet-open) {
+  overflow: hidden;
+}
+
 @keyframes cart-panel-pulse {
   0%,
   100% {
@@ -3808,17 +3893,52 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1200px) {
+  /* Tablet (incluye iPad Air/Pro en horizontal ~1180-1194px): aquí ya NO cabe
+     el catálogo + carrito lado a lado, así que pasamos al carrito como hoja
+     inferior. La barra lateral del POS sigue visible, por eso desplazamos la
+     hoja y la barra por su ancho (--sidebar-w). En móvil (<=760) estas
+     variables se reinician a 0 (sidebar oculto). */
   .sale-content {
+    --sheet-left: var(--sidebar-w, 0px);
+    --bar-gap: 14px;
     grid-template-columns: 1fr;
     gap: 14px;
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
   }
 
-  .cart-panel {
-    position: static;
-    height: auto;
-    max-height: none;
-    min-height: 420px;
+  /* Apila herramientas y título: la búsqueda y el selector de vista (grilla /
+     lista) quedan siempre accesibles, sin recortarse contra el borde derecho. */
+  .pos-toolbar,
+  .pos-titlebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pos-titlebar {
+    gap: 10px;
+  }
+
+  .toolbar-group {
+    width: 100%;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .toolbar-label {
+    display: none;
+  }
+
+  .toolbar-search {
+    order: -1;
+    flex: 1 1 100%;
+    min-width: 0;
+    height: 42px;
+  }
+
+  .toolbar-search input {
+    width: 100%;
+    flex: 1 1 auto;
   }
 
   .catalog-area {
@@ -3830,27 +3950,17 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
     overflow: visible;
     padding-right: 0;
   }
-}
-
-@media (max-width: 760px) {
-  .pos-toolbar,
-  .pos-titlebar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .toolbar-group {
-    width: 100%;
-  }
-
-  .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  }
 
   .catalog-scroll.is-table {
     overflow-x: hidden;
   }
 
+  /* El catálogo ocupa todo el ancho disponible sin desbordar en tablet. */
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  /* Filas de producto compactas con botón "+" claro (también en tablet). */
   .product-table__head {
     display: none;
   }
@@ -3861,6 +3971,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
     gap: 10px;
     min-width: 0;
     padding: 10px;
+    cursor: pointer;
   }
 
   .product-row__icon {
@@ -3888,15 +3999,220 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   }
 
   .product-row__add {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 42px;
+    min-width: 0;
+    height: 42px;
+    padding: 0;
+    border-radius: 999px !important;
+    box-shadow: 0 6px 14px rgba(15, 158, 46, 0.28);
+  }
+
+  .product-row__add :deep(.p-button-label) {
     display: none;
   }
 
-  .product-row {
-    cursor: pointer;
+  .product-row__add :deep(.p-button-icon) {
+    margin: 0;
+    font-size: 1.05rem;
   }
 
   .product-row.is-recently-added {
     background: var(--primary-50);
+  }
+
+  /* ====== Carrito como hoja inferior deslizante (bottom sheet) ====== */
+  .cart-panel {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: var(--sheet-left);
+    z-index: 60;
+    height: auto;
+    max-height: 88dvh;
+    min-height: 0;
+    padding-top: 10px;
+    border: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -18px 44px rgba(15, 23, 42, 0.26);
+    transform: translateY(110%);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .cart-panel.is-open {
+    transform: translateY(0);
+  }
+
+  .cart-panel.is-pulsing {
+    /* La hoja está oculta hasta abrirse; evita que el pulse la desplace. */
+    animation: none;
+  }
+
+  .cart-sheet-handle {
+    display: block;
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    width: 42px;
+    height: 4px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: #cfd8e3;
+  }
+
+  .cart-sheet-close {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 999px;
+    color: #51607a;
+    background: #eef2f7;
+    cursor: pointer;
+  }
+
+  .cart-sheet-scrim {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: var(--sheet-left);
+    z-index: 55;
+    background: rgba(8, 19, 39, 0.5);
+  }
+
+  /* ====== Barra fija de carrito (siempre visible) ====== */
+  .mobile-cart-bar {
+    display: flex;
+    position: fixed;
+    right: var(--bar-gap);
+    bottom: calc(var(--bar-gap) + env(safe-area-inset-bottom));
+    left: calc(var(--sheet-left) + var(--bar-gap));
+    z-index: 40;
+    align-items: center;
+    gap: 12px;
+    height: 60px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 14px;
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--primary-500), var(--primary-700));
+    box-shadow: 0 14px 30px rgba(10, 111, 31, 0.34);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .mobile-cart-bar.is-empty {
+    color: #51607a;
+    background: #ffffff;
+    border: 1px solid #dde4ec;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  }
+
+  .mobile-cart-bar__icon {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 11px;
+    font-size: 1.1rem;
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .mobile-cart-bar.is-empty .mobile-cart-bar__icon {
+    background: #f1f5f9;
+  }
+
+  .mobile-cart-bar__count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    color: var(--primary-700);
+    background: #ffffff;
+    font-size: 0.7rem;
+    font-weight: 900;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .mobile-cart-bar__copy {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    flex: 1 1 auto;
+    line-height: 1.15;
+  }
+
+  .mobile-cart-bar__copy strong {
+    font-size: 0.92rem;
+    font-weight: 900;
+  }
+
+  .mobile-cart-bar__copy small {
+    overflow: hidden;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.82;
+  }
+
+  .mobile-cart-bar__total {
+    display: grid;
+    flex: 0 0 auto;
+    justify-items: end;
+    gap: 1px;
+    line-height: 1.1;
+  }
+
+  .mobile-cart-bar.is-empty .mobile-cart-bar__total {
+    display: none;
+  }
+
+  .mobile-cart-bar__total small {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.82;
+  }
+
+  .mobile-cart-bar__total strong {
+    font-size: 1rem;
+    font-weight: 900;
+  }
+
+  .mobile-cart-bar__chevron {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    opacity: 0.85;
+  }
+}
+
+@media (max-width: 760px) {
+  /* En móvil la barra lateral está oculta: la hoja y la barra vuelven al ancho
+     completo (offset 0) y con márgenes más ajustados. */
+  .sale-content {
+    --sheet-left: 0px;
+    --bar-gap: 8px;
+    padding-bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
 
   .product-info__body {

@@ -27,6 +27,7 @@ type CatalogProduct = {
   name: string
   description: string | null
   kind: 'producto' | 'servicio' | 'combo'
+  costingType: 'reventa' | 'produccion' | 'servicio'
   unit: string
   cost: number
   price: number
@@ -60,6 +61,7 @@ type ProductForm = {
   name: string
   description: string
   kind: CatalogProduct['kind']
+  costingType: CatalogProduct['costingType']
   unit: string
   cost: number
   price: number
@@ -101,6 +103,7 @@ const categoryDialogOpen = ref(false)
 const stockDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
 const catalogError = ref('')
+const categoryDialogFromProduct = ref(false)
 
 const searchTerm = ref('')
 const activeChip = ref<ChipKey>('todos')
@@ -128,6 +131,24 @@ const kindOptions = [
   { label: 'Producto', value: 'producto' },
   { label: 'Servicio', value: 'servicio' },
   { label: 'Combo', value: 'combo' },
+]
+
+const costingTypeOptions = [
+  {
+    label: 'Reventa simple',
+    value: 'reventa',
+    description: 'Compras el producto y lo vendes con margen.',
+  },
+  {
+    label: 'Preparado / producción',
+    value: 'produccion',
+    description: 'Usa ingredientes, insumos o rendimiento por lote.',
+  },
+  {
+    label: 'Servicio',
+    value: 'servicio',
+    description: 'Calcula por tiempo, insumos o mano de obra.',
+  },
 ]
 
 const stockReasons = [
@@ -245,6 +266,14 @@ const stockResult = computed(() => {
 watch(
   () => form.kind,
   (kind) => {
+    if (kind === 'servicio') {
+      form.costingType = 'servicio'
+    } else if (kind === 'combo' && form.costingType === 'reventa') {
+      form.costingType = 'produccion'
+    } else if (kind === 'producto' && form.costingType === 'servicio') {
+      form.costingType = 'reventa'
+    }
+
     if (kind !== 'servicio') {
       return
     }
@@ -297,6 +326,7 @@ function emptyProductForm(): ProductForm {
     name: '',
     description: '',
     kind: 'producto',
+    costingType: 'reventa',
     unit: 'unidad',
     cost: 0,
     price: 0,
@@ -337,6 +367,20 @@ const liveProfit = computed(() => {
   return { profit, margin }
 })
 
+const targetMargin = computed(() => Number(form.minMargin ?? storeDefaultMargin.value ?? 0))
+const suggestedPrice = computed(() => {
+  const margin = Math.min(Math.max(targetMargin.value, 0), 95)
+  if (form.cost <= 0 || margin <= 0) {
+    return form.cost
+  }
+  return form.cost / (1 - margin / 100)
+})
+const suggestedProfit = computed(() => Math.max(suggestedPrice.value - form.cost, 0))
+
+function applySuggestedPrice() {
+  form.price = Number(suggestedPrice.value.toFixed(2))
+}
+
 function addVariant() {
   form.variants.push({ name: '', sku: '', barcode: '', cost: null, price: null, stock: 0 })
   sections.variants = true
@@ -346,7 +390,7 @@ function removeVariant(index: number) {
   form.variants.splice(index, 1)
 }
 
-function openCreateCategory() {
+function openCreateCategory(fromProduct = false) {
   Object.assign(categoryForm, {
     id: null,
     name: '',
@@ -354,6 +398,7 @@ function openCreateCategory() {
     icon: 'pi pi-box',
     active: true,
   })
+  categoryDialogFromProduct.value = fromProduct
   catalogError.value = ''
   categoryDialogOpen.value = true
 }
@@ -371,6 +416,7 @@ function openEditProduct(product: CatalogProduct | null) {
     name: product.name,
     description: product.description ?? '',
     kind: product.kind,
+    costingType: product.costingType,
     unit: product.unit,
     cost: product.cost,
     price: product.price,
@@ -430,6 +476,10 @@ function margin(product: CatalogProduct | null) {
     return '0%'
   }
   return `${Math.round(((product.price - product.cost) / product.price) * 100)}%`
+}
+
+function costingLabel(type: CatalogProduct['costingType']) {
+  return costingTypeOptions.find(option => option.value === type)?.label ?? 'Reventa simple'
 }
 
 function isLowStock(product: CatalogProduct) {
@@ -516,6 +566,7 @@ async function saveProduct() {
     name: form.name,
     description: form.description,
     kind: form.kind,
+    costingType: form.costingType,
     unit: form.unit,
     cost: form.cost,
     price: form.price,
@@ -587,13 +638,17 @@ async function saveCategory() {
         body: payload,
       })
     } else {
-      await $fetch('/api/pos/catalog/categories', {
+      const response = await $fetch<{ category: CatalogCategory }>('/api/pos/catalog/categories', {
         method: 'POST',
         body: payload,
       })
+      if (categoryDialogFromProduct.value) {
+        form.categoryId = response.category.id
+      }
     }
 
     categoryDialogOpen.value = false
+    categoryDialogFromProduct.value = false
     await loadCatalog()
   } catch {
     catalogError.value = 'No se pudo guardar la categoría.'
@@ -674,7 +729,7 @@ async function openStockHistory(product: CatalogProduct | null) {
       </nav>
 
       <div class="crumb-actions">
-        <Button type="button" text size="small" icon="pi pi-tags" label="Categorías" @click="openCreateCategory" />
+        <Button type="button" text size="small" icon="pi pi-tags" label="Categorías" @click="openCreateCategory()" />
         <Select v-model="viewScope" :options="viewScopes" optionLabel="label" optionValue="value" size="small" />
         <Button
           type="button"
@@ -695,7 +750,7 @@ async function openStockHistory(product: CatalogProduct | null) {
       </div>
 
       <div class="catalog-heading__actions">
-        <Button type="button" severity="contrast" icon="pi pi-plus" label="Nuevo producto" @click="openCreateProduct" />
+        <Button type="button" icon="pi pi-plus" label="Nuevo producto" @click="openCreateProduct" />
       </div>
     </div>
 
@@ -864,8 +919,12 @@ async function openStockHistory(product: CatalogProduct | null) {
               <strong>Bs {{ money(selectedProduct.cost) }}</strong>
             </div>
             <div>
-              <span>Margen</span>
+              <span>Margen real</span>
               <strong>{{ margin(selectedProduct) }}</strong>
+            </div>
+            <div>
+              <span>Costeo</span>
+              <strong>{{ costingLabel(selectedProduct.costingType) }}</strong>
             </div>
             <div>
               <span>Stock total</span>
@@ -877,7 +936,6 @@ async function openStockHistory(product: CatalogProduct | null) {
           <div class="detail-actions">
             <Button
               type="button"
-              severity="contrast"
               icon="pi pi-sliders-h"
               label="Ajustar stock"
               :disabled="selectedProduct.kind === 'servicio'"
@@ -932,7 +990,93 @@ async function openStockHistory(product: CatalogProduct | null) {
             <InputText id="product-name" v-model="form.name" autocomplete="off" placeholder="Ej. Coca Cola, Leche Pil, Pan..." />
           </div>
 
-          <!-- Precio venta / Stock -->
+          <!-- Categoría -->
+          <div class="pfield">
+            <label for="product-category">Categoría / Rubro</label>
+            <div class="category-picker">
+              <Select id="product-category" v-model="form.categoryId" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
+              <Button
+                type="button"
+                icon="pi pi-plus"
+                label="Nueva"
+                outlined
+                @click="openCreateCategory(true)"
+              />
+            </div>
+          </div>
+
+          <div class="pfield">
+            <label>Forma de calcular costo</label>
+            <div class="costing-toggle">
+              <button
+                v-for="option in costingTypeOptions"
+                :key="option.value"
+                type="button"
+                class="costing-toggle__btn"
+                :class="{ 'is-active': form.costingType === option.value }"
+                @click="form.costingType = option.value as ProductForm['costingType']"
+              >
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.description }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Costo / Margen de ganancia -->
+          <div class="pgrid">
+            <div class="pfield">
+              <label for="product-cost">Costo</label>
+              <InputNumber
+                id="product-cost"
+                v-model="form.cost"
+                prefix="Bs "
+                :min="0"
+                :minFractionDigits="2"
+                :maxFractionDigits="2"
+                fluid
+              />
+            </div>
+            <div class="pfield">
+              <label for="product-margin">Margen de ganancia</label>
+              <InputNumber
+                id="product-margin"
+                v-model="form.minMargin"
+                suffix=" %"
+                :min="0"
+                :max="95"
+                :placeholder="`Por defecto: ${storeDefaultMargin}%`"
+                fluid
+              />
+              <small class="field-help">NEXA calcula el precio desde este margen real.</small>
+            </div>
+          </div>
+
+          <div class="price-helper">
+            <div class="price-helper__main">
+              <span class="price-helper__icon"><i class="pi pi-percentage" aria-hidden="true" /></span>
+              <div>
+                <small>Precio recomendado con margen de ganancia</small>
+                <strong>Bs {{ money(suggestedPrice) }}</strong>
+                <em>Margen {{ targetMargin.toFixed(1) }}% · Ganancia Bs {{ money(suggestedProfit) }}</em>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="small"
+              icon="pi pi-check"
+              label="Aplicar"
+              outlined
+              :disabled="form.cost <= 0 || suggestedPrice <= 0"
+              @click="applySuggestedPrice"
+            />
+          </div>
+
+          <!-- Ganancia en vivo -->
+          <div class="profit-box" :class="{ 'is-negative': liveProfit.profit < 0 }">
+            <span>Ganancia / margen real</span>
+            <strong>Bs {{ money(liveProfit.profit) }} · {{ liveProfit.margin.toFixed(1) }}%</strong>
+          </div>
+
           <div class="pgrid">
             <div class="pfield">
               <label for="product-price">Precio venta <span class="req">*</span></label>
@@ -955,46 +1099,6 @@ async function openStockHistory(product: CatalogProduct | null) {
               <small v-if="form.kind === 'servicio'" class="field-help">Los servicios no manejan stock.</small>
               <small v-else-if="form.id" class="field-help">Usa Ajustar stock para registrar movimientos.</small>
             </div>
-          </div>
-
-          <!-- Costo / Margen mínimo -->
-          <div class="pgrid">
-            <div class="pfield">
-              <label for="product-cost">Costo</label>
-              <InputNumber
-                id="product-cost"
-                v-model="form.cost"
-                prefix="Bs "
-                :min="0"
-                :minFractionDigits="2"
-                :maxFractionDigits="2"
-                fluid
-              />
-            </div>
-            <div class="pfield">
-              <label for="product-margin">Margen mínimo</label>
-              <InputNumber
-                id="product-margin"
-                v-model="form.minMargin"
-                suffix=" %"
-                :min="0"
-                :max="100"
-                :placeholder="`Por defecto: ${storeDefaultMargin}%`"
-                fluid
-              />
-            </div>
-          </div>
-
-          <!-- Ganancia en vivo -->
-          <div class="profit-box" :class="{ 'is-negative': liveProfit.profit < 0 }">
-            <span>Ganancia / margen</span>
-            <strong>Bs {{ money(liveProfit.profit) }} · {{ liveProfit.margin.toFixed(1) }}%</strong>
-          </div>
-
-          <!-- Categoría -->
-          <div class="pfield">
-            <label for="product-category">Categoría / Rubro</label>
-            <Select id="product-category" v-model="form.categoryId" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
           </div>
 
           <!-- Sección: Códigos e imagen -->
@@ -1098,7 +1202,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 
         <footer class="pform-footer">
           <Button type="button" outlined label="Cancelar" severity="secondary" @click="productDialogOpen = false" />
-          <Button type="submit" :label="form.id ? 'Guardar cambios' : 'Guardar'"  severity="contrast" :loading="saving" />
+          <Button type="submit" :label="form.id ? 'Guardar cambios' : 'Guardar'" :loading="saving" />
         </footer>
       </form>
     </Dialog>
@@ -1170,7 +1274,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 
         <footer class="stock-footer">
           <Button type="button" label="Cancelar" outlined severity="secondary" @click="stockDialogOpen = false" />
-          <Button type="submit" label="Confirmar ajuste" severity="contrast" :loading="saving" />
+          <Button type="submit" label="Confirmar ajuste" :loading="saving" />
         </footer>
       </form>
     </Dialog>
@@ -1194,7 +1298,7 @@ async function openStockHistory(product: CatalogProduct | null) {
           <span>Categoría activa</span>
         </label>
         <footer class="dialog-actions">
-          <Button type="button" label="Cancelar" severity="secondary" outlined @click="categoryDialogOpen = false" />
+          <Button type="button" label="Cancelar" severity="secondary" outlined @click="categoryDialogOpen = false; categoryDialogFromProduct = false" />
           <Button type="submit" label="Guardar categoría" :loading="saving" />
         </footer>
       </form>
@@ -1241,6 +1345,9 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 <style scoped>
 .catalog-workspace {
+  --catalog-accent: #0b982f;
+  --catalog-accent-strong: #066322;
+  --catalog-accent-soft: #e4f4ea;
   display: grid;
   gap: 14px;
   padding: 12px 0 0;
@@ -1395,8 +1502,8 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .chip.is-active {
-  border-color: #0f172a;
-  background: #0f172a;
+  border-color: var(--catalog-accent);
+  background: var(--catalog-accent);
   color: #ffffff;
 }
 
@@ -1758,8 +1865,8 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .kind-toggle__btn.is-active {
-  border-color: #0f172a;
-  background: #0f172a;
+  border-color: var(--catalog-accent);
+  background: var(--catalog-accent);
   color: #ffffff;
 }
 
@@ -1797,6 +1904,121 @@ async function openStockHistory(product: CatalogProduct | null) {
 .pfield :deep(.p-inputnumber),
 .pfield :deep(.p-select) {
   width: 100%;
+}
+
+.category-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.category-picker :deep(.p-button) {
+  height: 100%;
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.costing-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.costing-toggle__btn {
+  display: grid;
+  gap: 4px;
+  min-height: 82px;
+  padding: 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.costing-toggle__btn:hover {
+  border-color: #86efac;
+  background: #f8fafc;
+}
+
+.costing-toggle__btn.is-active {
+  border-color: var(--catalog-accent);
+  background: var(--catalog-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--catalog-accent);
+}
+
+.costing-toggle__btn strong {
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.costing-toggle__btn span {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.price-helper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+}
+
+.price-helper__main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.price-helper__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 1rem;
+}
+
+.price-helper small,
+.price-helper strong,
+.price-helper em {
+  display: block;
+}
+
+.price-helper small {
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.price-helper strong {
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 1.18rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-helper em {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
 }
 
 /* Ganancia en vivo */
@@ -1932,8 +2154,8 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .emoji-btn.is-active {
-  border-color: #0f172a;
-  background: #eef2ff;
+  border-color: var(--catalog-accent);
+  background: var(--catalog-accent-soft);
 }
 
 /* Checks */
@@ -2022,8 +2244,8 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .stock-mode button.is-active {
-  border-color: #0f172a;
-  background: #0b0f14;
+  border-color: var(--catalog-accent);
+  background: var(--catalog-accent-strong);
   color: #ffffff;
 }
 
@@ -2119,6 +2341,14 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 @media (max-width: 480px) {
+  .category-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .costing-toggle {
+    grid-template-columns: 1fr;
+  }
+
   .variant-row {
     grid-template-columns: 1fr;
   }

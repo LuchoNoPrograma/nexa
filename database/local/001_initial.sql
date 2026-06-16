@@ -158,6 +158,7 @@ create table if not exists producto (
   nombre text not null,
   descripcion text,
   tipo text not null default 'producto' check (tipo in ('producto', 'servicio', 'combo')),
+  tipo_costeo text not null default 'reventa' check (tipo_costeo in ('reventa', 'produccion', 'servicio')),
   unidad text not null default 'unidad',
   costo_unitario numeric(12,2) not null default 0,
   precio_venta numeric(12,2) not null default 0,

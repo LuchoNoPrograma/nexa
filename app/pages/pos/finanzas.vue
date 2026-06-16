@@ -8,1247 +8,805 @@ useHead({
   title: 'Finanzas | NEXA',
 })
 
-type Tone = 'green' | 'red' | 'blue' | 'purple'
+const session = usePosSession()
 
-const toneClasses: Record<Tone, string> = {
-  green: 'bg-emerald-50 text-emerald-700',
-  red: 'bg-orange-50 text-orange-600',
-  blue: 'bg-blue-50 text-blue-600',
-  purple: 'bg-violet-50 text-violet-600',
+// Saludo cercano usando el nombre del negocio (lenguaje del mundo real, 20-60 años).
+const storeName = computed(() => session.value?.store?.trim() || 'tu negocio')
+
+type Category = { label: string, amount: number, color: string }
+type TrendPoint = { label: string, amount: number }
+type Period = {
+  label: string
+  short: string
+  income: number
+  balance: number
+  expenses: Category[]
+  incomeSources: Category[]
+  incomeTrend: TrendPoint[]
 }
 
-const metrics = [
-  { label: 'Mis ingresos', value: 'Bs. 48,750', hint: 'vs. mes anterior', delta: '+18.4%', icon: 'pi pi-wallet', tone: 'green' as Tone },
-  { label: 'Gastos realizados', value: 'Bs. 23,860', hint: 'vs. mes anterior', delta: '+9.7%', icon: 'pi pi-credit-card', tone: 'red' as Tone },
-  { label: 'Ganancia neta', value: 'Bs. 24,890', hint: 'vs. mes anterior', delta: '+25.6%', icon: 'pi pi-chart-line', tone: 'green' as Tone },
-  { label: 'Mis ventas diarias', value: 'Bs. 24,890', hint: 'Promedio diario', delta: '+14.2%', icon: 'pi pi-shopping-bag', tone: 'blue' as Tone },
-  { label: 'Saldo disponible', value: 'Bs. 62,340', hint: 'En caja y bancos', delta: '+12.3%', icon: 'pi pi-database', tone: 'purple' as Tone },
-]
+// Datos demo coherentes: cada periodo cuadra (ingresos - gastos = ganancia).
+const finances: Record<'este' | 'pasado', Period> = {
+  este: {
+    label: 'este mes',
+    short: 'Este mes',
+    income: 48750,
+    balance: 62340,
+    expenses: [
+      { label: 'Compras de productos', amount: 8300, color: '#0b6f38' },
+      { label: 'Sueldos', amount: 5640, color: '#22c55e' },
+      { label: 'Luz, agua e internet', amount: 4500, color: '#3b82f6' },
+      { label: 'Transporte', amount: 2450, color: '#f59e0b' },
+      { label: 'Publicidad', amount: 2140, color: '#8b5cf6' },
+      { label: 'Otros gastos', amount: 830, color: '#94a3b8' },
+    ],
+    // De dónde entró el dinero (suma = income).
+    incomeSources: [
+      { label: 'Ventas en el local', amount: 31000, color: '#0b6f38' },
+      { label: 'Delivery', amount: 12750, color: '#22c55e' },
+      { label: 'Pedidos especiales', amount: 5000, color: '#3b82f6' },
+    ],
+    // Ingresos de los últimos 6 meses (el último es este mes).
+    incomeTrend: [
+      { label: 'Ene', amount: 38000 },
+      { label: 'Feb', amount: 41000 },
+      { label: 'Mar', amount: 39500 },
+      { label: 'Abr', amount: 44000 },
+      { label: 'May', amount: 41200 },
+      { label: 'Jun', amount: 48750 },
+    ],
+  },
+  pasado: {
+    label: 'el mes pasado',
+    short: 'Mes pasado',
+    income: 41200,
+    balance: 56350,
+    expenses: [
+      { label: 'Compras de productos', amount: 7600, color: '#0b6f38' },
+      { label: 'Sueldos', amount: 5200, color: '#22c55e' },
+      { label: 'Luz, agua e internet', amount: 4300, color: '#3b82f6' },
+      { label: 'Transporte', amount: 2200, color: '#f59e0b' },
+      { label: 'Publicidad', amount: 1900, color: '#8b5cf6' },
+      { label: 'Otros gastos', amount: 1100, color: '#94a3b8' },
+    ],
+    incomeSources: [
+      { label: 'Ventas en el local', amount: 27000, color: '#0b6f38' },
+      { label: 'Delivery', amount: 10200, color: '#22c55e' },
+      { label: 'Pedidos especiales', amount: 4000, color: '#3b82f6' },
+    ],
+    incomeTrend: [
+      { label: 'Dic', amount: 35000 },
+      { label: 'Ene', amount: 37000 },
+      { label: 'Feb', amount: 36500 },
+      { label: 'Mar', amount: 40000 },
+      { label: 'Abr', amount: 38800 },
+      { label: 'May', amount: 41200 },
+    ],
+  },
+}
 
-const incomeRows = [
-  { date: '24 May 2026', concept: 'Venta de productos', amount: 12450 },
-  { date: '22 May 2026', concept: 'Servicio de consultoría', amount: 8900 },
-  { date: '20 May 2026', concept: 'Venta de productos', amount: 7600 },
-  { date: '18 May 2026', concept: 'Suscripción mensual', amount: 4600 },
-]
-
-const expenseRows = [
-  { label: 'Servicios', amount: 7250, percent: 30, color: '#0f9e2e' },
-  { label: 'Compras', amount: 6380, percent: 26, color: '#ffad0a' },
-  { label: 'Costo laboral', amount: 5640, percent: 23, color: '#3b82f6' },
-  { label: 'Transporte', amount: 2450, percent: 10, color: '#2563eb' },
-  { label: 'Publicidad', amount: 2140, percent: 9, color: '#8b5cf6' },
-]
-
-const dailySales = [
-  { day: 'Lun', value: 27000 },
-  { day: 'Mar', value: 18000 },
-  { day: 'Mié', value: 32000 },
-  { day: 'Jue', value: 26000 },
-  { day: 'Vie', value: 16500 },
-  { day: 'Dom', value: 29500 },
-]
-
-const topProducts = [
-  { product: 'Bowl Açaí', sales: 12500, units: 250, profit: 2500, margin: 25, tone: 'green' },
-  { product: 'Batidos', sales: 8400, units: 200, profit: 1200, margin: 14, tone: 'amber' },
-  { product: 'Café', sales: 4800, units: 160, profit: 600, margin: 12, tone: 'amber' },
-  { product: 'Conos', sales: 6200, units: 140, profit: 400, margin: 6, tone: 'red' },
-  { product: 'Otros', sales: 3100, units: 120, profit: 300, margin: 10, tone: 'blue' },
-]
-
-const cost = ref(15)
-const indirectCosts = ref(5)
-const margin = ref(40)
-const searchTerm = ref('')
-const activeFilter = ref('overview')
-const selectedPeriod = ref('may')
-
+const period = ref<'este' | 'pasado'>('este')
 const periodOptions = [
-  { label: 'Mayo 2026', value: 'may' },
-  { label: 'Abril 2026', value: 'apr' },
-  { label: 'Últimos 90 días', value: 'quarter' },
+  { value: 'este' as const, label: 'Este mes' },
+  { value: 'pasado' as const, label: 'Mes pasado' },
 ]
 
-const financeFilters = [
-  { key: 'overview', label: 'Resumen', count: 6 },
-  { key: 'income', label: 'Ingresos', count: incomeRows.length },
-  { key: 'expenses', label: 'Gastos', count: expenseRows.length },
-  { key: 'prices', label: 'Precios', count: 1 },
-]
+const current = computed(() => finances[period.value])
+const periodLabel = computed(() => current.value.label)
 
-const baseCost = computed(() => Number(cost.value || 0) + Number(indirectCosts.value || 0))
-const recommendedPrice = computed(() => baseCost.value * (1 + Number(margin.value || 0) / 100))
-const monthlyFixedCosts = 30000
-const breakEvenUnits = computed(() => Math.ceil(monthlyFixedCosts / Math.max(recommendedPrice.value - baseCost.value, 1)))
+function expensesOf(p: Period) {
+  return p.expenses.reduce((sum, cat) => sum + cat.amount, 0)
+}
+function profitOf(p: Period) {
+  return p.income - expensesOf(p)
+}
 
-const currencyFormatter = new Intl.NumberFormat('es-BO', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+const income = computed(() => current.value.income)
+const expensesTotal = computed(() => expensesOf(current.value))
+const profit = computed(() => profitOf(current.value))
+const isProfit = computed(() => profit.value >= 0)
+const balance = computed(() => current.value.balance)
+
+// Comparación amable contra el mes anterior (solo cuando estamos viendo "este mes").
+const profitDelta = computed(() => period.value === 'este' ? profit.value - profitOf(finances.pasado) : null)
+
+// Categorías con porcentaje calculado para que la tortita siempre cuadre.
+const expenseCategories = computed(() => {
+  const total = expensesTotal.value || 1
+  return current.value.expenses.map(cat => ({
+    ...cat,
+    percent: Math.round((cat.amount / total) * 100),
+  }))
 })
 
-function money(value: number) {
-  return `Bs. ${currencyFormatter.format(value)}`
+// Tortita (dona) de gastos: gradiente cónico generado desde los montos reales.
+const donutGradient = computed(() => buildDonut(current.value.expenses, expensesTotal.value))
+
+// --- Ingresos: de dónde entra el dinero + cómo viene cambiando ---
+const incomeSources = computed(() => {
+  const total = income.value || 1
+  return current.value.incomeSources.map(src => ({
+    ...src,
+    percent: Math.round((src.amount / total) * 100),
+  }))
+})
+
+const incomeDonut = computed(() => buildDonut(current.value.incomeSources, income.value))
+
+const incomeTrend = computed(() => current.value.incomeTrend)
+const maxTrend = computed(() => Math.max(...incomeTrend.value.map(p => p.amount), 1))
+function trendHeight(point: TrendPoint) {
+  return `${Math.max((point.amount / maxTrend.value) * 100, 8)}%`
 }
 
-function compactMoney(value: number) {
-  return `Bs. ${new Intl.NumberFormat('es-BO').format(value)}`
+// Construye un gradiente cónico (dona) a partir de una lista de montos.
+function buildDonut(items: Category[], total: number) {
+  const safeTotal = total || 1
+  let acc = 0
+  const stops = items.map((item) => {
+    const from = acc
+    acc += (item.amount / safeTotal) * 100
+    return `${item.color} ${from}% ${acc}%`
+  })
+  return `conic-gradient(${stops.join(', ')})`
+}
+
+const haruTip = computed(() => isProfit.value
+  ? 'Revisa tus gastos cada semana. Los gastos chiquitos, juntos, se comen tu ganancia sin que te des cuenta.'
+  : 'Este mes gastaste más de lo que vendiste. Mira en qué se fue tu plata y recorta el gasto más grande primero.')
+
+const nf = new Intl.NumberFormat('es-BO')
+function bs(value: number) {
+  return nf.format(Math.round(value))
 }
 </script>
 
 <template>
-  <div class="finance-dashboard">
-    <div class="finance-breadcrumb">
-      <nav class="crumbs" aria-label="Ruta de finanzas">
-        <span>Finanzas</span>
-        <i class="pi pi-angle-right" aria-hidden="true" />
-        <strong>Dashboard</strong>
-      </nav>
-
-      <div class="crumb-actions">
-        <Select v-model="selectedPeriod" :options="periodOptions" optionLabel="label" optionValue="value" size="small" />
-        <Button type="button" text rounded icon="pi pi-refresh" aria-label="Actualizar finanzas" />
-      </div>
-    </div>
-
-    <section class="finance-heading">
+  <div class="fin">
+    <!-- Saludo cercano + selector de mes -->
+    <header class="fin-greet">
       <div>
-        <h2>Finanzas</h2>
-        <p>Controla ingresos, gastos, precios y rentabilidad con datos listos para decidir.</p>
+        <p class="fin-greet__hi">Hola, {{ storeName }} 👋</p>
+        <h1 class="fin-greet__title">Así va tu dinero</h1>
       </div>
 
-      <div class="finance-heading__actions">
-        <Button type="button" icon="pi pi-chart-bar" label="Ver reporte" outlined severity="success" />
-        <Button type="button" icon="pi pi-plus" label="Registrar movimiento" severity="success" />
-      </div>
-    </section>
-
-    <section class="finance-metrics" aria-label="Resumen financiero">
-      <article v-for="metric in metrics" :key="metric.label" class="metric-card">
-        <span class="metric-card__icon" :class="toneClasses[metric.tone]">
-          <i :class="metric.icon" aria-hidden="true" />
-        </span>
-        <div>
-          <small>{{ metric.label }}</small>
-          <strong>{{ metric.value }}</strong>
-          <span>
-            {{ metric.hint }}
-            <b :class="metric.tone === 'red' ? 'text-orange-600' : 'text-emerald-600'">
-              <i class="pi pi-arrow-up" aria-hidden="true" /> {{ metric.delta }}
-            </b>
-          </span>
-        </div>
-      </article>
-    </section>
-
-    <div class="finance-toolbar">
-      <IconField class="finance-search">
-        <InputIcon>
-          <i class="pi pi-search" />
-        </InputIcon>
-        <InputText v-model="searchTerm" placeholder="Buscar ingresos, gastos, productos o categorías..." />
-      </IconField>
-
-      <div class="finance-chips" role="tablist" aria-label="Filtros rápidos de finanzas">
+      <div class="fin-period" role="group" aria-label="Periodo">
         <button
-          v-for="filter in financeFilters"
-          :key="filter.key"
+          v-for="option in periodOptions"
+          :key="option.value"
           type="button"
-          class="finance-chip"
-          :class="{ 'is-active': activeFilter === filter.key }"
-          role="tab"
-          :aria-selected="activeFilter === filter.key"
-          @click="activeFilter = filter.key"
+          :class="{ 'is-active': period === option.value }"
+          @click="period = option.value"
         >
-          {{ filter.label }}
-          <span>{{ filter.count }}</span>
+          {{ option.label }}
         </button>
       </div>
-    </div>
+    </header>
 
-    <section class="finance-board" aria-label="Paneles del módulo de finanzas">
-      <article class="finance-panel income-panel">
-        <header class="panel-head">
-          <h2>1. Mis ingresos</h2>
-          <Button type="button" text size="small" severity="success" icon="pi pi-arrow-right" label="Ver ingresos" @click="navigateTo('/pos/ingresos')" />
-        </header>
+    <!-- HÉROE: la historia completa en un vistazo -> entró, salió, te quedó -->
+    <section class="fin-hero" :class="{ 'is-loss': !isProfit }" aria-label="Resumen del mes">
+      <div class="fin-hero__main">
+        <small>{{ isProfit ? `Te quedó de ganancia ${periodLabel}` : `Perdiste ${periodLabel}` }}</small>
+        <strong><em>Bs</em>{{ bs(Math.abs(profit)) }}</strong>
+        <p v-if="profitDelta !== null && profitDelta !== 0" class="fin-hero__delta">
+          <i :class="profitDelta > 0 ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" aria-hidden="true" />
+          Bs {{ bs(Math.abs(profitDelta)) }} {{ profitDelta > 0 ? 'más' : 'menos' }} que el mes pasado
+        </p>
+        <p v-else class="fin-hero__delta is-muted">Resumen de {{ periodLabel }}</p>
+      </div>
 
-        <div class="income-layout">
-          <div>
-            <DataTable :value="incomeRows" size="small" class="finance-table">
-              <Column field="date" header="Fecha" />
-              <Column field="concept" header="Concepto" />
-              <Column header="Monto">
-                <template #body="{ data }">
-                  <strong class="amount-positive">{{ compactMoney(data.amount) }}</strong>
-                </template>
-              </Column>
-            </DataTable>
+      <div class="fin-hero__split">
+        <article class="fin-hero__tile is-in">
+          <span class="fin-hero__ic"><i class="pi pi-arrow-down-left" aria-hidden="true" /></span>
+          <span>
+            <small>Entró</small>
+            <strong>Bs {{ bs(income) }}</strong>
+          </span>
+        </article>
+        <article class="fin-hero__tile is-out">
+          <span class="fin-hero__ic"><i class="pi pi-arrow-up-right" aria-hidden="true" /></span>
+          <span>
+            <small>Salió</small>
+            <strong>Bs {{ bs(expensesTotal) }}</strong>
+          </span>
+        </article>
+      </div>
 
-            <footer class="panel-total">
-              <span>Total ingresos</span>
-              <strong>Bs. 48,750</strong>
-            </footer>
-          </div>
-
-          <div class="income-chart">
-            <span>Evolución de ingresos</span>
-            <small>Últimos 6 meses</small>
-            <svg viewBox="0 0 190 106" aria-hidden="true">
-              <path class="grid-line" d="M10 82 H178 M10 60 H178 M10 38 H178" />
-              <path class="chart-area" d="M12 86 L34 76 L56 68 L78 58 L100 62 L122 42 L144 46 L166 28 L180 12 L180 92 L12 92 Z" />
-              <path class="chart-line" d="M12 86 L34 76 L56 68 L78 58 L100 62 L122 42 L144 46 L166 28 L180 12" />
-              <g class="chart-dots">
-                <circle cx="12" cy="86" r="3" />
-                <circle cx="78" cy="58" r="3" />
-                <circle cx="122" cy="42" r="3" />
-                <circle cx="180" cy="12" r="3" />
-              </g>
-            </svg>
-            <div class="months"><span>Dic</span><span>Ene</span><span>Feb</span><span>Mar</span><span>Abr</span><span>May</span></div>
-          </div>
-        </div>
-      </article>
-
-      <article class="finance-panel expenses-panel">
-        <header class="panel-head">
-          <h2>2. Gastos realizados</h2>
-        </header>
-
-        <div class="expense-layout">
-          <div class="donut" aria-label="Total de gastos por categoría">
-            <span>Bs. 23,860</span>
-            <small>Total gastos</small>
-          </div>
-
-          <div class="expense-list">
-            <div v-for="row in expenseRows" :key="row.label" class="expense-row">
-              <span :style="{ backgroundColor: row.color }" />
-              <strong>{{ row.label }}</strong>
-              <em>{{ compactMoney(row.amount) }}</em>
-              <small>{{ row.percent }}%</small>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <article class="finance-panel calculator-panel">
-        <header class="panel-head">
-          <h2>3. ¿Cuánto costará mi producto?</h2>
-        </header>
-
-        <div class="formula-row" aria-label="Fórmula de precio">
-          <span>Costo de producción</span>
-          <b>+</b>
-          <span>Gastos indirectos</span>
-          <b>+</b>
-          <span>Margen de ganancia</span>
-          <b>=</b>
-          <span>Precio de venta</span>
-        </div>
-
-        <div class="calc-layout">
-          <div class="calc-inputs">
-            <label>
-              <span>Costo unitario</span>
-              <InputNumber v-model="cost" input-id="cost" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
-            </label>
-            <label>
-              <span>Gastos indirectos</span>
-              <InputNumber v-model="indirectCosts" input-id="indirect-costs" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
-            </label>
-            <label>
-              <span>Margen (%)</span>
-              <InputNumber v-model="margin" input-id="margin" suffix=" %" :min="0" :max="300" fluid />
-            </label>
-          </div>
-
-          <div class="price-card">
-            <small>Precio recomendado</small>
-            <strong>{{ money(recommendedPrice) }}</strong>
-            <span>Por unidad <i class="pi pi-star-fill" aria-hidden="true" /></span>
-          </div>
-        </div>
-
-        <Message severity="success" size="small" icon="pi pi-info-circle">
-          Calcula el precio ideal para cubrir tus costos y obtener la ganancia que deseas.
-        </Message>
-      </article>
-
-      <article class="finance-panel balance-panel">
-        <header class="panel-head">
-          <h2>4. Cantidad que debería vender</h2>
-        </header>
-
-        <div class="balance-layout">
-          <div class="units-card">
-            <small>Debes vender</small>
-            <strong>{{ breakEvenUnits }}</strong>
-            <span>unidades</span>
-            <em>para cubrir todos tus costos y gastos.</em>
-            <i class="pi pi-bullseye" aria-hidden="true" />
-          </div>
-
-          <div class="break-chart">
-            <span>Costos vs. Ingresos</span>
-            <svg viewBox="0 0 370 200" aria-hidden="true">
-              <path class="grid-line" d="M34 168 H348 M34 124 H348 M34 80 H348 M34 36 H348" />
-              <path class="axis-line" d="M34 20 V168 H350" />
-              <path class="cost-line" d="M36 154 L348 74" />
-              <path class="income-line" d="M36 170 L348 28" />
-              <path class="break-line" d="M218 62 V168" />
-              <circle cx="218" cy="84" r="7" />
-              <text x="232" y="112">Punto de equilibrio</text>
-              <text x="232" y="129">{{ breakEvenUnits }} unidades</text>
-            </svg>
-          </div>
-        </div>
-      </article>
-
-      <article class="finance-panel daily-panel">
-        <header class="panel-head">
-          <h2>5. Mis ventas diarias</h2>
-        </header>
-
-        <div class="daily-layout">
-          <div class="daily-summary">
-            <small>Promedio diario</small>
-            <strong>Bs. 24,890</strong>
-            <b><i class="pi pi-arrow-up" aria-hidden="true" /> 14.2%</b>
-            <span>vs. mes anterior</span>
-          </div>
-
-          <div class="bar-chart">
-            <span>Ventas por día (últimos 7 días)</span>
-            <div class="bars">
-              <div v-for="day in dailySales" :key="day.day">
-                <i :style="{ height: `${Math.max(28, day.value / 360)}px` }" />
-                <small>{{ day.day }}</small>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <Message severity="success" size="small" icon="pi pi-calendar">
-          Lleva un control diario de tus ventas y conoce tu promedio para mejorar tu planificación.
-        </Message>
-      </article>
-
-      <article class="finance-panel products-panel">
-        <header class="panel-head">
-          <h2>6. ¿Qué producto sale más?</h2>
-        </header>
-
-        <DataTable :value="topProducts" size="small" class="finance-table product-table">
-          <Column field="product" header="Producto" />
-          <Column header="Ventas">
-            <template #body="{ data }">{{ compactMoney(data.sales) }}</template>
-          </Column>
-          <Column field="units" header="Unidades" />
-          <Column header="Ganancia">
-            <template #body="{ data }">{{ compactMoney(data.profit) }}</template>
-          </Column>
-          <Column header="Margen">
-            <template #body="{ data }">
-              <div class="margin-cell">
-                <span>{{ data.margin }}%</span>
-                <i :class="`is-${data.tone}`" :style="{ width: `${Math.max(data.margin * 2.1, 18)}px` }" />
-              </div>
-            </template>
-          </Column>
-        </DataTable>
-
-        <Message severity="warn" size="small" icon="pi pi-star">
-          Conoce qué productos generan más ganancias y cuáles puedes mejorar.
-        </Message>
-      </article>
+      <footer class="fin-hero__balance">
+        <i class="pi pi-wallet" aria-hidden="true" />
+        <span>Tienes disponible en caja y banco</span>
+        <strong>Bs {{ bs(balance) }}</strong>
+      </footer>
     </section>
 
-    <section class="finance-footer-grid">
-      <article class="info-panel module-panel">
-        <div>
-          <h2><i class="pi pi-chart-bar" aria-hidden="true" /> ¿Qué puedes ver en este módulo?</h2>
-          <p>Toda la información financiera de tu negocio en un solo lugar para tomar mejores decisiones.</p>
-          <ul>
-            <li><i class="pi pi-check" /> Resumen de ingresos y gastos</li>
-            <li><i class="pi pi-check" /> Evolución de tus ventas</li>
-            <li><i class="pi pi-check" /> Rentabilidad por producto</li>
-            <li><i class="pi pi-check" /> Gastos por categoría</li>
-            <li><i class="pi pi-check" /> Flujo de caja</li>
-            <li><i class="pi pi-check" /> Y mucho más...</li>
+    <!-- Dos tarjetas grandes: de dónde entra el dinero / en qué se va -->
+    <div class="fin-grid">
+      <!-- INGRESOS: gráfica de cómo entra el dinero -->
+      <section class="fin-card" aria-label="De dónde entra tu dinero">
+        <header class="fin-card__head">
+          <div>
+            <h2>¿De dónde entra tu dinero?</h2>
+            <small>Tus ingresos de {{ periodLabel }}</small>
+          </div>
+          <NuxtLink to="/pos/ingresos" class="fin-link">Ver ingresos <i class="pi pi-arrow-right" aria-hidden="true" /></NuxtLink>
+        </header>
+
+        <!-- Gráfica de barras: cómo vienen cambiando los ingresos -->
+        <div class="trend" role="img" aria-label="Ingresos de los últimos meses">
+          <div class="trend__bars">
+            <div
+              v-for="(point, index) in incomeTrend"
+              :key="point.label"
+              class="trend__col"
+              :class="{ 'is-last': index === incomeTrend.length - 1 }"
+            >
+              <span class="trend__val">Bs {{ bs(point.amount) }}</span>
+              <span class="trend__bar" :style="{ height: trendHeight(point) }" />
+              <small class="trend__label">{{ point.label }}</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desglose: por dónde llegó cada boliviano -->
+        <div class="spend">
+          <div class="spend__chart">
+            <div class="donut" :style="{ background: incomeDonut }" aria-hidden="true">
+              <div class="donut__hole">
+                <strong>Bs {{ bs(income) }}</strong>
+                <small>entró</small>
+              </div>
+            </div>
+          </div>
+
+          <ul class="spend__list">
+            <li v-for="src in incomeSources" :key="src.label">
+              <span class="spend__dot" :style="{ background: src.color }" />
+              <span class="spend__label">{{ src.label }}</span>
+              <span class="spend__amount">Bs {{ bs(src.amount) }}</span>
+              <span class="spend__pct">{{ src.percent }}%</span>
+            </li>
           </ul>
         </div>
-        <div class="monitor-illustration" aria-hidden="true">
-          <i class="pi pi-desktop" />
-          <span />
+      </section>
+
+      <!-- GASTOS: ¿en qué se va tu dinero? -->
+      <section class="fin-card" aria-label="En qué se va tu dinero">
+        <header class="fin-card__head">
+          <div>
+            <h2>¿En qué se va tu dinero?</h2>
+            <small>Tus gastos de {{ periodLabel }}</small>
+          </div>
+          <NuxtLink to="/pos/gastos" class="fin-link">Ver gastos <i class="pi pi-arrow-right" aria-hidden="true" /></NuxtLink>
+        </header>
+
+        <div class="spend">
+          <div class="spend__chart">
+            <div class="donut" :style="{ background: donutGradient }" aria-hidden="true">
+              <div class="donut__hole">
+                <strong>Bs {{ bs(expensesTotal) }}</strong>
+                <small>en gastos</small>
+              </div>
+            </div>
+          </div>
+
+          <ul class="spend__list">
+            <li v-for="cat in expenseCategories" :key="cat.label">
+              <span class="spend__dot" :style="{ background: cat.color }" />
+              <span class="spend__label">{{ cat.label }}</span>
+              <span class="spend__amount">Bs {{ bs(cat.amount) }}</span>
+              <span class="spend__pct">{{ cat.percent }}%</span>
+            </li>
+          </ul>
         </div>
-      </article>
+      </section>
+    </div>
 
-      <article class="info-panel register-panel">
-        <h2><i class="pi pi-dollar" aria-hidden="true" /> ¿Qué puedes registrar en tu negocio?</h2>
-        <p>Registra tus operaciones de forma rápida y sencilla para mantener tu información siempre actualizada.</p>
-
-        <div class="register-grid">
-          <div>
-            <i class="pi pi-dollar" />
-            <strong>Ingresos</strong>
-            <span>Registra ventas o entradas de dinero.</span>
-          </div>
-          <div>
-            <i class="pi pi-credit-card is-orange" />
-            <strong>Gastos</strong>
-            <span>Registra tus gastos y desembolsos.</span>
-          </div>
-          <div>
-            <i class="pi pi-shopping-cart is-blue" />
-            <strong>Ventas</strong>
-            <span>Registra ventas diarias.</span>
-          </div>
-          <div>
-            <i class="pi pi-database is-purple" />
-            <strong>Costos</strong>
-            <span>Registra costos de tus productos.</span>
-          </div>
-        </div>
-
-        <small>Una vez guardado, el registro se reflejará automáticamente en el dashboard y en los reportes.</small>
-      </article>
+    <!-- Consejo de Haru -->
+    <section class="haru-tip">
+      <div class="haru-tip__copy">
+        <span class="haru-tip__kicker"><i class="pi pi-sparkles" aria-hidden="true" />Consejo de Haru</span>
+        <p>{{ haruTip }}</p>
+      </div>
+      <img src="/haru.png" alt="" aria-hidden="true" class="haru-tip__mascot">
     </section>
   </div>
 </template>
 
 <style scoped>
-.finance-dashboard {
+.fin {
   display: grid;
-  gap: 14px;
-  padding: 12px 0 0;
+  gap: 16px;
+  width: min(100%, 920px);
+  margin: 0 auto;
   color: #102016;
 }
 
-.finance-breadcrumb {
+/* Dos tarjetas grandes lado a lado en desktop, apiladas en tablet/móvil. */
+.fin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* --- Saludo + periodo --- */
+.fin-greet {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
 }
 
-.crumbs {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #64748b;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.crumbs strong {
-  color: #0f172a;
-}
-
-.crumbs i {
-  color: #94a3b8;
-  font-size: 0.7rem;
-}
-
-.crumb-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.finance-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.finance-heading h2 {
+.fin-greet__hi {
   margin: 0;
-  color: #071327;
-  font-size: 1.6rem;
+  color: #5c6b60;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.fin-greet__title {
+  margin: 2px 0 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.5rem;
   font-weight: 900;
+  line-height: 1.15;
 }
 
-.finance-heading p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.finance-heading__actions {
+.fin-period {
   display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.finance-metrics {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.metric-card,
-.finance-panel,
-.info-panel {
-  border: 1px solid #e5ece7;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
-}
-
-.metric-card {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 12px;
-  min-height: 96px;
-  padding: 14px 16px;
-}
-
-.metric-card__icon {
-  display: grid;
-  width: 48px;
-  height: 48px;
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: 16px;
-  font-size: 1.35rem;
-}
-
-.metric-card small,
-.finance-panel small,
-.calc-inputs span,
-.formula-row,
-.register-grid span,
-.info-panel p,
-.info-panel small {
-  color: #6b7570;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.metric-card strong {
-  display: block;
-  margin-top: 3px;
-  color: #121c17;
-  font-size: 1.08rem;
-  font-weight: 900;
-}
-
-.metric-card span:not(.metric-card__icon) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
-  color: #6b7570;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.metric-card b {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.finance-toolbar {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1.25fr);
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
-}
-
-.finance-search {
-  width: 100%;
-}
-
-.finance-search :deep(.p-inputtext) {
-  width: 100%;
-  border-radius: 10px;
-  font-size: 0.82rem;
-}
-
-.finance-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.finance-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid #dbe5df;
+  padding: 4px;
+  border: 1px solid #e2ebe4;
   border-radius: 999px;
-  background: #ffffff;
-  color: #475569;
+  background: #fff;
+}
+
+.fin-period button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: transparent;
+  color: #5c6b60;
+  font-size: 0.78rem;
+  font-weight: 800;
   cursor: pointer;
-  font-size: 0.76rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fin-period button.is-active {
+  background: #0b6f38;
+  color: #fff;
+}
+
+/* --- Héroe: entró / salió / te quedó --- */
+.fin-hero {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #0a6f1f 0%, #0e8a28 55%, #0b6f38 100%);
+  box-shadow: 0 16px 34px rgba(10, 111, 32, 0.26);
+}
+
+.fin-hero.is-loss {
+  background: linear-gradient(135deg, #b4451b 0%, #d75a23 55%, #ec6a2c 100%);
+  box-shadow: 0 16px 34px rgba(180, 69, 27, 0.26);
+}
+
+.fin-hero__main {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+
+.fin-hero__main > small {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.fin-hero__main strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 2.6rem;
   font-weight: 900;
+  line-height: 1;
 }
 
-.finance-chip span {
-  display: inline-grid;
-  min-width: 22px;
-  height: 22px;
-  place-items: center;
-  padding: 0 6px;
+.fin-hero__main strong em {
+  font-size: 1.1rem;
+  font-style: normal;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.fin-hero__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 5px 12px;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 0.66rem;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
-.finance-chip.is-active {
-  border-color: rgba(15, 158, 46, 0.26);
-  background: #ecfdf0;
+.fin-hero__delta.is-muted {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.fin-hero__split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fin-hero__tile {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.fin-hero__ic {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+}
+
+.fin-hero__tile.is-in .fin-hero__ic {
   color: #0a6f1f;
 }
 
-.finance-chip.is-active span {
-  background: #0f9e2e;
-  color: #ffffff;
+.fin-hero__tile.is-out .fin-hero__ic {
+  color: #c0501f;
 }
 
-.finance-board {
-  display: grid;
-  grid-template-columns: minmax(330px, 1.12fr) minmax(300px, 0.95fr) minmax(330px, 1fr);
-  gap: 12px;
+.fin-hero__tile small {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
 }
 
-.finance-panel {
-  min-width: 0;
-  padding: 16px;
+.fin-hero__tile strong {
+  display: block;
+  font-size: 1.12rem;
+  font-weight: 900;
 }
 
-.panel-head {
+.fin-hero__balance {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.fin-hero__balance strong {
+  margin-left: auto;
+  font-size: 0.96rem;
+  font-weight: 900;
+  color: #fff;
+}
+
+/* --- Tarjetas blancas --- */
+.fin-card {
+  padding: 18px;
+  border: 1px solid #e7eee8;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.fin-card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
-.panel-head h2 {
+.fin-card__head h2 {
   margin: 0;
-  color: #17221b;
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 0.95rem;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.income-panel,
-.balance-panel {
-  grid-column: span 1;
-}
-
-.income-layout,
-.expense-layout,
-.balance-layout,
-.daily-layout {
-  display: grid;
-  gap: 16px;
-}
-
-.income-layout,
-.balance-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(165px, 0.75fr);
-  align-items: center;
-}
-
-.expense-layout {
-  grid-template-columns: 150px minmax(190px, 1fr);
-  align-items: center;
-}
-
-.finance-table :deep(.p-datatable-header-cell),
-.finance-table :deep(.p-datatable-tbody > tr > td) {
-  padding: 0.45rem 0.4rem;
-  border-color: transparent;
-  background: transparent;
-  color: #253029;
-  font-size: 0.7rem;
-}
-
-.finance-table :deep(.p-datatable-header-cell) {
-  color: #4e5b53;
+  font-size: 1.05rem;
   font-weight: 900;
 }
 
-.finance-table :deep(.p-datatable-tbody > tr) {
-  background: transparent;
+.fin-card__head small {
+  color: #6b7a6f;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
-.amount-positive,
-.panel-total strong {
-  color: #0f9e2e;
-}
-
-.panel-total {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-  padding-top: 12px;
-  border-top: 1px solid #eef3ef;
+.fin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: #1c7a2c;
   font-size: 0.78rem;
   font-weight: 900;
+  text-decoration: none;
 }
 
-.income-chart span,
-.break-chart span,
-.bar-chart span {
-  display: block;
-  color: #253029;
-  font-size: 0.72rem;
-  font-weight: 900;
+.fin-link:hover {
+  text-decoration: underline;
 }
 
-.income-chart svg,
-.break-chart svg {
-  width: 100%;
-  overflow: visible;
+/* --- Tortita / dona --- */
+.spend {
+  display: grid;
+  grid-template-columns: 152px minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
 }
 
-.grid-line {
-  fill: none;
-  stroke: #e9f0eb;
-  stroke-width: 1;
-}
-
-.axis-line {
-  fill: none;
-  stroke: #cbd7cf;
-  stroke-width: 1.5;
-}
-
-.chart-area {
-  fill: rgba(15, 158, 46, 0.12);
-}
-
-.chart-line,
-.income-line {
-  fill: none;
-  stroke: #0f8f29;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 4;
-}
-
-.chart-dots circle,
-.break-chart circle {
-  fill: #0f9e2e;
-  stroke: #ffffff;
-  stroke-width: 3;
-}
-
-.months {
-  display: flex;
-  justify-content: space-between;
-  color: #6b7570;
-  font-size: 0.64rem;
-  font-weight: 800;
+.spend__chart {
+  display: grid;
+  place-items: center;
 }
 
 .donut {
-  display: grid;
-  width: 150px;
+  position: relative;
+  width: 148px;
   aspect-ratio: 1;
-  place-items: center;
-  justify-self: center;
   border-radius: 50%;
-  background:
-    radial-gradient(circle, #ffffff 0 43%, transparent 44%),
-    conic-gradient(#0f9e2e 0 30%, #ffad0a 30% 56%, #3b82f6 56% 79%, #2563eb 79% 90%, #8b5cf6 90% 100%);
 }
 
-.donut span {
-  align-self: end;
+.donut__hole {
+  position: absolute;
+  inset: 23%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-radius: 50%;
+  background: #fff;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px #eef3ef;
+}
+
+.donut__hole strong {
   font-size: 0.92rem;
   font-weight: 900;
 }
 
-.donut small {
-  align-self: start;
+.donut__hole small {
+  color: #6b7a6f;
+  font-size: 0.66rem;
+  font-weight: 700;
 }
 
-.expense-list {
+.spend__list {
   display: grid;
-  gap: 10px;
-}
-
-.expense-row {
-  display: grid;
-  grid-template-columns: auto minmax(78px, 1fr) minmax(68px, auto) 34px;
-  gap: 10px;
-  align-items: center;
-  color: #26322a;
-  font-size: 0.72rem;
-}
-
-.expense-row span {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-
-.expense-row strong {
-  font-weight: 900;
-}
-
-.expense-row em {
-  color: #4d5b52;
-  font-style: normal;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.formula-row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
-  gap: 7px;
-  align-items: center;
-  margin-bottom: 14px;
-  text-align: center;
-}
-
-.formula-row b {
-  color: #0f9e2e;
-  font-size: 0.9rem;
-}
-
-.calc-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 138px;
-  gap: 12px;
-  align-items: stretch;
-}
-
-.calc-inputs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(92px, 1fr));
-  gap: 10px;
-}
-
-.calc-inputs label {
-  display: grid;
-  gap: 7px;
-}
-
-.calc-inputs :deep(.p-inputnumber-input) {
-  width: 100%;
-  min-height: 44px;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
-.price-card {
-  display: grid;
-  place-items: center;
-  min-height: 110px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #eef8ec;
-  color: #0a6f1f;
-  text-align: center;
-}
-
-.price-card strong {
-  font-size: 1.42rem;
-  font-weight: 900;
-}
-
-.price-card span {
-  color: #6b7570;
-  font-size: 0.68rem;
-  font-weight: 900;
-}
-
-.price-card i {
-  color: #f2b400;
-}
-
-.calculator-panel :deep(.p-message),
-.daily-panel :deep(.p-message),
-.products-panel :deep(.p-message) {
-  margin: 12px 0 0;
-  border-radius: 8px;
-  font-size: 0.72rem;
-}
-
-.units-card {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  min-height: 180px;
-  padding: 14px;
-  border-radius: 8px;
-  background: #f4faf2;
-  text-align: center;
-}
-
-.units-card strong {
-  color: #0f8f29;
-  font-size: 2.25rem;
-  line-height: 1;
-  font-weight: 900;
-}
-
-.units-card span {
-  color: #0a6f1f;
-  font-size: 0.9rem;
-  font-weight: 900;
-}
-
-.units-card em {
-  max-width: 130px;
-  margin-top: 12px;
-  color: #4e5b53;
-  font-size: 0.72rem;
-  font-style: normal;
-  font-weight: 800;
-}
-
-.units-card i {
-  margin-top: 12px;
-  color: #0f9e2e;
-  font-size: 1.55rem;
-}
-
-.cost-line {
-  fill: none;
-  stroke: #ff5b2e;
-  stroke-dasharray: 6 6;
-  stroke-linecap: round;
-  stroke-width: 3;
-}
-
-.break-line {
-  fill: none;
-  stroke: #80a18c;
-  stroke-dasharray: 4 5;
-  stroke-width: 2;
-}
-
-.break-chart text {
-  fill: #4e5b53;
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-
-.daily-layout {
-  grid-template-columns: 130px minmax(0, 1fr);
-  align-items: center;
-}
-
-.daily-summary {
-  display: grid;
-  gap: 6px;
-  min-height: 126px;
-  align-content: center;
-  padding: 12px;
-  border-radius: 8px;
-  background: #f5faf2;
-}
-
-.daily-summary strong {
-  font-size: 1.08rem;
-  font-weight: 900;
-}
-
-.daily-summary b {
-  color: #0f9e2e;
-  font-size: 0.78rem;
-}
-
-.daily-summary span {
-  color: #6b7570;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.bar-chart {
-  display: grid;
-  gap: 12px;
-}
-
-.bars {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  align-items: end;
-  min-height: 126px;
-  padding-left: 10px;
-  border-left: 1px solid #e3ece6;
-  border-bottom: 1px solid #e3ece6;
-}
-
-.bars div {
-  display: grid;
-  justify-items: center;
-  align-items: end;
-  gap: 7px;
-}
-
-.bars i {
-  display: block;
-  width: 22px;
-  border-radius: 5px 5px 0 0;
-  background: #1aa037;
-}
-
-.bars small {
-  color: #4e5b53;
-}
-
-.product-table :deep(.p-datatable-tbody > tr > td) {
-  padding-top: 0.38rem;
-  padding-bottom: 0.38rem;
-}
-
-.margin-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.margin-cell span {
-  width: 28px;
-  color: #26322a;
-  font-size: 0.68rem;
-  font-weight: 900;
-}
-
-.margin-cell i {
-  display: block;
-  height: 8px;
-  border-radius: 999px;
-}
-
-.margin-cell .is-green {
-  background: #22a537;
-}
-
-.margin-cell .is-amber {
-  background: #ffad0a;
-}
-
-.margin-cell .is-red {
-  background: #ff5b2e;
-}
-
-.margin-cell .is-blue {
-  background: #3b82f6;
-}
-
-.finance-footer-grid {
-  display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  gap: 12px;
-}
-
-.info-panel {
-  display: grid;
-  gap: 12px;
-  padding: 18px 20px;
-}
-
-.module-panel {
-  grid-template-columns: minmax(0, 1fr) 130px;
-  align-items: center;
-}
-
-.info-panel h2 {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: #0a6f1f;
-  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 1rem;
-  font-weight: 900;
-}
-
-.info-panel p {
-  margin: 4px 0 10px;
-}
-
-.info-panel ul {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 20px;
+  gap: 11px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.info-panel li {
+.spend__list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 38px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+.spend__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+.spend__label {
+  overflow: hidden;
+  color: #28352c;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spend__amount {
+  color: #46554b;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.spend__pct {
+  color: #8a958c;
+  font-weight: 800;
+  text-align: right;
+}
+
+/* --- Gráfica de ingresos (barras por mes) --- */
+.trend {
+  margin-bottom: 18px;
+  padding: 14px 4px 0;
+  border-bottom: 1px solid #eef3ef;
+}
+
+.trend__bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+  height: 132px;
+}
+
+.trend__col {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: end;
+  justify-items: center;
+  gap: 6px;
+  height: 100%;
+}
+
+.trend__val {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #8a958c;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.trend__col.is-last .trend__val,
+.trend__col:hover .trend__val {
+  opacity: 1;
+  color: #1c7a2c;
+}
+
+.trend__bar {
+  width: 100%;
+  max-width: 34px;
+  align-self: end;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, #bfe6c4, #8fd49a);
+  transition: filter 0.15s ease;
+}
+
+.trend__col.is-last .trend__bar {
+  background: linear-gradient(180deg, #0b6f38, #0a6f1f);
+}
+
+.trend__col:hover .trend__bar {
+  filter: brightness(0.96);
+}
+
+.trend__label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #6b7a6f;
+}
+
+.trend__col.is-last .trend__label {
+  color: #1c7a2c;
+}
+
+/* --- Consejo de Haru --- */
+.haru-tip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 150px;
+  overflow: hidden;
+  padding: 20px 165px 20px 22px;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(120deg, #063718, #0e7a26 70%, #14a634);
+  box-shadow: 0 16px 34px rgba(6, 55, 24, 0.26);
+}
+
+.haru-tip__kicker {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  color: #28352c;
+  gap: 6px;
+  color: #9af29c;
   font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.info-panel li i {
-  color: #18a13b;
-}
-
-.monitor-illustration {
-  display: grid;
-  place-items: center;
-  justify-self: end;
-  width: 116px;
-  height: 86px;
-  border: 1px solid #cfdcd4;
-  border-radius: 8px;
-  background: #eef7f1;
-  color: #0f9e2e;
-  font-size: 2rem;
-}
-
-.register-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.register-grid div {
-  display: grid;
-  gap: 5px;
-  justify-items: center;
-  text-align: center;
-}
-
-.register-grid i {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 50%;
-  background: #e9f8eb;
-  color: #0f9e2e;
-  font-size: 1.2rem;
-}
-
-.register-grid .is-orange {
-  background: #fff1e8;
-  color: #ff5b2e;
-}
-
-.register-grid .is-blue {
-  background: #eef5ff;
-  color: #2563eb;
-}
-
-.register-grid .is-purple {
-  background: #f3eeff;
-  color: #8b5cf6;
-}
-
-.register-grid strong {
-  font-size: 0.76rem;
   font-weight: 900;
 }
 
-@media (max-width: 1680px) {
-  .finance-board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .calculator-panel,
-  .products-panel {
-    grid-column: span 2;
-  }
-
-  .calculator-panel .formula-row {
-    grid-template-columns: repeat(7, auto);
-    justify-content: start;
-  }
+.haru-tip__copy p {
+  margin: 8px 0 0;
+  max-width: 360px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-@media (max-width: 1320px) {
-  .finance-metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.haru-tip__mascot {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  height: 150px;
+  width: auto;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 14px 18px rgba(3, 24, 9, 0.34));
+  pointer-events: none;
 }
 
-@media (max-width: 920px) {
-  .finance-breadcrumb,
-  .finance-heading,
-  .finance-heading__actions {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .finance-heading__actions,
-  .crumb-actions {
-    width: 100%;
-  }
-
-  .finance-metrics,
-  .finance-toolbar,
-  .finance-board,
-  .finance-footer-grid,
-  .income-layout,
-  .expense-layout,
-  .balance-layout,
-  .daily-layout,
-  .calc-layout,
-  .module-panel,
-  .info-panel ul,
-  .register-grid {
+/* --- Responsivo --- */
+/* Tablet y móvil: las dos tarjetas grandes pasan a una sola columna. */
+@media (max-width: 1024px) {
+  .fin-grid {
     grid-template-columns: 1fr;
-  }
-
-  .finance-chips {
-    justify-content: flex-start;
-  }
-
-  .calculator-panel,
-  .products-panel {
-    grid-column: auto;
-  }
-
-  .monitor-illustration {
-    justify-self: start;
   }
 }
 
 @media (max-width: 560px) {
-  .finance-panel,
-  .info-panel {
-    padding: 14px;
+  .fin-greet {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
-  .metric-card {
-    min-height: auto;
+  .fin-period {
+    width: 100%;
   }
 
-  .calc-inputs,
-  .formula-row {
+  .fin-period button {
+    flex: 1 1 0;
+  }
+
+  .fin-hero__main strong {
+    font-size: 2.2rem;
+  }
+
+  .spend {
     grid-template-columns: 1fr;
-    text-align: left;
+    justify-items: center;
+    gap: 16px;
   }
 
-  .formula-row b {
+  .spend__list {
+    width: 100%;
+  }
+
+  .trend__bars {
+    height: 116px;
+    gap: 6px;
+  }
+
+  .trend__val {
     display: none;
   }
 
-  .bars i {
-    width: 16px;
+  .haru-tip {
+    min-height: 134px;
+    padding: 18px 124px 18px 18px;
+  }
+
+  .haru-tip__mascot {
+    height: 130px;
+    right: 6px;
+  }
+}
+
+@media (max-width: 380px) {
+  .fin-hero__split {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -45,7 +45,9 @@ type RegisterSaleInput = {
 type CashSessionPayload = {
   status: PosCashStatus
   openingFloat: number
+  expectedCash: number
   countedCash: number | null
+  difference: number | null
   openedAt: string
   closedAt: string | null
   openedBy: string
@@ -60,18 +62,10 @@ type CashOverviewPayload = {
 }
 
 export function usePosCashRegister() {
-  const cashStatus = useState<PosCashStatus>('nexa-pos-cash-status', () => 'abierta')
+  const cashStatus = useState<PosCashStatus>('nexa-pos-cash-status', () => 'cerrada')
   const movements = useState<PosCashMovement[]>('nexa-pos-cash-movements', () => [])
   const productSales = useState<PosCashProductSale[]>('nexa-pos-cash-product-sales', () => [])
-  const cashSession = useState<CashSessionPayload | null>('nexa-pos-cash-session', () => ({
-    status: 'abierta',
-    openingFloat: 200,
-    countedCash: null,
-    openedAt: '08:00',
-    closedAt: null,
-    openedBy: 'Responsable de caja',
-    notes: null,
-  }))
+  const cashSession = useState<CashSessionPayload | null>('nexa-pos-cash-session', () => null)
   const isLoading = useState('nexa-pos-cash-loading', () => false)
 
   function applyOverview(overview: CashOverviewPayload) {

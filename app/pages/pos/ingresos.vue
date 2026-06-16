@@ -96,41 +96,33 @@ const periodCopy = {
     title: 'Ingresos',
     subtitle: 'Ventas realizadas hoy · Martes, 20 de mayo de 2026',
     panelTitle: 'Ventas realizadas hoy',
-    sideTitle: 'Resumen del día',
-    comparisonTitle: 'Comparación con ayer',
     advice: [
-      'Las ventas de hoy están 14.6% arriba de ayer.',
-      'Bowl Açaí concentra la mayor venta; conviene mantenerlo visible en el mostrador.',
+      'Mantén visible el Bowl Açaí en mostrador y en historias: hoy está empujando la venta.',
+      'Entre 15:00 y 17:00 hay mejor respuesta. Programa una oferta corta para ese bloque.',
     ],
   },
   week: {
     title: 'Ingresos',
     subtitle: 'Semana actual · 20 al 26 de mayo de 2026',
     panelTitle: 'Ingresos por día',
-    sideTitle: 'Resumen semanal',
-    comparisonTitle: 'Comparación con semana anterior',
     advice: [
-      'Viernes es el día más fuerte de la semana.',
-      'Sábado y domingo están bajos; una promoción simple puede recuperar tráfico.',
+      'Viernes concentra el mejor resultado. Refuerza stock y personal antes de esa franja.',
+      'Sábado y domingo bajan fuerte. Prueba un combo pequeño por WhatsApp antes del mediodía.',
     ],
   },
   month: {
     title: 'Ingresos',
     subtitle: 'Mes actual · Mayo 2026',
     panelTitle: 'Ingresos por semana',
-    sideTitle: 'Resumen mensual',
-    comparisonTitle: 'Comparación con mes anterior',
     advice: [
-      'La Semana 4 superó la meta y explica buena parte del crecimiento mensual.',
-      'Mantén el seguimiento semanal; es más accionable que mirar solo el total del mes.',
+      'La Semana 4 superó la meta. Repite la misma oferta o canal que funcionó esa semana.',
+      'Revisa ingresos cada semana, no solo al cierre del mes: así corriges antes de perder ritmo.',
     ],
   },
 } satisfies Record<PeriodKey, {
   title: string
   subtitle: string
   panelTitle: string
-  sideTitle: string
-  comparisonTitle: string
   advice: string[]
 }>
 
@@ -139,7 +131,6 @@ const trendRows = computed(() => activePeriod.value === 'month' ? monthRows : we
 const maxTrendValue = computed(() => Math.max(...trendRows.value.map((row) => row.sales), 1))
 const trendTotal = computed(() => trendRows.value.reduce((sum, row) => sum + row.sales, 0))
 const trendTransactions = computed(() => trendRows.value.reduce((sum, row) => sum + row.transactions, 0))
-const trendAverageTicket = computed(() => trendTotal.value / Math.max(trendTransactions.value, 1))
 const bestTrendRow = computed(() => trendRows.value.reduce((best, row) => row.sales > best.sales ? row : best, trendRows.value[0]))
 const bestMonthRow = computed(() => monthlyComparisonRows.reduce((best, row) => row.sales > best.sales ? row : best, monthlyComparisonRows[0]))
 const maxMonthlyComparisonValue = computed(() => Math.max(...monthlyComparisonRows.map((row) => row.sales), 1))
@@ -154,18 +145,14 @@ const currentMonthVariation = computed(() => {
 
   return ((currentMonthComparison.value.sales - previous) / previous) * 100
 })
-const monthsOverTarget = computed(() => monthlyComparisonRows.filter((row) => row.sales >= row.target).length)
-
 const todayTotal = computed(() => todaySales.reduce((sum, row) => sum + row.total, 0))
 const todayTransactions = computed(() => todaySales.reduce((sum, row) => sum + row.qty, 0))
-const todayAverageTicket = computed(() => todayTotal.value / Math.max(todayTransactions.value, 1))
 
 const metrics = computed<MetricCard[]>(() => {
   if (activePeriod.value === 'today') {
     return [
       { label: 'Total vendido', value: money(todayTotal.value), meta: '+14.6% vs. ayer', icon: 'pi pi-wallet', tone: 'green' },
       { label: 'Número de ventas', value: String(todayTransactions.value), meta: '3 más que ayer', icon: 'pi pi-receipt', tone: 'blue' },
-      { label: 'Ticket promedio', value: money(todayAverageTicket.value), meta: '+12.3% vs. ayer', icon: 'pi pi-chart-bar', tone: 'gold' },
       { label: 'Producto más vendido', value: 'Bowl Açaí', meta: '4 unidades vendidas', icon: 'pi pi-star', tone: 'orange' },
     ]
   }
@@ -174,7 +161,6 @@ const metrics = computed<MetricCard[]>(() => {
     return [
       { label: 'Total semanal', value: money(trendTotal.value), meta: '+8.2% vs. semana anterior', icon: 'pi pi-wallet', tone: 'green' },
       { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Promedio diario: 10', icon: 'pi pi-receipt', tone: 'blue' },
-      { label: 'Ticket promedio', value: money(trendAverageTicket.value), meta: 'Calculado por venta', icon: 'pi pi-chart-bar', tone: 'gold' },
       { label: 'Mejor día', value: bestTrendRow.value.label, meta: money(bestTrendRow.value.sales), icon: 'pi pi-calendar-plus', tone: 'orange' },
     ]
   }
@@ -182,7 +168,6 @@ const metrics = computed<MetricCard[]>(() => {
   return [
     { label: 'Total mensual', value: money(trendTotal.value), meta: '+16.8% vs. mes anterior', icon: 'pi pi-wallet', tone: 'green' },
     { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'pi pi-receipt', tone: 'blue' },
-    { label: 'Ticket promedio', value: money(trendAverageTicket.value), meta: 'Promedio del mes', icon: 'pi pi-chart-bar', tone: 'gold' },
     { label: 'Mejor mes reciente', value: bestMonthRow.value.label, meta: money(bestMonthRow.value.sales), icon: 'pi pi-trophy', tone: 'orange' },
   ]
 })
@@ -200,65 +185,6 @@ const visibleSales = computed(() => {
     row.category,
     row.method,
   ].some((value) => value.toLowerCase().includes(term)))
-})
-
-const paymentSummary = computed(() => {
-  const methods: PaymentMethod[] = ['Efectivo', 'QR']
-  return methods.map((method) => {
-    const total = todaySales
-      .filter((row) => row.method === method)
-      .reduce((sum, row) => sum + row.total, 0)
-
-    return {
-      method,
-      total,
-      percent: todayTotal.value === 0 ? 0 : Math.round((total / todayTotal.value) * 100),
-    }
-  })
-})
-
-const sideSummary = computed(() => {
-  if (activePeriod.value === 'today') {
-    return [
-      { label: 'Hora de mayor venta', value: '15:00 - 17:00', icon: 'pi pi-clock', tone: 'green' },
-      ...paymentSummary.value.map((item) => ({
-        label: `Ventas con ${item.method}`,
-        value: `${money(item.total)} (${item.percent}%)`,
-        icon: item.method === 'Efectivo' ? 'pi pi-money-bill' : 'pi pi-qrcode',
-        tone: item.method === 'Efectivo' ? 'green' : 'blue',
-      })),
-    ]
-  }
-
-  return [
-    { label: activePeriod.value === 'week' ? 'Mejor día' : 'Mejor semana', value: `${bestTrendRow.value.label} · ${money(bestTrendRow.value.sales)}`, icon: 'pi pi-star', tone: 'green' },
-    { label: 'Promedio por periodo', value: money(trendTotal.value / trendRows.value.length), icon: 'pi pi-chart-line', tone: 'blue' },
-    { label: 'Meta de referencia', value: activePeriod.value === 'week' ? 'Bs. 340 por día' : 'Bs. 8,000 por mes', icon: 'pi pi-bullseye', tone: 'gold' },
-  ]
-})
-
-const comparisons = computed(() => {
-  if (activePeriod.value === 'today') {
-    return [
-      { label: 'Total vendido', value: '+ Bs. 74.00', percent: '+14.6%' },
-      { label: 'Número de ventas', value: '+ 3', percent: '+20%' },
-      { label: 'Ticket promedio', value: '+ Bs. 3.52', percent: '+12.3%' },
-    ]
-  }
-
-  if (activePeriod.value === 'week') {
-    return [
-      { label: 'Total semanal', value: '+ Bs. 185.00', percent: '+8.2%' },
-      { label: 'Ventas registradas', value: '+ 6', percent: '+9.0%' },
-      { label: 'Promedio diario', value: '+ Bs. 26.40', percent: '+8.2%' },
-    ]
-  }
-
-  return [
-    { label: 'Total vs. abril', value: '+ Bs. 1,210.00', percent: '+16.8%' },
-    { label: 'Ventas registradas', value: '+ 18', percent: '+7.7%' },
-    { label: 'Meses sobre meta', value: `${monthsOverTarget.value} de ${monthlyComparisonRows.length}`, percent: `${Math.round((monthsOverTarget.value / monthlyComparisonRows.length) * 100)}%` },
-  ]
 })
 
 function money(value: number) {
@@ -300,7 +226,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
           <InputText v-model="searchTerm" placeholder="Buscar venta, producto o método..." />
         </IconField>
 
-        <Button type="button" icon="pi pi-download" label="Exportar reporte" outlined severity="success" @click="exportDialogVisible = true" />
+        <Button type="button" icon="pi pi-download" label="Exportar reporte" outlined @click="exportDialogVisible = true" />
       </div>
     </section>
 
@@ -417,42 +343,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
         </div>
       </article>
 
-      <aside class="income-side">
-        <article class="income-panel side-panel">
-          <header class="panel-head">
-            <div>
-              <span>Lectura rápida</span>
-              <h2>{{ currentCopy.sideTitle }}</h2>
-            </div>
-          </header>
-
-          <div class="side-list">
-            <div v-for="item in sideSummary" :key="item.label">
-              <span :class="`is-${item.tone}`"><i :class="item.icon" aria-hidden="true" /></span>
-              <div>
-                <small>{{ item.label }}</small>
-                <strong>{{ item.value }}</strong>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="income-panel side-panel">
-          <header class="panel-head">
-            <div>
-              <span>Contexto</span>
-              <h2>{{ currentCopy.comparisonTitle }}</h2>
-            </div>
-          </header>
-
-          <div class="comparison-list">
-            <div v-for="item in comparisons" :key="item.label">
-              <span>{{ item.label }}</span>
-              <strong><i class="pi pi-arrow-up" aria-hidden="true" /> {{ item.value }} <small>{{ item.percent }}</small></strong>
-            </div>
-          </div>
-        </article>
-      </aside>
     </section>
 
     <section class="ai-advice">
@@ -522,7 +412,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   place-items: center;
   border-radius: 999px;
   background: #e7f6ea;
-  color: #0f9e2e;
+  color: #0b6f38;
   font-size: 1.3rem;
 }
 
@@ -602,7 +492,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 }
 
 .income-metric__icon,
-.side-list > div > span,
 .ai-advice__icon {
   display: grid;
   width: 48px;
@@ -614,20 +503,17 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 }
 
 .income-metric__icon.is-green,
-.side-list .is-green,
 .ai-advice__icon {
   background: #e8f7eb;
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
-.income-metric__icon.is-blue,
-.side-list .is-blue {
+.income-metric__icon.is-blue {
   background: #eaf3ff;
   color: #2f7ded;
 }
 
-.income-metric__icon.is-gold,
-.side-list .is-gold {
+.income-metric__icon.is-gold {
   background: #fff8d8;
   color: #9a6b00;
 }
@@ -638,7 +524,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 }
 
 .income-metric small,
-.side-list small,
 .panel-head span {
   color: #64748b;
   font-size: 0.74rem;
@@ -656,7 +541,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 .income-metric em {
   display: block;
   margin-top: 8px;
-  color: #0f9e2e;
+  color: #0b6f38;
   font-size: 0.74rem;
   font-style: normal;
   font-weight: 900;
@@ -664,7 +549,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 
 .income-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 14px;
   align-items: start;
 }
@@ -674,8 +558,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   overflow: hidden;
 }
 
-.main-panel,
-.side-panel {
+.main-panel {
   padding: 16px;
 }
 
@@ -722,7 +605,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   place-items: center;
   border-radius: 6px;
   background: #edf8ef;
-  color: #0f9e2e;
+  color: #0b6f38;
   font-size: 0.72rem;
 }
 
@@ -799,7 +682,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 
 .target-pill.is-ok {
   background: #e8f7eb;
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
 .month-comparison {
@@ -832,7 +715,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 }
 
 .month-comparison header > strong {
-  color: #0f9e2e;
+  color: #0b6f38;
   font-size: 0.82rem;
   font-weight: 900;
   white-space: nowrap;
@@ -894,7 +777,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 
 .month-bar.is-current > span,
 .month-bar.is-current strong {
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
 .month-comparison footer {
@@ -921,7 +804,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 }
 
 .month-comparison footer b {
-  background: #0f9e2e;
+  background: #0b6f38;
 }
 
 .month-comparison footer i {
@@ -932,57 +815,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   margin-left: auto;
   color: #0f172a;
   font-style: normal;
-}
-
-.income-side {
-  display: grid;
-  gap: 14px;
-}
-
-.side-list {
-  display: grid;
-}
-
-.side-list > div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  align-items: center;
-  padding: 13px 0;
-  border-top: 1px solid #edf1f5;
-}
-
-.side-list strong {
-  display: block;
-  margin-top: 3px;
-  font-size: 0.84rem;
-  font-weight: 900;
-}
-
-.comparison-list {
-  display: grid;
-  gap: 14px;
-  padding-top: 6px;
-}
-
-.comparison-list div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: #334155;
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.comparison-list strong {
-  color: #0f9e2e;
-  white-space: nowrap;
-}
-
-.comparison-list small {
-  margin-left: 4px;
-  color: #0f9e2e;
-  font-size: 0.72rem;
 }
 
 .ai-advice {
@@ -1055,7 +887,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   place-items: center;
   border-radius: 9px;
   background: #e8f7eb;
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
 .export-options strong,
@@ -1103,8 +935,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
     grid-template-columns: 1fr;
   }
 
-  .main-panel,
-  .side-panel {
+  .main-panel {
     padding: 12px;
   }
 

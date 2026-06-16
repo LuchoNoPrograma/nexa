@@ -130,13 +130,14 @@ const sidebarItems = [
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
   { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos' },
   { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing' },
+  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
   { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas' },
   { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos' },
+  { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos' },
   { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos' },
-  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
   { label: 'Reportes', icon: 'pi pi-chart-bar' },
-  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes' },
   { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico' },
+  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes' },
   { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
 ]
 
@@ -366,17 +367,18 @@ function selectModule(to?: string) {
 
     <section id="pos-workspace" class="pos-workspace">
       <header class="pos-topbar mb-2">
+        <button
+          type="button"
+          class="mobile-menu-button"
+          v-tooltip.bottom="{ value: 'Abrir menú', showDelay: 150 }"
+          aria-label="Abrir menú"
+          aria-controls="pos-workspace"
+          :aria-expanded="mobileMenuOpen"
+          @click="toggleMenu"
+        >
+          <i class="pi pi-bars" aria-hidden="true" />
+        </button>
         <div class="topbar-title">
-          <Button
-            type="button"
-            icon="pi pi-bars"
-            class="mobile-menu-button"
-            v-tooltip.bottom="{ value: 'Abrir menú', showDelay: 150 }"
-            aria-label="Abrir menú"
-            aria-controls="pos-workspace"
-            :aria-expanded="mobileMenuOpen"
-            @click="toggleMenu"
-          />
           <div class="topbar-title__text">
             <h1>{{ activeTitle }}</h1>
             <small v-if="session?.store">{{ session.store }}</small>
@@ -920,10 +922,12 @@ function selectModule(to?: string) {
   width: 2.4rem !important;
   height: 2.4rem !important;
   place-items: center;
+  appearance: none;
   border-radius: 11px !important;
   color: #46555c !important;
   background: #f1f5f2 !important;
   border: 1px solid #e4ebe6 !important;
+  cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1127,18 +1131,64 @@ function selectModule(to?: string) {
   }
 
   .pos-topbar {
+    display: grid;
+    grid-template-columns: 68px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "menu title"
+      "menu actions";
     align-items: stretch;
-    flex-direction: column;
-    padding: 12px 14px;
+    gap: 10px 12px;
+    min-height: 126px;
+    padding: 12px;
   }
 
   .topbar-title {
-    width: 100%;
+    grid-area: title;
+    width: auto;
+    min-width: 0;
+    align-self: end;
+  }
+
+  .topbar-title__text {
+    min-width: 0;
+  }
+
+  .topbar-title__text h1,
+  .topbar-title__text small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .topbar-actions {
-    width: 100%;
-    justify-content: flex-end;
+    grid-area: actions;
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+    align-self: start;
+    gap: 8px;
+  }
+
+  .mobile-menu-button {
+    grid-area: menu;
+    display: grid !important;
+    place-items: center;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 102px;
+    padding: 0 !important;
+    border-radius: 14px !important;
+    font-size: 1.25rem !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .mobile-menu-button i {
+    display: block;
+    font-size: 1.35rem;
+    line-height: 1;
+    margin: 0;
   }
 
   /* La tienda ya se ve en el subtítulo del encabezado. */

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { PosCashMovement } from '~/composables/usePosCashRegister'
+
 definePageMeta({
   layout: 'pos',
   posTitle: 'Inicio',
@@ -14,6 +16,18 @@ const session = usePosSession()
 const { data: diagData } = await useFetch('/api/diagnostico/latest', { default: () => null })
 const diagnosticoEstado = computed(() => diagData.value?.estado ?? 'pendiente')
 
+// Caja de hoy: el mismo dato que muestra /pos/caja, leído de la BD.
+type CashOverview = {
+  session: { status: 'abierta' | 'cerrada' } | null
+  movements: PosCashMovement[]
+}
+const { data: cashData } = await useFetch<CashOverview>('/api/pos/cash', { default: () => null })
+
+// Total de ventas del turno (igual que en la caja: ingresos por venta).
+const salesTotal = computed(() => (cashData.value?.movements ?? [])
+  .filter(movement => movement.type === 'Ingreso' && movement.source === 'venta')
+  .reduce((sum, movement) => sum + movement.amount, 0))
+
 // Primer nombre para un saludo cercano (heurística: lenguaje del mundo real).
 const firstName = computed(() => {
   const name = session.value?.name?.trim()
@@ -23,19 +37,16 @@ const firstName = computed(() => {
   return name.split(/\s+/)[0]
 })
 
-// Totales de caja del día. Datos demo en 0 (aún no hay módulo de ventas real),
-// con las tres monedas que maneja un negocio de la zona fronteriza.
-const cashTotals = [
-  { symbol: 'Bs', amount: '0.00', name: 'Bolivianos (BOB)' },
-  { symbol: 'R$', amount: '0.00', name: 'Reales (BRL)' },
-]
+// Por ahora solo bolivianos (BOB).
+const nf = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const salesText = computed(() => nf.format(salesTotal.value))
 
 // Accesos rápidos: pocos, grandes y reconocibles (Nielsen: reconocer > recordar).
 const quickActions: { label: string; icon: string; to?: string }[] = [
   { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos' },
-  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
-  { label: 'Proveedores', icon: 'pi pi-truck' },
+  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
+  { label: 'Finanzas', icon: 'pi pi-chart-pie' },
 ]
 
 // Sugerencias en forma de pregunta: lenguaje cercano para gente de 20 a 60.
@@ -69,9 +80,9 @@ function go(to?: string) {
 
       <p class="cash__label">Total de ventas</p>
       <div class="cash__totals">
-        <article v-for="total in cashTotals" :key="total.name">
-          <span class="cash__amount"><em>{{ total.symbol }}</em>{{ total.amount }}</span>
-          <small>{{ total.name }}</small>
+        <article>
+          <span class="cash__amount"><em>Bs</em>{{ salesText }}</span>
+          <small>Bolivianos (BOB)</small>
         </article>
       </div>
 
@@ -162,7 +173,7 @@ function go(to?: string) {
   padding: 20px;
   border-radius: 18px;
   color: #fff;
-  background: linear-gradient(135deg, #0a6f1f 0%, #0e8a28 55%, #16a534 100%);
+  background: linear-gradient(135deg, #0a6f1f 0%, #0e8a28 55%, #0b6f38 100%);
   box-shadow: 0 16px 34px rgba(10, 111, 32, 0.26);
 }
 
@@ -210,14 +221,13 @@ function go(to?: string) {
 
 .cash__totals {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
 .cash__totals article {
   display: grid;
   gap: 3px;
-  padding: 14px;
+  padding: 16px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.14);
   text-align: center;
@@ -228,7 +238,7 @@ function go(to?: string) {
   align-items: baseline;
   justify-content: center;
   gap: 4px;
-  font-size: 1.4rem;
+  font-size: 1.9rem;
   font-weight: 900;
   line-height: 1.1;
 }
@@ -337,7 +347,7 @@ function go(to?: string) {
   margin-left: auto;
   padding: 10px 16px;
   border-radius: 11px;
-  background: linear-gradient(120deg, #0a6f1f, #14b536);
+  background: linear-gradient(120deg, #0a6f1f, #0b6f38);
   color: #fff;
   font-size: 0.82rem;
   font-weight: 900;
@@ -499,11 +509,11 @@ function go(to?: string) {
   }
 
   .cash__totals article {
-    padding: 12px 6px;
+    padding: 14px 6px;
   }
 
   .cash__amount {
-    font-size: 1.15rem;
+    font-size: 1.55rem;
   }
 
   .cash__actions {

@@ -211,12 +211,12 @@ function normalizarDesdeRow(row: any): ResultadoView {
 const NIVEL_META = {
   bajo: { label: 'Nivel inicial', color: '#e0794f', tag: 'Bajo' },
   medio: { label: 'Nivel medio', color: '#d99a2b', tag: 'Medio' },
-  alto: { label: 'Buen nivel', color: '#0f9e2e', tag: 'Alto' },
+  alto: { label: 'Buen nivel', color: '#0b6f38', tag: 'Alto' },
 } as const
 
 // Paleta natural y calma (verde marca, teal, terracota suave, slate-azul).
 const AREAS_META: { key: keyof AreaScores; label: string; icon: string; color: string }[] = [
-  { key: 'ventas', label: 'Ventas', icon: 'pi pi-shopping-cart', color: '#0f9e2e' },
+  { key: 'ventas', label: 'Ventas', icon: 'pi pi-shopping-cart', color: '#0b6f38' },
   { key: 'finanzas', label: 'Finanzas', icon: 'pi pi-wallet', color: '#1f9e8a' },
   { key: 'marketing', label: 'Marketing', icon: 'pi pi-megaphone', color: '#c97f3a' },
   { key: 'inventario', label: 'Inventario', icon: 'pi pi-box', color: '#5b7a9e' },
@@ -592,7 +592,7 @@ function areaScore(key: keyof AreaScores) {
   height: 38px;
   border-radius: 50%;
   border: 4px solid #d9ead9;
-  border-top-color: #0f9e2e;
+  border-top-color: #0b6f38;
   animation: diag-spin 0.8s linear infinite;
 }
 
@@ -693,7 +693,7 @@ function areaScore(key: keyof AreaScores) {
 }
 
 .diag-facts i {
-  color: #0f9e2e;
+  color: #0b6f38;
 }
 
 .diag-intro__actions {
@@ -721,7 +721,7 @@ function areaScore(key: keyof AreaScores) {
 
 .diag-btn--primary {
   color: #fff;
-  background: linear-gradient(150deg, #14b536, #0a6f1f);
+  background: linear-gradient(150deg, #0b6f38, #0a6f1f);
   box-shadow: 0 14px 26px rgba(14, 111, 32, 0.26);
 }
 
@@ -784,7 +784,7 @@ function areaScore(key: keyof AreaScores) {
 }
 
 .diag-step.is-active {
-  background: #0f9e2e;
+  background: #0b6f38;
   color: #fff;
   transform: scale(1.08);
   box-shadow: 0 8px 18px rgba(15, 158, 46, 0.3);
@@ -885,7 +885,7 @@ function areaScore(key: keyof AreaScores) {
 }
 
 .diag-option.is-selected {
-  border-color: #0f9e2e;
+  border-color: #0b6f38;
   background: #edf7e8;
   box-shadow: 0 10px 22px rgba(15, 158, 46, 0.18);
 }
@@ -904,8 +904,8 @@ function areaScore(key: keyof AreaScores) {
 }
 
 .diag-option.is-selected .diag-option__check {
-  border-color: #0f9e2e;
-  background: #0f9e2e;
+  border-color: #0b6f38;
+  background: #0b6f38;
   color: #fff;
   transform: scale(1.05);
 }
@@ -1264,7 +1264,7 @@ function areaScore(key: keyof AreaScores) {
 }
 
 .diag-empty i {
-  color: #0f9e2e;
+  color: #0b6f38;
   font-size: 1.1rem;
   margin-top: 1px;
 }
@@ -1284,7 +1284,7 @@ function areaScore(key: keyof AreaScores) {
   height: 24px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #0f9e2e;
+  background: #0b6f38;
   color: #fff;
   font-size: 0.78rem;
   font-weight: 900;
