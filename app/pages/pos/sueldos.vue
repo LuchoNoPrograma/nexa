@@ -35,6 +35,9 @@ type Empleado = {
   rol: Rol | null
   ci: string | null
   tieneLogin: boolean
+  valorHora: number | null
+  fechaAlta: string | null
+  fechaBaja: string | null
   slots: Set<string>
 }
 
@@ -73,6 +76,9 @@ function aEmpleado(row: any): Empleado {
     rol: (row.rol as Rol) ?? null,
     ci: row.ci ?? null,
     tieneLogin: Boolean(row.tieneLogin),
+    valorHora: row.valorHora != null ? Number(row.valorHora) : null,
+    fechaAlta: row.fechaAlta ?? null,
+    fechaBaja: row.fechaBaja ?? null,
     slots,
   }
 }
@@ -269,9 +275,14 @@ onBeforeUnmount(() => {
 // ---------- Cálculos derivados ----------
 const valorHoraActual = computed(() => valorHora(config))
 
+// Costo mensual estimado de un empleado (usa su valor por hora propio o el de la tienda).
+function costoMensual(emp: Empleado) {
+  return calcularSueldo(emp.slots.size, config, emp.valorHora).sueldoMensual
+}
+
 const filas = computed(() =>
   empleados.value.map((emp) => {
-    const calc = calcularSueldo(emp.slots.size, config)
+    const calc = calcularSueldo(emp.slots.size, config, emp.valorHora)
     return {
       id: emp.id,
       etiqueta: `Empleado ${emp.numero}`,
@@ -279,6 +290,8 @@ const filas = computed(() =>
       color: emp.color,
       horasSemanales: calc.horasSemanales,
       horasMensuales: calc.horasMensuales,
+      valorHora: calc.valorHora,
+      valorHoraPropio: emp.valorHora != null,
       sueldoMensual: calc.sueldoMensual,
     }
   }),
@@ -326,6 +339,9 @@ async function agregarEmpleado(notify = true) {
     }
     if (notify) {
       flash('Empleado agregado')
+      // Lleva al usuario a la card recién creada (al final del grid).
+      await nextTick()
+      document.getElementById(`emp-card-${emp.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   } catch {
     if (notify) {
@@ -375,6 +391,8 @@ const editForm = reactive({
   celular: '',
   fechaNacimiento: '',
   direccion: '',
+  valorHora: null as number | null,
+  fechaAlta: '',
   rol: '' as '' | Rol,
   ci: '',
   password: '',
@@ -391,6 +409,8 @@ function abrirEditar(emp: Empleado) {
   editForm.celular = emp.celular ?? ''
   editForm.fechaNacimiento = emp.fechaNacimiento ?? ''
   editForm.direccion = emp.direccion ?? ''
+  editForm.valorHora = emp.valorHora
+  editForm.fechaAlta = emp.fechaAlta ?? ''
   editForm.rol = emp.rol ?? ''
   editForm.ci = emp.ci ?? ''
   editForm.password = ''
@@ -429,6 +449,8 @@ async function guardarInfo() {
         celular: editForm.celular.trim(),
         fechaNacimiento: editForm.fechaNacimiento.trim(),
         direccion: editForm.direccion.trim(),
+        valorHora: editForm.valorHora,
+        fechaAlta: editForm.fechaAlta.trim(),
       },
     })
 
@@ -437,6 +459,8 @@ async function guardarInfo() {
     emp.celular = actualizado.celular ?? null
     emp.fechaNacimiento = actualizado.fechaNacimiento ?? null
     emp.direccion = actualizado.direccion ?? null
+    emp.valorHora = actualizado.valorHora != null ? Number(actualizado.valorHora) : null
+    emp.fechaAlta = actualizado.fechaAlta ?? null
 
     // 2) Acceso (rol + login), solo si cambió el rol o se enviaron credenciales.
     const rolCambio = (editForm.rol || '') !== (emp.rol ?? '')
@@ -532,15 +556,14 @@ function flash(msg: string) {
       <section>
         <div class="su-section-head">
         <h2>1. Define turnos semanales</h2>
-          <button type="button" class="su-add" @click="agregarEmpleado()">
-            <i class="pi pi-plus" /> Agregar empleado
-          </button>
+          <Button type="button" icon="pi pi-plus" label="Agregar empleado" @click="agregarEmpleado()" />
         </div>
         <p class="su-section-sub">Haz clic y arrastra sobre la hoja para marcar las horas planificadas de cada persona.</p>
 
         <div class="su-grid">
           <article
-            v-for="(emp, i) in empleados"
+            v-for="emp in empleados"
+            :id="`emp-card-${emp.id}`"
             :key="emp.id"
             class="su-card"
             :style="{ '--c': emp.color }"
@@ -574,8 +597,14 @@ function flash(msg: string) {
             </div>
 
             <footer class="su-card__foot">
-              <span>Total horas semanales:</span>
-              <strong :style="{ color: emp.color }">{{ emp.slots.size }} h</strong>
+              <span class="su-card__metric">
+                <span>Horas semanales:</span>
+                <strong :style="{ color: emp.color }">{{ emp.slots.size }} h</strong>
+              </span>
+              <span class="su-card__metric">
+                <span>Estimado mensual:</span>
+                <strong class="su-card__cost">{{ money(costoMensual(emp)) }}</strong>
+              </span>
             </footer>
           </article>
 
@@ -621,6 +650,7 @@ function flash(msg: string) {
                   <th>Empleado</th>
                   <th class="num">Total horas semanales</th>
                   <th class="num">Total horas mensuales<small>(aprox. {{ config.semanasPorMes }} semanas)</small></th>
+                  <th class="num">Valor hora</th>
                   <th class="num">Costo mensual estimado</th>
                 </tr>
               </thead>
@@ -632,12 +662,16 @@ function flash(msg: string) {
                   </td>
                   <td class="num">{{ f.horasSemanales }} h</td>
                   <td class="num">{{ Math.round(f.horasMensuales) }} h</td>
+                  <td class="num">
+                    {{ money(f.valorHora) }}
+                    <small v-if="f.valorHoraPropio" class="su-tag-propio">propio</small>
+                  </td>
                   <td class="num strong">{{ money(f.sueldoMensual) }}</td>
                 </tr>
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="3">Costo laboral mensual estimado</td>
+                  <td colspan="4">Costo laboral mensual estimado</td>
                   <td class="num strong total">{{ money(totalSueldos) }}</td>
                 </tr>
               </tfoot>
@@ -693,6 +727,31 @@ function flash(msg: string) {
         <div class="su-form__field">
           <label>Puesto</label>
           <InputText v-model="editForm.puesto" placeholder="Ej. Atención y caja" fluid />
+        </div>
+
+        <p class="su-form__section">Pago y vínculo</p>
+        <p class="su-form__hint">
+          El costo se calcula con las horas planificadas. Si defines un
+          <strong>valor por hora</strong> propio, se usa ese; si lo dejas vacío, se aplica el de la tienda
+          (<strong>{{ money(valorHoraActual) }}</strong>).
+        </p>
+
+        <div class="su-form__row">
+          <div class="su-form__field">
+            <label>Valor por hora (Bs.)</label>
+            <InputNumber
+              v-model="editForm.valorHora"
+              mode="decimal"
+              :min="0"
+              :max-fraction-digits="2"
+              :placeholder="fmt.format(valorHoraActual)"
+              fluid
+            />
+          </div>
+          <div class="su-form__field">
+            <label>Fecha de ingreso</label>
+            <input v-model="editForm.fechaAlta" type="date" class="su-date">
+          </div>
         </div>
 
         <p class="su-form__section">Acceso al sistema</p>
@@ -856,24 +915,6 @@ function flash(msg: string) {
   font-weight: 600;
 }
 
-.su-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 14px;
-  border: 1px solid #cfe3c6;
-  border-radius: 10px;
-  background: #eaf6e7;
-  color: #1c7a2c;
-  font-size: 0.8rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.su-add:hover {
-  background: #def0d8;
-}
-
 /* ---------- Tarjetas de trabajador ---------- */
 .su-grid {
   display: grid;
@@ -1001,7 +1042,7 @@ function flash(msg: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 14px 4px;
+  padding: 4px 14px 4px;
 }
 
 .su-badge {
@@ -1163,7 +1204,8 @@ function flash(msg: string) {
 .su-card__foot {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 14px;
   border-top: 1px solid #eff4ef;
@@ -1172,12 +1214,23 @@ function flash(msg: string) {
   color: #5d6b61;
 }
 
+.su-card__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .su-card__foot strong {
   padding: 4px 12px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--c) 14%, #fff);
   font-size: 0.86rem;
   font-weight: 900;
+}
+
+.su-card__foot strong.su-card__cost {
+  background: #eaf6e7;
+  color: #0a6f1f;
 }
 
 .su-hint {
@@ -1340,6 +1393,19 @@ function flash(msg: string) {
   font-weight: 900;
 }
 
+.su-tag-propio {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef2fb;
+  color: #2f5fd0;
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .su-dot {
   display: inline-block;
   width: 9px;
@@ -1403,10 +1469,6 @@ function flash(msg: string) {
   .su-section-head {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .su-add {
-    justify-content: center;
   }
 }
 

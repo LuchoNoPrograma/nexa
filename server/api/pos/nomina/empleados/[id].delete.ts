@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
 
   const result = await pool.query(
     `
-      update empleado set activo = false, updated_at = now()
+      update empleado set activo = false, fecha_baja = current_date, updated_at = now()
       where id = $1 and tienda_id = $2 and activo = true
       returning id
     `,

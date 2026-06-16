@@ -69,9 +69,18 @@ export type CalculoSueldo = {
   sueldoMensual: number
 }
 
-// Cálculo puro: a partir de las horas semanales y la configuración.
-export function calcularSueldo(horasSemanales: number, config: NominaConfig): CalculoSueldo {
-  const vHora = valorHora(config)
+// Cálculo puro: a partir de las horas semanales y la configuración. Si el
+// empleado tiene su propio valor por hora (`valorHoraEmpleado`), se usa ese;
+// si no, cae al valor por hora de la tienda. Así el pago por horas puede ser
+// personalizado por persona sin romper a quienes no lo definen.
+export function calcularSueldo(
+  horasSemanales: number,
+  config: NominaConfig,
+  valorHoraEmpleado?: number | null,
+): CalculoSueldo {
+  const vHora = valorHoraEmpleado != null && valorHoraEmpleado > 0
+    ? valorHoraEmpleado
+    : valorHora(config)
   const horasMensuales = horasSemanales * config.semanasPorMes
   return {
     horasSemanales,

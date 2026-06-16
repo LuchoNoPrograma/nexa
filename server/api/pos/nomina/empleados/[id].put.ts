@@ -9,6 +9,8 @@ type EmpleadoBody = {
   celular?: string
   fechaNacimiento?: string
   direccion?: string
+  valorHora?: number | null
+  fechaAlta?: string
 }
 
 // Actualiza datos de un empleado de la tienda: nombre, puesto, color y los
@@ -19,6 +21,11 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<EmpleadoBody>(event)
   await ensureDatabase()
 
+  // El valor por hora se puede limpiar (null = vuelve al valor de la tienda),
+  // así que se distingue "no enviado" (mantener) de "enviado en null" (limpiar).
+  const setValorHora = body?.valorHora !== undefined
+  const valorHora = typeof body?.valorHora === 'number' && body.valorHora >= 0 ? body.valorHora : null
+
   const result = await pool.query(
     `
       update empleado set
@@ -28,10 +35,15 @@ export default defineEventHandler(async (event) => {
         celular = coalesce($6, celular),
         fecha_nacimiento = coalesce($7::date, fecha_nacimiento),
         direccion = coalesce($8, direccion),
+        valor_hora = case when $9::boolean then $10::numeric else valor_hora end,
+        fecha_alta = coalesce($11::date, fecha_alta),
         updated_at = now()
       where id = $1 and tienda_id = $2
       returning id, nombre, puesto, color, orden, numero, celular,
-        to_char(fecha_nacimiento, 'YYYY-MM-DD') as "fechaNacimiento", direccion
+        to_char(fecha_nacimiento, 'YYYY-MM-DD') as "fechaNacimiento", direccion,
+        valor_hora::float as "valorHora",
+        to_char(fecha_alta, 'YYYY-MM-DD') as "fechaAlta",
+        to_char(fecha_baja, 'YYYY-MM-DD') as "fechaBaja"
     `,
     [
       id,
@@ -42,6 +54,9 @@ export default defineEventHandler(async (event) => {
       body?.celular !== undefined ? (body.celular.trim() || null) : null,
       body?.fechaNacimiento !== undefined ? (body.fechaNacimiento.trim() || null) : null,
       body?.direccion !== undefined ? (body.direccion.trim() || null) : null,
+      setValorHora,
+      valorHora,
+      body?.fechaAlta !== undefined ? (body.fechaAlta.trim() || null) : null,
     ],
   )
 

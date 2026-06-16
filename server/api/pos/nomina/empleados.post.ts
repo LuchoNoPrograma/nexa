@@ -10,6 +10,8 @@ type EmpleadoBody = {
   celular?: string
   fechaNacimiento?: string
   direccion?: string
+  valorHora?: number | null
+  fechaAlta?: string
 }
 
 // Crea un empleado para la tienda. El número es monótono por tienda (nunca se
@@ -38,12 +40,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Límite de empleados alcanzado.' })
   }
 
+  const valorHora = typeof body?.valorHora === 'number' && body.valorHora >= 0 ? body.valorHora : null
+
   const result = await pool.query(
     `
-      insert into empleado (tienda_id, nombre, puesto, color, orden, numero, celular, fecha_nacimiento, direccion)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      insert into empleado (
+        tienda_id, nombre, puesto, color, orden, numero,
+        celular, fecha_nacimiento, direccion, valor_hora, fecha_alta
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, coalesce($11::date, current_date))
       returning id, nombre, puesto, color, orden, numero, celular,
-        to_char(fecha_nacimiento, 'YYYY-MM-DD') as "fechaNacimiento", direccion
+        to_char(fecha_nacimiento, 'YYYY-MM-DD') as "fechaNacimiento", direccion,
+        valor_hora::float as "valorHora",
+        to_char(fecha_alta, 'YYYY-MM-DD') as "fechaAlta",
+        to_char(fecha_baja, 'YYYY-MM-DD') as "fechaBaja"
     `,
     [
       session.storeId,
@@ -55,6 +65,8 @@ export default defineEventHandler(async (event) => {
       body?.celular?.trim() || null,
       body?.fechaNacimiento?.trim() || null,
       body?.direccion?.trim() || null,
+      valorHora,
+      body?.fechaAlta?.trim() || null,
     ],
   )
 

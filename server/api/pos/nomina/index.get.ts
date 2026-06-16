@@ -1,8 +1,15 @@
 import { ensureDatabase, pool } from '../../../utils/db'
 import { requireStoreSession } from '../../../utils/posCatalog'
+import {
+  HORAS_MENSUALES_REFERENCIA,
+  SEMANAS_POR_MES,
+  calcularSueldo,
+  type NominaConfig,
+} from '~~/shared/utils/nomina'
 
 // Estado completo de nómina de la tienda: configuración de cálculo + empleados
-// con su planilla semanal (celdas marcadas y horas).
+// con su planilla semanal (celdas marcadas y horas) + el costo laboral mensual
+// estimado (para que Finanzas/Reportes lo consuman).
 export default defineEventHandler(async (event) => {
   const session = await requireStoreSession(event)
   await ensureDatabase()
@@ -36,6 +43,9 @@ export default defineEventHandler(async (event) => {
         u.ci,
         (u.id is not null) as "tieneLogin",
         r.codigo as rol,
+        e.valor_hora::float as "valorHora",
+        to_char(e.fecha_alta, 'YYYY-MM-DD') as "fechaAlta",
+        to_char(e.fecha_baja, 'YYYY-MM-DD') as "fechaBaja",
         coalesce(h.slots, '[]'::jsonb) as slots,
         coalesce(h.horas_semanales, 0)::float as "horasSemanales"
       from empleado e
@@ -49,8 +59,25 @@ export default defineEventHandler(async (event) => {
     [session.storeId],
   )
 
+  // Costo laboral mensual estimado. Se usa la jornada legal canónica (no el
+  // valor histórico que pueda tener la BD) para que cuadre con la planilla.
+  const config: NominaConfig = {
+    salarioMinimoMensual: configRes.rows[0]?.salarioMinimoMensual ?? 0,
+    horasMensualesReferencia: HORAS_MENSUALES_REFERENCIA,
+    semanasPorMes: SEMANAS_POR_MES,
+  }
+
+  const costoLaboralMensual = empleadosRes.rows.reduce(
+    (total, e) => total + calcularSueldo(e.horasSemanales, config, e.valorHora).sueldoMensual,
+    0,
+  )
+
   return {
     config: configRes.rows[0],
     empleados: empleadosRes.rows,
+    resumen: {
+      empleados: empleadosRes.rows.length,
+      costoLaboralMensual,
+    },
   }
 })
