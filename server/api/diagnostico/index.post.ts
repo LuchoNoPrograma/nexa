@@ -42,6 +42,7 @@ export default defineEventHandler(async (event) => {
     recomendaciones: resultado.recomendaciones,
     mensajeNivel: resultado.mensajeNivel,
     recomendacionPrincipal: resultado.recomendacionPrincipal,
+    ciclo: resultado.ciclo,
     version: resultado.version,
   })
 

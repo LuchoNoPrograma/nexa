@@ -6,6 +6,10 @@
 
 export type DiagnosticoArea = 'ventas' | 'finanzas' | 'marketing' | 'inventario'
 
+// Etapa del ciclo de vida del negocio (curva clásica de ventas en el tiempo).
+// El orden es la posición sobre la curva: lanzamiento → crecimiento → madurez → declive.
+export type EtapaNegocio = 'lanzamiento' | 'crecimiento' | 'madurez' | 'declive'
+
 export type DiagnosticoOpcion = {
   value: string
   label: string
@@ -35,6 +39,17 @@ export type DiagnosticoPaso = {
 
 export type DiagnosticoRespuestas = Record<string, string>
 
+// Resultado del análisis de ciclo de vida (preguntas q11–q14). No afecta la
+// salud del negocio: clasifica en qué etapa está y alimenta el "grafiquito".
+export type CicloVida = {
+  etapa: EtapaNegocio
+  // Posición sobre la curva, 0..3 (lanzamiento=0 … declive=3) para ubicar el marcador.
+  indice: number
+  titulo: string
+  descripcion: string
+  consejo: string
+}
+
 export type DiagnosticoResultado = {
   saludGeneral: number
   nivel: 'bajo' | 'medio' | 'alto'
@@ -48,13 +63,14 @@ export type DiagnosticoResultado = {
   recomendaciones: string[]
   mensajeNivel: string
   recomendacionPrincipal: string
+  ciclo: CicloVida
   rubro: string | null
   canalPrincipal: string | null
   problemaPrincipal: string | null
   version: number
 }
 
-export const DIAGNOSTICO_VERSION = 1
+export const DIAGNOSTICO_VERSION = 2
 
 export const PASOS_DIAGNOSTICO: DiagnosticoPaso[] = [
   { numero: 1, titulo: 'Conociendo tu negocio', subtitulo: 'Cuéntanos lo básico', icono: 'pi pi-shop' },
@@ -62,6 +78,7 @@ export const PASOS_DIAGNOSTICO: DiagnosticoPaso[] = [
   { numero: 3, titulo: 'Marketing digital', subtitulo: 'Cómo te das a conocer', icono: 'pi pi-megaphone' },
   { numero: 4, titulo: 'Inventario e insumos', subtitulo: 'Tus productos y materia prima', icono: 'pi pi-box' },
   { numero: 5, titulo: 'Organización', subtitulo: 'Tu mayor reto hoy', icono: 'pi pi-compass' },
+  { numero: 6, titulo: 'Etapa del negocio', subtitulo: 'En qué momento estás', icono: 'pi pi-chart-line' },
 ]
 
 export const PREGUNTAS_DIAGNOSTICO: DiagnosticoPregunta[] = [
@@ -205,6 +222,54 @@ export const PREGUNTAS_DIAGNOSTICO: DiagnosticoPregunta[] = [
       { value: 'otro', label: 'Otro problema' },
     ],
   },
+  {
+    id: 'q11',
+    paso: 6,
+    titulo: '¿Qué tan ocupado está tu negocio actualmente?',
+    ayuda: 'Piensa en cuántos clientes atiendes hoy comparado con tu capacidad.',
+    opciones: [
+      { value: 'pocos', label: 'Tengo pocos clientes' },
+      { value: 'normal', label: 'Tengo una cantidad normal de clientes' },
+      { value: 'muchos', label: 'Tengo muchos clientes' },
+      { value: 'desbordado', label: 'No logro atender a todos los clientes' },
+    ],
+  },
+  {
+    id: 'q12',
+    paso: 6,
+    titulo: 'En el último año, la inversión en tu negocio ha sido:',
+    ayuda: 'Cuánto dinero pusiste en productos, equipos o mejoras.',
+    opciones: [
+      { value: 'mucho_mayor', label: 'Mucho mayor que antes' },
+      { value: 'poco_mayor', label: 'Un poco mayor que antes' },
+      { value: 'igual', label: 'Se mantiene igual' },
+      { value: 'menor', label: 'Menor que antes' },
+    ],
+  },
+  {
+    id: 'q13',
+    paso: 6,
+    titulo: 'Durante el último año, tu negocio ha:',
+    ayuda: 'Tu impresión general sobre cómo te fue este año.',
+    opciones: [
+      { value: 'crecido_mucho', label: 'Crecido mucho' },
+      { value: 'crecido_poco', label: 'Crecido un poco' },
+      { value: 'igual', label: 'Se ha mantenido igual' },
+      { value: 'disminuido', label: 'Ha disminuido' },
+    ],
+  },
+  {
+    id: 'q14',
+    paso: 6,
+    titulo: '¿Qué es lo que más te preocupa hoy en tu negocio?',
+    ayuda: 'Elige el reto que sientes más cercano en este momento.',
+    opciones: [
+      { value: 'darme_conocer', label: 'Darme a conocer' },
+      { value: 'mas_clientes', label: 'Conseguir más clientes' },
+      { value: 'mantener', label: 'Mantener mis ventas actuales' },
+      { value: 'recuperar', label: 'Recuperar ventas o clientes perdidos' },
+    ],
+  },
 ]
 
 const ETIQUETAS_AREA: Record<DiagnosticoArea, string> = {
@@ -249,6 +314,102 @@ const MENSAJES_NIVEL: Record<'bajo' | 'medio' | 'alto', string> = {
   bajo: 'Necesitas empezar ordenando ventas, gastos e inventario. Demos el primer paso juntos.',
   medio: 'Vas por buen camino, pero necesitas organizar mejor tus áreas clave.',
   alto: 'Tu negocio está bien encaminado. Ahora puedes mejorar marketing, reportes y crecimiento.',
+}
+
+// ----- Ciclo de vida del negocio (q11–q14) -----
+// Cada opción aporta "votos" hacia una o más etapas. La etapa con más votos
+// clasifica al negocio sobre la curva de ciclo de vida (ventas vs. tiempo).
+const ETAPA_INDICE: Record<EtapaNegocio, number> = {
+  lanzamiento: 0,
+  crecimiento: 1,
+  madurez: 2,
+  declive: 3,
+}
+
+// Orden de desempate: ante empate gana la etapa más relevante de comunicar
+// (el declive no debe quedar oculto; madurez es el residual por defecto).
+const ETAPA_PRIORIDAD: EtapaNegocio[] = ['declive', 'crecimiento', 'lanzamiento', 'madurez']
+
+type PesoEtapa = Partial<Record<EtapaNegocio, number>>
+
+const PESOS_CICLO: Record<string, Record<string, PesoEtapa>> = {
+  q11: {
+    pocos: { lanzamiento: 2, declive: 1 },
+    normal: { madurez: 2 },
+    muchos: { crecimiento: 1, madurez: 1 },
+    desbordado: { crecimiento: 2 },
+  },
+  q12: {
+    mucho_mayor: { crecimiento: 2 },
+    poco_mayor: { crecimiento: 1, lanzamiento: 1 },
+    igual: { madurez: 2 },
+    menor: { declive: 2 },
+  },
+  q13: {
+    crecido_mucho: { crecimiento: 2 },
+    crecido_poco: { crecimiento: 1, lanzamiento: 1 },
+    igual: { madurez: 2 },
+    disminuido: { declive: 2 },
+  },
+  q14: {
+    darme_conocer: { lanzamiento: 2 },
+    mas_clientes: { crecimiento: 1, lanzamiento: 1 },
+    mantener: { madurez: 2 },
+    recuperar: { declive: 2 },
+  },
+}
+
+const ETAPA_META: Record<EtapaNegocio, { titulo: string; descripcion: string; consejo: string }> = {
+  lanzamiento: {
+    titulo: 'Lanzamiento',
+    descripcion: 'Tu negocio está dando sus primeros pasos. Lo más importante ahora es darte a conocer y ganar tus primeros clientes fieles.',
+    consejo: 'Enfócate en mostrar tu negocio: redes, boca a boca y una oferta clara para atraer clientes.',
+  },
+  crecimiento: {
+    titulo: 'Crecimiento',
+    descripcion: 'Tu negocio está creciendo y atrae cada vez más clientes. Es el momento de ordenar tus procesos para sostener el ritmo sin perder calidad.',
+    consejo: 'Ordena tus ventas, inventario y finanzas para crecer sin desbordarte.',
+  },
+  madurez: {
+    titulo: 'Madurez',
+    descripcion: 'Tu negocio está estable y consolidado. El reto es mantener tus ventas e innovar para no estancarte.',
+    consejo: 'Cuida a tus clientes actuales y prueba nuevos productos o canales para seguir vigente.',
+  },
+  declive: {
+    titulo: 'Declive',
+    descripcion: 'Tu negocio muestra señales de baja. Conviene reactivar a tus clientes y revisar qué cambió para recuperar tus ventas.',
+    consejo: 'Reconecta con los clientes que dejaron de comprar y revisa precios, productos y promoción.',
+  },
+}
+
+function calcularCicloVida(respuestas: DiagnosticoRespuestas): CicloVida {
+  const votos: Record<EtapaNegocio, number> = { lanzamiento: 0, crecimiento: 0, madurez: 0, declive: 0 }
+  for (const [preguntaId, reglas] of Object.entries(PESOS_CICLO)) {
+    const pesos = reglas[respuestas[preguntaId] ?? '']
+    if (!pesos) {
+      continue
+    }
+    for (const [clave, peso] of Object.entries(pesos)) {
+      votos[clave as EtapaNegocio] += peso ?? 0
+    }
+  }
+
+  // Etapa ganadora: mayor cantidad de votos. Recorremos en orden de prioridad
+  // y usamos `>` estricto, así el empate lo gana la etapa más prioritaria.
+  let etapa: EtapaNegocio = 'madurez'
+  let mejorVotos = -1
+  for (const candidata of ETAPA_PRIORIDAD) {
+    if (votos[candidata] > mejorVotos) {
+      mejorVotos = votos[candidata]
+      etapa = candidata
+    }
+  }
+
+  return {
+    etapa,
+    indice: ETAPA_INDICE[etapa],
+    ...ETAPA_META[etapa],
+  }
 }
 
 function nivelDeSalud(salud: number): 'bajo' | 'medio' | 'alto' {
@@ -336,6 +497,7 @@ export function calcularDiagnostico(respuestas: DiagnosticoRespuestas): Diagnost
     recomendaciones,
     mensajeNivel: MENSAJES_NIVEL[nivel],
     recomendacionPrincipal,
+    ciclo: calcularCicloVida(respuestas),
     rubro: etiquetaOpcion('q1', respuestas),
     canalPrincipal: etiquetaOpcion('q2', respuestas),
     problemaPrincipal: etiquetaOpcion('q10', respuestas),

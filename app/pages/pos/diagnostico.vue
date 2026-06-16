@@ -2,7 +2,9 @@
 import {
   PREGUNTAS_DIAGNOSTICO,
   PASOS_DIAGNOSTICO,
+  type CicloVida,
   type DiagnosticoRespuestas,
+  type EtapaNegocio,
 } from '~~/shared/utils/diagnostico'
 
 definePageMeta({
@@ -21,6 +23,8 @@ type ResultadoView = {
   recomendaciones: string[]
   mensajeNivel: string
   recomendacionPrincipal: string
+  // Opcional: los diagnósticos guardados antes de v2 no traen ciclo de vida.
+  ciclo: CicloVida | null
 }
 
 const session = usePosSession()
@@ -204,6 +208,7 @@ function normalizarDesdeRow(row: any): ResultadoView {
     recomendaciones: r.recomendaciones ?? [],
     mensajeNivel: r.mensajeNivel ?? '',
     recomendacionPrincipal: r.recomendacionPrincipal ?? '',
+    ciclo: r.ciclo ?? null,
   }
 }
 
@@ -223,6 +228,26 @@ const AREAS_META: { key: keyof AreaScores; label: string; icon: string; color: s
 ]
 
 const nivelMeta = computed(() => NIVEL_META[resultado.value?.nivel ?? 'medio'])
+
+// --- Curva del ciclo de vida del negocio ---
+// Cada etapa tiene su centro (x,y) sobre la curva dibujada en el SVG (viewBox 0 0 300 150).
+const ETAPAS_ORDEN: EtapaNegocio[] = ['lanzamiento', 'crecimiento', 'madurez', 'declive']
+const ETAPA_GRAFICO: Record<EtapaNegocio, { label: string; color: string; x: number; y: number }> = {
+  lanzamiento: { label: 'Lanzamiento', color: '#3b82f6', x: 37.5, y: 120 },
+  crecimiento: { label: 'Crecimiento', color: '#16a34a', x: 112.5, y: 68 },
+  madurez: { label: 'Madurez', color: '#0d9488', x: 187.5, y: 40 },
+  declive: { label: 'Declive', color: '#f97316', x: 262.5, y: 92 },
+}
+const cicloMeta = computed(() =>
+  resultado.value?.ciclo ? ETAPA_GRAFICO[resultado.value.ciclo.etapa] : null,
+)
+// Posición del marcador en % sobre el área del gráfico (viewBox 300×150),
+// así el punto es un círculo perfecto (HTML) sin deformarse por el SVG estirado.
+const cicloMarcador = computed(() =>
+  cicloMeta.value
+    ? { left: `${(cicloMeta.value.x / 300) * 100}%`, top: `${(cicloMeta.value.y / 150) * 100}%` }
+    : {},
+)
 
 // Helpers de dona reutilizables (animan con `anim`, 0..1).
 function circ(r: number) {
@@ -283,7 +308,7 @@ function areaScore(key: keyof AreaScores) {
           </p>
           <ul class="diag-facts">
             <li><i class="pi pi-clock" /> 2 a 3 minutos</li>
-            <li><i class="pi pi-list-check" /> 10 preguntas · 5 pasos</li>
+            <li><i class="pi pi-list-check" /> 14 preguntas · 6 pasos</li>
             <li><i class="pi pi-heart" /> Sin respuestas buenas o malas</li>
           </ul>
           <div class="diag-intro__actions">
@@ -464,6 +489,69 @@ function areaScore(key: keyof AreaScores) {
             </div>
           </div>
         </div>
+
+        <!-- ====================== Ciclo de vida del negocio ====================== -->
+        <section v-if="resultado.ciclo && cicloMeta" class="diag-card diag-ciclo">
+          <header class="diag-ciclo__head">
+            <span class="diag-kicker"><i class="pi pi-chart-line" /> Etapa de tu negocio</span>
+            <h3>Tu negocio está en <strong :style="{ color: cicloMeta.color }">{{ resultado.ciclo.titulo }}</strong></h3>
+            <p>{{ resultado.ciclo.descripcion }}</p>
+          </header>
+
+          <div class="diag-ciclo__chart">
+            <div class="diag-ciclo__plot">
+              <svg viewBox="0 0 300 150" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="cicloFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" :stop-color="cicloMeta.color" stop-opacity="0.22" />
+                    <stop offset="100%" :stop-color="cicloMeta.color" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+
+                <!-- Divisiones de fase -->
+                <line v-for="x in [75, 150, 225]" :key="x" :x1="x" y1="6" :x2="x" y2="150" class="diag-ciclo__divider" />
+
+                <!-- Área bajo la curva -->
+                <path
+                  class="diag-ciclo__area"
+                  fill="url(#cicloFill)"
+                  d="M 0,146 C 16,140 28,132 37,120 C 60,100 88,84 112,68 C 140,52 164,42 187,40 C 212,38 240,64 262,92 C 280,110 292,122 300,130 L 300,150 L 0,150 Z"
+                />
+                <!-- Curva -->
+                <path
+                  class="diag-ciclo__curve"
+                  fill="none"
+                  d="M 0,146 C 16,140 28,132 37,120 C 60,100 88,84 112,68 C 140,52 164,42 187,40 C 212,38 240,64 262,92 C 280,110 292,122 300,130"
+                />
+
+                <!-- Guía vertical de la etapa (no se deforma: es vertical) -->
+                <line :x1="cicloMeta.x" :y1="cicloMeta.y" :x2="cicloMeta.x" y2="150" class="diag-ciclo__marker-line" :style="{ stroke: cicloMeta.color }" />
+              </svg>
+
+              <!-- Marcador en HTML: círculo perfecto, sin deformación del SVG -->
+              <span class="diag-ciclo__marker" :style="{ ...cicloMarcador, '--c': cicloMeta.color }">
+                <span class="diag-ciclo__marker-dot" />
+              </span>
+            </div>
+
+            <div class="diag-ciclo__labels">
+              <span
+                v-for="etapa in ETAPAS_ORDEN"
+                :key="etapa"
+                class="diag-ciclo__label"
+                :class="{ 'is-active': resultado.ciclo.etapa === etapa }"
+                :style="resultado.ciclo.etapa === etapa ? { color: ETAPA_GRAFICO[etapa].color, borderColor: ETAPA_GRAFICO[etapa].color } : {}"
+              >
+                {{ ETAPA_GRAFICO[etapa].label }}
+              </span>
+            </div>
+          </div>
+
+          <div class="diag-ciclo__tip">
+            <i class="pi pi-compass" :style="{ color: cicloMeta.color }" />
+            <p>{{ resultado.ciclo.consejo }}</p>
+          </div>
+        </section>
 
         <div class="diag-result__cols">
           <div
@@ -1223,6 +1311,162 @@ function areaScore(key: keyof AreaScores) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+
+/* ----- Ciclo de vida del negocio ----- */
+.diag-ciclo {
+  display: grid;
+  gap: 18px;
+  padding: clamp(18px, 2.4vw, 26px);
+  animation: diag-rise 0.5s ease both;
+}
+
+.diag-ciclo__head {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.diag-ciclo__head h3 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #102016;
+}
+
+.diag-ciclo__head p {
+  margin: 0;
+  max-width: 70ch;
+  color: #5d6b61;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.diag-ciclo__chart {
+  display: grid;
+  gap: 0;
+}
+
+.diag-ciclo__plot {
+  position: relative;
+  width: 100%;
+  height: clamp(150px, 26vw, 210px);
+}
+
+.diag-ciclo__chart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.diag-ciclo__divider {
+  stroke: #e7eee8;
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.diag-ciclo__curve {
+  stroke: #b9c6bc;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.diag-ciclo__marker-line {
+  stroke-width: 1.5;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Marcador HTML: círculo perfecto con halo pulsante y glow del color de etapa */
+.diag-ciclo__marker {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.diag-ciclo__marker::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: var(--c);
+  opacity: 0.25;
+  animation: diag-ciclo-pulse 2s ease-in-out infinite;
+}
+
+.diag-ciclo__marker-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--c);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--c), 0 6px 16px color-mix(in srgb, var(--c) 55%, transparent);
+  animation: diag-ciclo-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.2s;
+}
+
+@keyframes diag-ciclo-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.25; }
+  50% { transform: scale(1.9); opacity: 0.06; }
+}
+
+@keyframes diag-ciclo-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.diag-ciclo__labels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.diag-ciclo__label {
+  padding: 7px 6px;
+  border: 1px solid var(--diag-line);
+  border-radius: 10px;
+  background: #fbfdfb;
+  text-align: center;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #8a978d;
+  transition: all 0.2s ease;
+}
+
+.diag-ciclo__label.is-active {
+  background: #fff;
+  border-width: 2px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.diag-ciclo__tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f7f9f6;
+  border: 1px solid #e7eee8;
+}
+
+.diag-ciclo__tip i {
+  margin-top: 2px;
+}
+
+.diag-ciclo__tip p {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #2f4a37;
+  line-height: 1.45;
 }
 
 .diag-list {
