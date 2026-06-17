@@ -1,6 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../utils/db'
-import { booleanOrDefault, cleanText, ensureCategoryName, mapUniqueConstraint, nullableText, requireStoreSession } from '../../../../utils/posCatalog'
+import { booleanOrDefault, cleanText, ensureCategoryName, mapUniqueConstraint, nullableText, requireStoreAccess } from '../../../../utils/posCatalog'
 
 type CategoryBody = {
   name?: string
@@ -10,7 +10,7 @@ type CategoryBody = {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'producto.gestionar')
   await ensureDatabase()
 
   const categoryId = getRouterParam(event, 'id')

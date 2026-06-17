@@ -1,6 +1,7 @@
 import { createError } from 'h3'
 import type { H3Event } from 'h3'
 import type { PoolClient } from 'pg'
+import { tieneAcceso } from '~~/shared/utils/acceso'
 import { pool } from './db'
 import { requireSession } from './session'
 
@@ -19,6 +20,16 @@ export async function requireStoreSession(event: H3Event): Promise<StoreSession>
   }
 
   return session as StoreSession
+}
+
+export async function requireStoreAccess(event: H3Event, access: string): Promise<StoreSession> {
+  const session = await requireStoreSession(event)
+
+  if (!tieneAcceso(access, session)) {
+    throw createError({ statusCode: 403, statusMessage: 'No autorizado para esta operacion.' })
+  }
+
+  return session
 }
 
 export function cleanText(value: unknown, fallback = '') {

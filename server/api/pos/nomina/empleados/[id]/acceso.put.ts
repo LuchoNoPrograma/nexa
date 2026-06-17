@@ -1,6 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../../utils/db'
-import { requireStoreSession } from '../../../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../../../utils/posCatalog'
 import { hashPassword } from '../../../../../utils/password'
 import { tieneAcceso } from '~~/shared/utils/acceso'
 
@@ -17,7 +17,7 @@ const ROLES_ASIGNABLES = ['cajero', 'administrador'] as const
 // reutiliza un usuario que inicia sesión con su CI; sin rol, le quita el acceso
 // a la tienda. Solo quien gestiona configuración de la tienda puede usarlo.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
 
   if (!tieneAcceso('CONFIG', { roles: session.roles, permisos: session.permisos })) {
     throw createError({ statusCode: 403, statusMessage: 'No autorizado para gestionar accesos.' })

@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 
 type ConfigBody = {
   salarioMinimoMensual?: number
@@ -10,7 +10,7 @@ type ConfigBody = {
 
 // Actualiza los parámetros de cálculo de sueldo de la tienda.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   const body = await readBody<ConfigBody>(event)
 
   const minimo = Number(body?.salarioMinimoMensual)

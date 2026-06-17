@@ -1,5 +1,6 @@
 import { createError, getRequestHeader, readBody } from 'h3'
 import { ensureDatabase, pool } from '../utils/db'
+import { assertRateLimit } from '../utils/rateLimit'
 
 type ContactBody = {
   nombre?: string
@@ -32,6 +33,14 @@ export default defineEventHandler(async (event) => {
   if (mensaje.length < 10) {
     throw createError({ statusCode: 400, statusMessage: 'Escribe un mensaje un poco mas detallado.' })
   }
+
+  assertRateLimit(event, {
+    namespace: 'contacto',
+    maxRequests: 8,
+    windowMs: 15 * 60 * 1000,
+    keyParts: [telefono || nombre],
+    message: 'Recibimos varias consultas seguidas. Intenta de nuevo en unos minutos.',
+  })
 
   const result = await pool.query<{ id: string }>(
     `

@@ -1,6 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../../utils/db'
-import { requireStoreSession } from '../../../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../../../utils/posCatalog'
 import { normalizarSlots } from '~~/shared/utils/nomina'
 
 type HorarioBody = {
@@ -10,7 +10,7 @@ type HorarioBody = {
 // Guarda la planilla semanal (celdas marcadas) de un trabajador.
 // Cada celda = 1 hora, así que las horas semanales = cantidad de celdas.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   const id = getRouterParam(event, 'id')
   const body = await readBody<HorarioBody>(event)
   await ensureDatabase()

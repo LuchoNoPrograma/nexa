@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   deleteCookie(event, 'nexa_session_token', {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
   })

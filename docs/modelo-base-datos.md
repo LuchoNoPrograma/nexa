@@ -1,685 +1,527 @@
-# Modelo de base de datos NEXA
+# Modelo tecnico de base de datos NEXA
 
-## Criterios de diseño
+Este documento describe el modelo vigente del MVP. La fuente de verdad para
+crear o actualizar la base es `database/local/*`, ejecutada con `dbmate` desde
+`npm run db:migrate`.
 
-- Base única PostgreSQL multi-tenant.
-- Todas las tablas se nombran en singular y en `snake_case`.
-- `tienda` representa cada negocio o microempresa.
-- Las tablas privadas del negocio llevan `tienda_id` para aplicar RLS.
-- El POS es soporte operativo para generar datos; no es el producto principal.
-- Haru IA, calculadora, catálogo público y análisis de rentabilidad son el núcleo del MVP.
-- No se modela facturación legal, pasarela de pago, contabilidad completa ni multisucursal avanzada.
-- Se prefiere resolver casos simples con columnas/estados antes de crear tablas adicionales.
+## Decision de arquitectura
 
-## Núcleo multi-tenant
+- Base unica PostgreSQL multi-tenant.
+- Supabase puede usarse como PostgreSQL gestionado, no como Auth/RLS.
+- La autenticacion del MVP vive en la app: `usuario.password_hash` y `sesion`.
+- El aislamiento por tienda se aplica en endpoints server usando la sesion
+  activa y `session.storeId`.
+- Cuando se migre a Supabase Auth/RLS, se debe crear una migracion nueva y
+  explicita; no mezclarla con el flujo actual.
+
+## Fuente de verdad
+
+Archivos vigentes:
+
+- `database/local/001_initial.sql`: modelo base consolidado para el MVP.
+- `database/local/002_catalog_templates.sql`: plantillas de catalogo por rubro.
+- `database/reset.sql`: utilitario destructivo para limpiar local antes de
+  volver a correr migraciones.
+- `database/demo_abarrotes_seed.sql`: seed manual opcional para la tienda demo.
+
+## Criterios de diseno
+
+- Tablas en singular y `snake_case`.
+- TypeScript en `camelCase`.
+- `tienda` es la unidad tenant.
+- Toda tabla privada de negocio lleva `tienda_id`, salvo tablas hijas que se
+  aislan por su padre.
+- El POS es soporte operativo para generar datos, no el producto principal.
+- Haru IA, calculadora, catalogo publico y analisis son el nucleo del MVP.
+- No crear tablas contables paralelas si `venta`, `pago` y `caja_movimiento`
+  cubren el caso.
+- No modelar facturacion legal, pasarela, contabilidad completa ni
+  multisucursal avanzada en el MVP.
+
+## Nucleo multi-tenant
 
 ### `usuario`
 
-Representa el perfil interno de una cuenta autenticada. La autenticación la maneja Supabase en `auth.users`; esta tabla guarda los datos operativos que NEXA sí gestiona desde la base de datos.
+Cuenta operativa del MVP.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `email text`
-- `nombre text`
-- `telefono text`
-- `avatar_url text`
-- `estado text default 'activo' check ('invitado', 'activo', 'bloqueado')`
-- `ultimo_acceso_at timestamptz`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
-
-### `tienda`
-
-Representa el negocio cliente de NEXA.
-
-Campos:
-
-- `id uuid pk`
-- `owner_id uuid` referencia a `usuario(id)`
-- `nombre text not null`
-- `slug text unique not null`
-- `rubro text`
-- `descripcion text`
-- `ciudad text default 'Cobija'`
-- `departamento text default 'Pando'`
-- `pais text default 'Bolivia'`
-- `telefono_whatsapp text`
-- `logo_url text`
-- `color_primario text default '#0B1F3A'`
-- `plan text default 'free' check ('free', 'pro', 'demo')`
-- `activo boolean default true`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
-
-### `tienda_usuario`
-
-Vincula usuarios con tiendas. Sirve para saber qué usuarios pertenecen a una tienda, aunque sus permisos reales se definan por roles.
-
-Campos:
-
-- `id uuid pk`
-- `tienda_id uuid not null` referencia a `tienda(id)`
-- `usuario_id uuid not null` referencia a `usuario(id)`
-- `cargo text`
-- `estado text default 'activo' check ('invitado', 'activo', 'suspendido')`
-- `invitado_por_id uuid null` referencia a `usuario(id)`
-- `joined_at timestamptz`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
-
-Restricción: `unique (tienda_id, usuario_id)`.
-
-## Usuarios, roles y permisos
-
-El modelo separa dos alcances:
-
-- `plataforma`: roles de la startup NEXA para administrar tiendas, planes, soporte y operación interna.
-- `tienda`: roles del negocio cliente para usar POS, caja, inventario, catálogo, Haru y reportes.
-
-### `rol`
-
-Rol asignable a un usuario. Puede ser un rol de plataforma o un rol de una tienda específica.
-
-Campos:
-
-- `id uuid pk`
-- `tienda_id uuid null` referencia a `tienda(id)`
-- `alcance text not null check ('plataforma', 'tienda')`
-- `codigo text not null`
-- `nombre text not null`
-- `descripcion text`
-- `sistema boolean default false`
-- `activo boolean default true`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+- `id`
+- `email`
+- `nombre`
+- `password_hash`
+- `telefono`
+- `ci`
+- `estado`
+- `ultimo_acceso_at`
+- timestamps
 
 Reglas:
 
-- Si `alcance = 'plataforma'`, `tienda_id` debe ser `null`.
-- Si `alcance = 'tienda'`, `tienda_id` puede ser `null` para roles plantilla o tener valor para roles personalizados de una tienda.
-- `sistema = true` protege roles base contra borrado accidental.
+- `email` puede ser null para registro publico por celular.
+- `telefono` tiene indice unico parcial cuando no es null.
+- La contrasena nunca se guarda en claro.
 
-Roles base sugeridos:
+### `sesion`
+
+Sesion HTTP propia de la app.
+
+Campos clave:
+
+- `usuario_id`
+- `token_hash`
+- `user_agent`
+- `ip`
+- `expires_at`
+- `revoked_at`
+- `last_seen_at`
+
+Reglas:
+
+- El token real vive en cookie HTTP only.
+- La base solo guarda `token_hash`.
+
+### `tienda`
+
+Negocio o microempresa cliente.
+
+Campos clave:
+
+- `owner_id`
+- `nombre`
+- `slug`
+- `rubro`
+- `descripcion`
+- `ciudad`, `departamento`, `pais`
+- `telefono_whatsapp`
+- `color_primario`
+- `margen_default`
+- `plan`
+- `onboarding_diagnostico`
+- `activo`
+
+Reglas:
+
+- `slug` identifica catalogo publico.
+- `telefono_whatsapp` se usa para pedidos por WhatsApp.
+- `onboarding_diagnostico` controla el primer diagnostico.
+
+### `tienda_usuario`
+
+Membresia de usuarios en tiendas.
+
+Campos clave:
+
+- `tienda_id`
+- `usuario_id`
+- `cargo`
+- `estado`
+- `joined_at`
+
+Regla: `unique (tienda_id, usuario_id)`.
+
+## Roles y permisos
+
+### `rol`
+
+Define roles de plataforma o tienda.
+
+Alcances:
+
+- `plataforma`: administracion de NEXA.
+- `tienda`: operacion del negocio.
+
+Roles base:
 
 - Plataforma: `super_admin`, `soporte`, `comercial`, `investigador`.
 - Tienda: `propietario`, `administrador`, `cajero`, `inventario`, `consulta`.
 
-### `permiso`
+### `permiso`, `rol_permiso`, `usuario_rol`
 
-Catálogo de permisos disponibles en la aplicación.
-
-Campos:
-
-- `id uuid pk`
-- `codigo text unique not null`
-- `modulo text not null`
-- `accion text not null`
-- `alcance text not null check ('plataforma', 'tienda')`
-- `descripcion text`
-- `activo boolean default true`
-- `created_at timestamptz default now()`
-
-Permisos base sugeridos:
-
-- Plataforma: `plataforma.tienda.ver`, `plataforma.tienda.gestionar`, `plataforma.usuario.gestionar`, `plataforma.soporte.acceder`, `plataforma.reporte.ver`.
-- Tienda/POS: `pos.vender`, `pos.descuento.aplicar`, `caja.abrir`, `caja.cerrar`, `caja.movimiento.crear`.
-- Tienda/operación: `producto.ver`, `producto.gestionar`, `compra.gestionar`, `cliente.gestionar`, `proveedor.gestionar`.
-- Tienda/core: `haru.usar`, `calculo_precio.usar`, `reporte.ver`, `configuracion.gestionar`.
-
-### `rol_permiso`
-
-Relación entre roles y permisos.
-
-Campos:
-
-- `id uuid pk`
-- `rol_id uuid not null` referencia a `rol(id)`
-- `permiso_id uuid not null` referencia a `permiso(id)`
-- `created_at timestamptz default now()`
-
-Restricción: `unique (rol_id, permiso_id)`.
-
-### `usuario_rol`
-
-Asignación de roles a usuarios. Permite que un usuario sea administrador de plataforma y también miembro de una tienda, sin duplicar cuentas.
-
-Campos:
-
-- `id uuid pk`
-- `usuario_id uuid not null` referencia a `usuario(id)`
-- `rol_id uuid not null` referencia a `rol(id)`
-- `tienda_id uuid null` referencia a `tienda(id)`
-- `asignado_por_id uuid null` referencia a `usuario(id)`
-- `created_at timestamptz default now()`
+Modelo RBAC simple.
 
 Reglas:
 
-- Para roles de plataforma, `tienda_id` debe ser `null`.
-- Para roles de tienda, `tienda_id` debe tener valor.
-- Un rol de tienda solo debe asignarse si existe una fila activa en `tienda_usuario`.
-- Restricción: `unique (usuario_id, rol_id, tienda_id)`.
+- `permiso.codigo` es unico.
+- `usuario_rol.tienda_id = null` para roles de plataforma.
+- `usuario_rol.tienda_id` con valor para roles de tienda.
+- El backend calcula permisos efectivos desde la sesion activa.
 
-## Catálogo y operación comercial
+## Catalogo
 
 ### `categoria`
 
-Agrupa productos/servicios por tienda.
+Agrupa productos, servicios y combos por tienda.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `nombre text not null`
-- `descripcion text`
-- `icono text`
-- `orden integer default 0`
-- `activo boolean default true`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+- `tienda_id`
+- `nombre`
+- `descripcion`
+- `icono`
+- `orden`
+- `activo`
 
-Restricción: `unique (tienda_id, nombre)`.
+Regla: `unique (tienda_id, nombre)`.
 
 ### `producto`
 
-Producto, servicio o combo vendido por el negocio.
+Unidad vendible: producto fisico, servicio o combo.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `categoria_id uuid null`
-- `sku text`
-- `codigo_barras text`
-- `nombre text not null`
-- `descripcion text`
-- `tipo text default 'producto' check ('producto', 'servicio', 'combo')`
-- `unidad text default 'unidad'`
-- `costo_unitario numeric(12,2) default 0`
-- `precio_venta numeric(12,2) default 0`
-- `stock_actual numeric(12,2) default 0`
-- `stock_minimo numeric(12,2) default 0`
-- `precio_variable boolean default false`
-- `orden_catalogo integer default 0`
-- `imagen_url text`
-- `visible_catalogo boolean default false`
-- `visible_pos boolean default true`
-- `activo boolean default true`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+- `tienda_id`
+- `categoria_id`
+- `sku`
+- `codigo_barras`
+- `nombre`
+- `descripcion`
+- `tipo`: `producto`, `servicio`, `combo`
+- `tipo_costeo`: `reventa`, `produccion`, `servicio`
+- `unidad`
+- `costo_unitario`
+- `precio_venta`
+- `stock_actual`
+- `stock_minimo`
+- `stock_maximo`
+- `margen_minimo`
+- `orden_catalogo`
+- `imagen_url`
+- `icono`
+- `visible_catalogo`
+- `visible_pos`
+- `activo`
 
-Restricciones:
+Reglas:
 
-- `unique (tienda_id, sku)` cuando `sku is not null`
-- `unique (tienda_id, codigo_barras)` cuando `codigo_barras is not null`
+- `visible_pos` controla si aparece en venta interna.
+- `visible_catalogo` queda para catalogo publico.
+- `sku` y `codigo_barras` son unicos por tienda cuando existen.
 
-### `combo_componente`
+### `producto_variante`
 
-Composición de productos cuando `producto.tipo = 'combo'`. Se usa “componente” en vez de “item” para mantener el modelo en español y describir mejor que cada fila es un producto que forma parte del combo.
+Variantes simples de un producto.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `combo_id uuid not null` referencia a `producto(id)`
-- `producto_id uuid not null` referencia a `producto(id)`
-- `cantidad numeric(12,2) not null default 1`
-- `created_at timestamptz default now()`
+- `producto_id`
+- `nombre`
+- `sku`
+- `codigo_barras`
+- `costo_unitario`
+- `precio_venta`
+- `stock_actual`
+- `orden`
+- `activo`
 
-Restricción: `unique (combo_id, producto_id)`.
+### `combo_item`
 
-### `cliente`
+Composicion de combos.
 
-Registro básico para ventas, historial y pedidos.
+Campos clave:
 
-Campos:
+- `combo_id`
+- `producto_id`
+- `cantidad`
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `nombre text not null`
-- `telefono text`
-- `email text`
-- `notas text`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+Reglas:
 
-### `proveedor`
+- `unique (combo_id, producto_id)`.
+- `combo_id <> producto_id`.
 
-Fuente de compras y reposición.
-
-Campos:
-
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `nombre text not null`
-- `telefono text`
-- `email text`
-- `notas text`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
-
-## POS, compras y caja
-
-### Sobre el carrito del POS
-
-El carrito que se ve en la interfaz del POS normalmente no necesita tabla propia para el MVP. Mientras el usuario está vendiendo, el carrito puede vivir como estado del frontend. Cuando se cobra, se persiste como:
-
-- `venta`: cabecera de la operación.
-- `venta_item`: líneas vendidas.
-- `pago`: uno o varios cobros asociados a la venta.
-- `caja_movimiento`: impacto confirmado en caja o cuenta.
-- `inventario_movimiento`: salida de inventario cuando aplica.
-
-Solo convendría una tabla `carrito` si se quisieran guardar carritos abandonados, ventas suspendidas, sincronización offline o múltiples cajas trabajando sobre borradores compartidos. Eso queda fuera del MVP.
-
-### `venta`
-
-Venta comercial. No es lo mismo que ingreso: una venta puede estar pendiente, parcialmente pagada o pagada con varios pagos.
-
-Campos:
-
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `cliente_id uuid null`
-- `numero text`
-- `caja_sesion_id uuid null`
-- `canal text default 'pos' check ('pos', 'catalogo_whatsapp', 'manual')`
-- `estado text default 'pendiente' check ('cotizacion', 'pendiente', 'parcial', 'pagada', 'anulada')`
-- `fecha timestamptz default now()`
-- `subtotal numeric(12,2) default 0`
-- `descuento numeric(12,2) default 0`
-- `total numeric(12,2) default 0`
-- `notas text`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
-
-Restricción: `unique (tienda_id, numero)` cuando `numero is not null`.
-
-### `venta_item`
-
-Línea de una venta. Cada fila congela el producto, servicio o combo vendido, con precio y costo del momento para que el histórico no cambie cuando se edite el catálogo.
-
-Campos:
-
-- `id uuid pk`
-- `venta_id uuid not null`
-- `producto_id uuid null`
-- `producto_variante_id uuid null`
-- `nombre_producto text not null`
-- `tipo_producto text check ('producto', 'servicio', 'combo')`
-- `cantidad numeric(12,2) not null default 1`
-- `costo_unitario numeric(12,2) default 0`
-- `precio_unitario numeric(12,2) not null default 0`
-- `descuento numeric(12,2) default 0`
-- `subtotal numeric(12,2) not null default 0`
-- `created_at timestamptz default now()`
-
-### `pago`
-
-Pago recibido o realizado. Permite cuotas, pagos mixtos y pagos pendientes. Una venta de Bs. 1.000 puede tener tres pagos: efectivo, QR y transferencia.
-
-Campos:
-
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `venta_id uuid null`
-- `compra_id uuid null`
-- `caja_sesion_id uuid null`
-- `cliente_id uuid null`
-- `proveedor_id uuid null`
-- `usuario_id uuid null`
-- `tipo text check ('ingreso', 'egreso')`
-- `metodo text check ('efectivo', 'qr', 'transferencia', 'tarjeta', 'otro')`
-- `estado text default 'confirmado' check ('pendiente', 'confirmado', 'anulado')`
-- `monto numeric(12,2) default 0`
-- `referencia text`
-- `fecha timestamptz default now()`
-- `fecha_vencimiento date`
-- `notas text`
-
-Regla operativa:
-
-- Pago confirmado de venta genera `caja_movimiento` tipo `ingreso`.
-- Pago confirmado de compra o gasto genera `caja_movimiento` tipo `egreso`.
-- Pago pendiente no afecta caja hasta confirmarse.
+## POS, ventas, pagos y caja
 
 ### `caja_sesion`
 
-Apertura y cierre simple de caja para el flujo POS.
+Apertura y cierre de caja.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `usuario_id uuid null`
-- `estado text default 'abierta' check ('abierta', 'cerrada')`
-- `saldo_inicial numeric(12,2) default 0`
-- `saldo_esperado numeric(12,2) default 0`
-- `saldo_contado numeric(12,2)`
-- `diferencia numeric(12,2)`
-- `abierta_at timestamptz default now()`
-- `cerrada_at timestamptz`
-- `notas text`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+- `tienda_id`
+- `usuario_id`
+- `empleado_id`
+- `estado`: `abierta`, `cerrada`
+- `saldo_inicial`
+- `saldo_esperado`
+- `saldo_contado`
+- `diferencia`
+- `abierta_at`
+- `cerrada_at`
 
-Fórmula:
+Regla: solo una caja abierta por tienda.
 
-```text
-saldo_esperado = saldo_inicial + ingresos_confirmados - egresos_confirmados
-diferencia = saldo_contado - saldo_esperado
-```
+### `venta`
 
-### `compra`
+Documento comercial.
 
-Entrada de productos, costos y proveedores.
+Campos clave:
 
-Campos:
+- `tienda_id`
+- `cliente_id`
+- `usuario_id`
+- `caja_sesion_id`
+- `numero`
+- `canal`: `pos`, `catalogo_whatsapp`, `manual`
+- `estado`: `cotizacion`, `pendiente`, `parcial`, `pagada`, `anulada`
+- `subtotal`
+- `descuento`
+- `total`
+- `fecha`
+- `fecha_vencimiento`
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `proveedor_id uuid null`
-- `usuario_id uuid null`
-- `numero text`
-- `estado text default 'recibida' check ('borrador', 'recibida', 'anulada')`
-- `estado_pago text default 'pendiente' check ('pendiente', 'parcial', 'pagada')`
-- `subtotal numeric(12,2) default 0`
-- `descuento numeric(12,2) default 0`
-- `fecha date default current_date`
-- `total numeric(12,2) default 0`
-- `notas text`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+Regla: `venta.total` representa la operacion comercial, no necesariamente dinero
+cobrado.
 
-### `compra_item`
+### `venta_item`
 
-Línea de detalle de una compra. Cada fila representa un producto recibido y su costo al momento de la entrada.
+Lineas congeladas de venta.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `compra_id uuid not null`
-- `producto_id uuid null`
-- `producto_variante_id uuid null`
-- `nombre_producto text not null`
-- `cantidad numeric(12,2) not null default 1`
-- `costo_unitario numeric(12,2) not null default 0`
-- `subtotal numeric(12,2) not null default 0`
-- `created_at timestamptz default now()`
+- `venta_id`
+- `producto_id`
+- `producto_variante_id`
+- `nombre_producto`
+- `tipo_producto`
+- `cantidad`
+- `costo_unitario`
+- `precio_unitario`
+- `descuento`
+- `subtotal`
+
+### `pago`
+
+Dinero cobrado o pagado.
+
+Campos clave:
+
+- `tienda_id`
+- `venta_id`
+- `compra_id`
+- `caja_sesion_id`
+- `cliente_id`
+- `proveedor_id`
+- `usuario_id`
+- `tipo`: `ingreso`, `egreso`
+- `metodo`: `efectivo`, `qr`, `transferencia`, `tarjeta`, `otro`
+- `estado`: `pendiente`, `confirmado`, `anulado`
+- `monto`
+- `referencia`
+- `fecha`
+- `fecha_vencimiento`
+
+Regla: los reportes financieros parten de `pago` y `caja_movimiento`.
 
 ### `caja_movimiento`
 
-Movimiento simple de caja. No cubre contabilidad completa; sirve para turnos, ingresos, egresos, gastos y conciliación.
+Impacto real en caja o cuenta.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `caja_sesion_id uuid null`
-- `pago_id uuid null`
-- `venta_id uuid null`
-- `compra_id uuid null`
-- `usuario_id uuid null`
-- `proveedor_id uuid null`
-- `cliente_id uuid null`
-- `tipo text not null check ('ingreso', 'egreso')`
-- `categoria text default 'otro'`
-- `concepto text not null`
-- `monto numeric(12,2) not null default 0`
-- `metodo text check ('efectivo', 'qr', 'transferencia', 'tarjeta', 'otro')`
-- `estado text default 'confirmado' check ('pendiente', 'confirmado', 'anulado')`
-- `fecha timestamptz default now()`
-- `created_at timestamptz default now()`
+- `tienda_id`
+- `caja_sesion_id`
+- `pago_id`
+- `venta_id`
+- `compra_id`
+- `usuario_id`
+- `proveedor_id`
+- `cliente_id`
+- `tipo`
+- `categoria`
+- `concepto`
+- `metodo`
+- `monto`
+- `estado`
+- `fecha`
+
+Regla: no crear tablas `ingreso` o `gasto`; se calculan desde esta tabla y
+`pago`.
+
+## Compras e inventario
+
+### `compra`
+
+Entrada de productos y costos.
+
+Campos clave:
+
+- `tienda_id`
+- `proveedor_id`
+- `usuario_id`
+- `numero`
+- `estado`: `borrador`, `recibida`, `anulada`
+- `estado_pago`: `pendiente`, `parcial`, `pagada`
+- `subtotal`
+- `descuento`
+- `total`
+- `fecha`
+
+### `compra_item`
+
+Detalle congelado de compra.
+
+Campos clave:
+
+- `compra_id`
+- `producto_id`
+- `producto_variante_id`
+- `nombre_producto`
+- `cantidad`
+- `costo_unitario`
+- `subtotal`
 
 ### `inventario_ajuste`
 
-Ajuste manual compatible con la pantalla actual de stock. Sirve para recuentos, daños, devoluciones y correcciones.
+Ajuste manual o tecnico de stock.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `producto_id uuid not null`
-- `producto_variante_id uuid null`
-- `usuario_id uuid null`
-- `tipo text check ('sumar', 'restar', 'fijar')`
-- `motivo text check ('compra_recibida', 'venta', 'producto_daniado', 'devolucion', 'recuento', 'traslado', 'otro')`
-- `sucursal text default 'Matriz'`
-- `cantidad numeric(12,2) default 0`
-- `stock_anterior numeric(12,2) default 0`
-- `stock_nuevo numeric(12,2) default 0`
-- `notas text`
-- `created_at timestamptz default now()`
+- `tienda_id`
+- `producto_id`
+- `producto_variante_id`
+- `usuario_id`
+- `tipo`: `sumar`, `restar`, `fijar`
+- `motivo`
+- `sucursal`
+- `cantidad`
+- `stock_anterior`
+- `stock_nuevo`
 
 ### `inventario_movimiento`
 
-Kardex simple para ventas, compras, devoluciones y ajustes. Es el histórico analítico de inventario.
+Kardex simple.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `producto_id uuid not null`
-- `tipo text not null check ('entrada', 'salida', 'ajuste')`
-- `producto_variante_id uuid null`
-- `usuario_id uuid null`
-- `venta_id uuid null`
-- `compra_id uuid null`
-- `ajuste_id uuid null`
-- `origen text not null check ('venta', 'compra', 'manual', 'devolucion')`
-- `cantidad numeric(12,2) not null`
-- `stock_anterior numeric(12,2)`
-- `stock_nuevo numeric(12,2)`
-- `costo_unitario numeric(12,2)`
-- `notas text`
-- `created_at timestamptz default now()`
+- `tienda_id`
+- `producto_id`
+- `producto_variante_id`
+- `usuario_id`
+- `venta_id`
+- `compra_id`
+- `ajuste_id`
+- `tipo`: `entrada`, `salida`, `ajuste`
+- `origen`: `venta`, `compra`, `manual`, `devolucion`
+- `cantidad`
+- `stock_anterior`
+- `stock_nuevo`
+- `costo_unitario`
 
-## Precio, rentabilidad y análisis
+## Precio, diagnostico y Haru IA
 
 ### `precio_historial`
 
 Historial de cambios de costo/precio.
 
-Campos:
-
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `producto_id uuid not null`
-- `costo_anterior numeric(12,2)`
-- `costo_nuevo numeric(12,2)`
-- `precio_anterior numeric(12,2)`
-- `precio_nuevo numeric(12,2)`
-- `motivo text`
-- `created_at timestamptz default now()`
-
 ### `calculo_precio`
 
-Resultado guardado de la calculadora de rentabilidad.
+Resultado guardado de calculadora de rentabilidad.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `producto_id uuid null`
-- `nombre_producto text`
-- `costo_unitario numeric(12,2) default 0`
-- `costo_fijo_prorrateado numeric(12,2) default 0`
-- `otros_costos numeric(12,2) default 0`
-- `margen_deseado numeric(5,2) default 0`
-- `precio_recomendado numeric(12,2) default 0`
-- `ganancia_estimada numeric(12,2) default 0`
-- `notas text`
-- `created_at timestamptz default now()`
+- `costo_unitario`
+- `costo_fijo_prorrateado`
+- `otros_costos`
+- `margen_deseado`
+- `precio_recomendado`
+- `ganancia_estimada`
 
 ### `diagnostico`
 
-Diagnóstico empresarial breve para alimentar recomendaciones de Haru IA.
+Diagnostico empresarial inicial.
 
-Campos:
+Campos clave:
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `rubro text`
-- `canal_venta_principal text`
-- `nivel_digital text check ('bajo', 'medio', 'alto')`
-- `problema_principal text`
-- `objetivo_principal text`
-- `resultado jsonb default '{}'::jsonb`
-- `created_at timestamptz default now()`
+- `tienda_id`
+- `usuario_id`
+- `rubro`
+- `canal_venta_principal`
+- `problema_principal`
+- `objetivo_principal`
+- scores por area
+- `resultado`
+- `completado_at`
 
-## Haru IA
+### `haru_conversacion`, `haru_mensaje`, `haru_chat_config`
 
-### `haru_conversacion`
+Persisten historial, resumen/contexto y configuracion de Haru IA por tienda.
 
-Agrupa conversaciones con Haru. Permite retomar una sesion de chat sin perder el historial.
+Reglas:
 
-Campos:
+- `haru_mensaje` cuelga de `haru_conversacion`.
+- Haru puede funcionar con fallback local si no existe `GEMINI_API_KEY`.
+- La key de Gemini vive solo en server.
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `usuario_id uuid null`
-- `titulo text default 'Nueva conversación'`
-- `contexto jsonb default '{}'::jsonb`
-- `origen text default 'burbuja_chat'`
-- `estado text default 'abierta' check ('abierta', 'cerrada', 'archivada')`
-- `last_message_at timestamptz`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+## Marketing y contacto
 
-### `haru_mensaje`
+### `marketing_publicacion`
 
-Mensaje de usuario o respuesta de Haru.
+Borradores generados para publicaciones comerciales.
 
-Campos:
+### `contacto_mensaje`
 
-- `id uuid pk`
-- `conversacion_id uuid not null`
-- `rol text not null check ('user', 'assistant', 'system')`
-- `contenido text not null`
-- `metadata jsonb default '{}'::jsonb`
-- `created_at timestamptz default now()`
+Mensajes publicos desde landing/contacto.
 
-### `haru_chat_config`
+## Personal y costo laboral
 
-Configuracion por tienda de la burbuja de chat.
+### `empleado`
 
-Campos:
+Trabajador de tienda. No necesariamente tiene login.
 
-- `id uuid pk`
-- `tienda_id uuid not null`
-- `nombre_asistente text default 'Haru IA'`
-- `saludo text`
-- `avatar_url text default '/haru-chat.png'`
-- `prompts jsonb`
-- `activo boolean default true`
-- `created_at timestamptz default now()`
-- `updated_at timestamptz default now()`
+Campos clave:
 
-## Catálogo público y tracción
+- `tienda_id`
+- `usuario_id`
+- `numero`
+- `nombre`
+- `celular`
+- `fecha_nacimiento`
+- `direccion`
+- `puesto`
+- `valor_hora`
+- `fecha_alta`
+- `fecha_baja`
+- `activo`
 
-El catálogo público no requiere una tabla separada al inicio. Se resuelve con:
+Si el empleado tiene acceso al sistema, `empleado.usuario_id` apunta a
+`usuario`; su identificador de login por CI vive en `usuario.ci`.
 
-- `tienda.slug`
-- `producto.visible_catalogo`
-- `producto.activo`
-- `tienda.telefono_whatsapp`
+### `nomina_config`, `turno_laboral`, `empleado_horario`, `empleado_turno`
 
-Ruta sugerida: `/tienda/[slug]`.
+Soporte de planificacion y costo laboral estimado. No es nomina legal.
 
-## Reportes de ingresos y gastos
+## Plantillas de catalogo
 
-Los submódulos visuales de ingresos y gastos no necesitan tablas principales propias en el MVP. Se calculan desde operaciones reales:
+### `catalogo_plantilla`, `catalogo_plantilla_categoria`, `catalogo_plantilla_producto`
 
-- Ingresos confirmados: `pago.tipo = 'ingreso' and pago.estado = 'confirmado'` más `caja_movimiento.tipo = 'ingreso'` para registros manuales sin venta.
-- Cobros pendientes: `pago.tipo = 'ingreso' and pago.estado = 'pendiente'` o ventas con `estado in ('pendiente', 'parcial')`.
-- Gastos confirmados: `caja_movimiento.tipo = 'egreso' and estado = 'confirmado'`.
-- Pagos por pagar: `pago.tipo = 'egreso' and pago.estado = 'pendiente'` o compras con `estado_pago in ('pendiente', 'parcial')`.
-- Top clientes: ventas/pagos agrupados por `cliente_id`.
-- Top proveedores: compras, pagos o egresos agrupados por `proveedor_id`.
-- Categorías de gasto: `caja_movimiento.categoria`.
+Catalogos sugeridos por rubro para acelerar onboarding.
 
-Regla de diseño: `venta.total` documenta la operación comercial, `pago.monto` documenta el cobro o pago, y `caja_movimiento.monto` documenta el impacto en caja/cuenta. Los reportes se calculan desde esas fuentes, no desde tablas duplicadas de `ingreso` o `gasto`.
-
-## RLS recomendado
-
-Función base para pertenencia a tienda:
+Funcion:
 
 ```sql
-create or replace function is_miembro_tienda(tienda_uuid uuid)
-returns boolean
-language sql
-stable
-as $$
-  select exists (
-    select 1
-    from tienda_usuario tu
-    where tu.tienda_id = tienda_uuid
-      and tu.usuario_id = auth.uid()
-      and tu.estado = 'activo'
-  );
-$$;
+aplicar_catalogo_plantilla(tienda_uuid, plantilla_codigo, incluir_productos)
 ```
 
-Política base:
+Plantilla inicial: `minimarket_abarrotes`.
 
-- `usuario`: el usuario ve su propio perfil; administradores de plataforma pueden gestionar usuarios.
-- `tienda_usuario`: miembros activos ven su membresía; administradores de tienda pueden gestionar miembros.
-- `tienda`: visible si `owner_id = auth.uid()` o `is_miembro_tienda(id)`.
-- Tablas con `tienda_id`: `using (is_miembro_tienda(tienda_id))`.
-- Tablas hijas sin `tienda_id` se aíslan por su padre.
-- Catálogo público: permitir `select` de `producto` activo y visible, unido a `tienda` activa.
-- Roles de plataforma: solo usuarios con permiso `plataforma.usuario.gestionar` o `plataforma.tienda.gestionar`.
-- Roles de tienda: solo usuarios con permiso `configuracion.gestionar` dentro de su tienda.
+## Flujo recomendado
 
-Funciones auxiliares recomendadas:
+1. Crear/actualizar schema con `npm run db:migrate`.
+2. La app crea admin demo y tienda demo desde `server/utils/db.ts` si existen
+   credenciales `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`.
+3. El registro publico crea `usuario`, `tienda`, `tienda_usuario`,
+   `usuario_rol`, `nomina_config`, `empleado`, `caja_sesion` y `sesion`.
+4. Las operaciones de venta crean `venta`, `venta_item`, `pago`,
+   `caja_movimiento` e `inventario_movimiento` segun corresponda.
 
-```sql
-create or replace function has_permiso(permiso_codigo text, tienda_uuid uuid default null)
-returns boolean
-language sql
-stable
-as $$
-  select exists (
-    select 1
-    from usuario_rol ur
-    join rol r on r.id = ur.rol_id and r.activo = true
-    join rol_permiso rp on rp.rol_id = r.id
-    join permiso p on p.id = rp.permiso_id and p.activo = true
-    where ur.usuario_id = auth.uid()
-      and p.codigo = permiso_codigo
-      and (
-        (r.alcance = 'plataforma' and ur.tienda_id is null)
-        or
-        (r.alcance = 'tienda' and ur.tienda_id = tienda_uuid)
-      )
-  );
-$$;
-```
+## Evolucion futura a Supabase Auth/RLS
 
-## Índices mínimos
+Cuando se decida usar Supabase Auth:
 
-- `tienda(slug)`
-- `usuario(email)`
-- `tienda_usuario(tienda_id, usuario_id)`
-- `rol(tienda_id, alcance, codigo)`
-- `permiso(codigo)`
-- `rol_permiso(rol_id, permiso_id)`
-- `usuario_rol(usuario_id, tienda_id)`
-- `categoria(tienda_id, orden)`
-- `producto(tienda_id, nombre)`
-- `producto(tienda_id, visible_pos, activo, orden_catalogo)`
-- `producto(tienda_id, visible_catalogo, activo)`
-- `venta(tienda_id, fecha desc)`
-- `compra(tienda_id, fecha desc)`
-- `caja_sesion(tienda_id, estado, abierta_at desc)`
-- `caja_movimiento(tienda_id, fecha desc)`
-- `inventario_ajuste(tienda_id, created_at desc)`
-- `inventario_ajuste(producto_id, created_at desc)`
-- `inventario_movimiento(tienda_id, created_at desc)`
-- `inventario_movimiento(producto_id, created_at desc)`
-- `haru_conversacion(tienda_id, estado, last_message_at desc, created_at desc)`
-- `haru_mensaje(conversacion_id, created_at)`
-- `haru_chat_config(tienda_id, activo)`
-
-## Resumen técnico
-
-El modelo se organiza alrededor de `tienda` como unidad tenant. `usuario` extiende la cuenta operativa del sistema, `tienda_usuario` define pertenencia a negocios, y `rol` + `permiso` + `rol_permiso` + `usuario_rol` permiten administrar accesos tanto para la startup NEXA como para cada tienda. El módulo POS genera ventas, pagos, compras, movimientos de inventario y caja, pero se mantiene acotado. El carrito del POS se maneja en la interfaz y se convierte en `venta` + `venta_item` al cobrar. Los mockups de ingresos y gastos son reportes calculados desde `pago` y `caja_movimiento`, no módulos contables duplicados. La calculadora y Haru IA tienen tablas propias porque son parte de la propuesta de valor de NEXA. El catálogo público se resuelve con columnas en `tienda` y `producto`, evitando complejidad prematura. El diseño usa PostgreSQL, UUID, auditoría temporal básica y datos históricos congelados en líneas de venta/compra para análisis posterior.
+- Migrar `usuario.id` para referenciar `auth.users(id)` o crear una tabla puente.
+- Reemplazar sesiones propias por Supabase session.
+- Crear funciones `is_miembro_tienda()` y `has_permiso()` compatibles con
+  `auth.uid()`.
+- Activar RLS por tabla.
+- Mantener `tienda_id` como criterio de aislamiento.
+- Hacerlo en una migracion nueva, probada y documentada.

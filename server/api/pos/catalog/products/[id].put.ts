@@ -13,7 +13,7 @@ import {
   productCostingType,
   productKind,
   replaceProductVariants,
-  requireStoreSession,
+  requireStoreAccess,
 } from '../../../../utils/posCatalog'
 
 type ProductBody = {
@@ -32,15 +32,13 @@ type ProductBody = {
   minMargin?: number | null
   imageUrl?: string | null
   icon?: string | null
-  variablePrice?: boolean
-  visibleCatalog?: boolean
   visiblePos?: boolean
   active?: boolean
   variants?: unknown
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'producto.gestionar')
   await ensureDatabase()
 
   const productId = getRouterParam(event, 'id')
@@ -75,10 +73,8 @@ export default defineEventHandler(async (event) => {
           margen_minimo = $15,
           imagen_url = $16,
           icono = $17,
-          precio_variable = $18,
-          visible_catalogo = $19,
-          visible_pos = $20,
-          activo = $21,
+          visible_pos = $18,
+          activo = $19,
           updated_at = now()
         where id = $1
           and tienda_id = $2
@@ -102,8 +98,6 @@ export default defineEventHandler(async (event) => {
         nullableNumber(body.minMargin),
         nullableText(body.imageUrl),
         nullableText(body.icon),
-        booleanOrDefault(body.variablePrice, false),
-        booleanOrDefault(body.visibleCatalog, false),
         booleanOrDefault(body.visiblePos, true),
         booleanOrDefault(body.active, true),
       ],

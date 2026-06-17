@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 import { COLORES_EMPLEADO } from '~~/shared/utils/nomina'
 
 type EmpleadoBody = {
@@ -17,7 +17,7 @@ type EmpleadoBody = {
 // Crea un empleado para la tienda. El número es monótono por tienda (nunca se
 // reutiliza, ni siquiera tras dar de baja a un empleado). Asigna color por defecto.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   const body = await readBody<EmpleadoBody>(event)
   await ensureDatabase()
 

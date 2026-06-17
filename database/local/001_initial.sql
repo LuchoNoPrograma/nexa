@@ -4,10 +4,11 @@ create extension if not exists pgcrypto;
 
 create table if not exists usuario (
   id uuid primary key default gen_random_uuid(),
-  email text not null unique,
+  email text unique,
   nombre text not null,
   password_hash text not null,
   telefono text,
+  ci text,
   avatar_url text,
   estado text not null default 'activo' check (estado in ('invitado', 'activo', 'bloqueado')),
   ultimo_acceso_at timestamptz,
@@ -166,7 +167,6 @@ create table if not exists producto (
   stock_minimo numeric(12,2) not null default 0,
   stock_maximo numeric(12,2),
   margen_minimo numeric(5,2),
-  precio_variable boolean not null default false,
   orden_catalogo integer not null default 0,
   imagen_url text,
   icono text,
@@ -448,20 +448,28 @@ create table if not exists empleado (
   id uuid primary key default gen_random_uuid(),
   tienda_id uuid not null references tienda(id) on delete cascade,
   usuario_id uuid references usuario(id) on delete set null,
+  numero integer,
   nombre text not null,
+  celular text,
+  fecha_nacimiento date,
+  direccion text,
   puesto text,
+  valor_hora numeric(12,2),
+  fecha_alta date default current_date,
+  fecha_baja date,
   color text,
   activo boolean not null default true,
   orden integer not null default 0,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  check (valor_hora is null or valor_hora >= 0)
 );
 
 -- Parámetros de cálculo de costo laboral estimado por tienda (una fila por tienda).
 create table if not exists nomina_config (
   tienda_id uuid primary key references tienda(id) on delete cascade,
   salario_minimo_mensual numeric(12,2) not null default 3300,
-  horas_mensuales_referencia numeric(6,2) not null default 240,
+  horas_mensuales_referencia numeric(6,2) not null default 207.84,
   semanas_por_mes numeric(4,2) not null default 4.33,
   updated_at timestamptz not null default now(),
   check (salario_minimo_mensual >= 0),
@@ -572,6 +580,27 @@ create table if not exists contacto_mensaje (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists marketing_publicacion (
+  id uuid primary key default gen_random_uuid(),
+  tienda_id uuid not null references tienda(id) on delete cascade,
+  usuario_id uuid references usuario(id) on delete set null,
+  producto_id uuid references producto(id) on delete set null,
+  producto_nombre text,
+  titulo text not null,
+  texto text not null,
+  hashtags jsonb not null default '[]'::jsonb,
+  idea_video text,
+  mejor_hora text,
+  audiencia text,
+  objetivo text,
+  impacto smallint not null default 4 check (impacto between 1 and 5),
+  imagen_url text,
+  estado text not null default 'sugerida' check (estado in ('sugerida', 'publicada', 'descartada')),
+  publicado_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists sesion (
   id uuid primary key default gen_random_uuid(),
   usuario_id uuid not null references usuario(id) on delete cascade,
@@ -584,8 +613,11 @@ create table if not exists sesion (
   created_at timestamptz not null default now()
 );
 
-create index if not exists usuario_email_idx on usuario (lower(email));
+create index if not exists usuario_email_idx on usuario (lower(email)) where email is not null;
+create unique index if not exists usuario_telefono_unique on usuario (telefono) where telefono is not null;
+create unique index if not exists usuario_ci_unique on usuario (ci) where ci is not null;
 create index if not exists tienda_slug_idx on tienda (slug);
+create index if not exists tienda_owner_idx on tienda (owner_id);
 create index if not exists tienda_usuario_tienda_idx on tienda_usuario (tienda_id, usuario_id);
 create index if not exists tienda_usuario_usuario_idx on tienda_usuario (usuario_id, tienda_id);
 create index if not exists permiso_codigo_idx on permiso (codigo);
@@ -618,11 +650,13 @@ create index if not exists inventario_movimiento_producto_idx on inventario_movi
 create index if not exists precio_historial_producto_idx on precio_historial (producto_id, created_at desc);
 create index if not exists calculo_precio_tienda_idx on calculo_precio (tienda_id, created_at desc);
 create index if not exists diagnostico_tienda_idx on diagnostico (tienda_id, created_at desc);
+create index if not exists empleado_numero_idx on empleado (tienda_id, numero);
 create index if not exists haru_conversacion_tienda_idx on haru_conversacion (tienda_id, estado, last_message_at desc, created_at desc);
 create index if not exists haru_mensaje_conversacion_idx on haru_mensaje (conversacion_id, created_at);
 create index if not exists haru_chat_config_tienda_idx on haru_chat_config (tienda_id, activo);
 create index if not exists contacto_mensaje_estado_idx on contacto_mensaje (estado, created_at desc);
 create index if not exists contacto_mensaje_created_at_idx on contacto_mensaje (created_at desc);
+create index if not exists marketing_publicacion_tienda_idx on marketing_publicacion (tienda_id, estado, created_at desc);
 create index if not exists sesion_token_hash_idx on sesion (token_hash);
 create index if not exists sesion_usuario_idx on sesion (usuario_id, expires_at desc);
 

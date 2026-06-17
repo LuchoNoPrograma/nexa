@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { cleanText, nullableText, numberOrZero, requireStoreSession } from '../../../utils/posCatalog'
+import { cleanText, nullableText, numberOrZero, requireStoreAccess } from '../../../utils/posCatalog'
 import { getCashOverview, requireOpenCashSession } from '../../../utils/posCash'
 
 const movementTypes = ['Ingreso', 'Egreso'] as const
@@ -27,7 +27,7 @@ function dbMethod(value: unknown) {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'caja.movimiento.crear')
   await ensureDatabase()
 
   const body = await readBody<MovementBody>(event)

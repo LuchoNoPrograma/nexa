@@ -20,7 +20,7 @@ En local, `npm run dev` tambien ejecuta `dbmate` antes de levantar Nuxt. En Verc
 npm run db:migrate && npm run build
 ```
 
-Para demo, este backend usa las tablas `usuario`, `tienda`, `producto`, etc. No uses por ahora las migraciones `supabase/migrations/*` para este deploy, porque tienen un modelo diferente basado en `auth.users`.
+Para demo, este backend usa las tablas `usuario`, `tienda`, `producto`, etc. La fuente de verdad es `database/local/*`; no hay migraciones SQL separadas para Supabase.
 
 ## 2. Vercel
 

@@ -143,11 +143,14 @@ La migracion consolidada esta en:
 database/local/001_initial.sql
 ```
 
-SQL completo para Supabase:
+Deploy en Supabase:
 
 ```text
-supabase/reset-and-bootstrap.sql
+npm run db:migrate
 ```
+
+Supabase se usa como PostgreSQL gestionado. No hay SQL separado para Supabase:
+se aplica el mismo `database/local`.
 
 Documentacion base:
 

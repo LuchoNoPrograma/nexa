@@ -8,14 +8,16 @@
     "db:rollback": "dbmate --migrations-dir database/local --no-dump-schema rollback",
     "db:status": "dbmate --migrations-dir database/local status",
     "dev": "npm run db:migrate && LAUNCH_EDITOR=idea nuxt dev",
+    "host": "npm run db:migrate && LAUNCH_EDITOR=idea nuxt dev --host",
     "generate": "nuxt generate",
     "preview": "nuxt preview"
   },
   "dependencies": {
+    "@iconify-json/fluent-emoji": "^1.2.7",
+    "@iconify-json/fluent-emoji-flat": "^1.2.5",
     "@nuxt/content": "^3.14.0",
+    "@nuxt/icon": "^2.2.3",
     "@primeuix/themes": "^2.0.3",
-    "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.108.1",
     "@tailwindcss/vite": "^4.3.0",
     "better-sqlite3": "^12.10.0",
     "jspreadsheet-ce": "^5.0.4",
@@ -33,5 +35,8 @@
   "devDependencies": {
     "@primevue/nuxt-module": "^4.5.5",
     "dbmate": "^2.33.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
   }
 }

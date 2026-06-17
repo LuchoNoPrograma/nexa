@@ -1,5 +1,5 @@
 import { ensureDatabase, pool } from '../../utils/db'
-import { requireSession } from '../../utils/session'
+import { requireStoreAccess } from '../../utils/posCatalog'
 
 type HaruMessageRow = {
   id: string
@@ -8,15 +8,8 @@ type HaruMessageRow = {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireSession(event)
+  const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
-
-  if (!session.storeId) {
-    return {
-      conversationId: null,
-      messages: [],
-    }
-  }
 
   const conversation = await pool.query<{ id: string }>(
     `

@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 import type { MarketingPublicacion } from '~~/shared/utils/marketing'
 
 // Objetivo elegido por el usuario antes de generar. Cada modo decide qué
@@ -393,7 +393,7 @@ async function generarConGemini(prompt: string): Promise<PostGenerado | null> {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
 
   const body = await readBody<GenerarBody | null>(event)

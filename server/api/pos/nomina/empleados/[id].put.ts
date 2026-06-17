@@ -1,6 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../utils/db'
-import { requireStoreSession } from '../../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../../utils/posCatalog'
 
 type EmpleadoBody = {
   nombre?: string
@@ -16,7 +16,7 @@ type EmpleadoBody = {
 // Actualiza datos de un empleado de la tienda: nombre, puesto, color y los
 // datos de contacto (celular, fecha de nacimiento y dirección).
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   const id = getRouterParam(event, 'id')
   const body = await readBody<EmpleadoBody>(event)
   await ensureDatabase()

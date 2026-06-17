@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
-import { cleanText, numberOrZero, requireStoreSession } from '../../utils/posCatalog'
+import { cleanText, numberOrZero, requireStoreAccess } from '../../utils/posCatalog'
 import { getCashOverview, requireOpenCashSession } from '../../utils/posCash'
 
 type SaleItemBody = {
@@ -16,6 +16,7 @@ type PaymentLineBody = {
 }
 
 type SaleBody = {
+  clientOperationId?: string
   number?: string
   subtotal?: number
   discount?: number
@@ -35,7 +36,7 @@ function dbPaymentMethod(label: unknown) {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'pos.vender')
   await ensureDatabase()
 
   const body = await readBody<SaleBody>(event)
@@ -47,6 +48,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const total = numberOrZero(body.total)
+  const clientOperationId = cleanText(body.clientOperationId)
 
   if (total <= 0) {
     throw createError({ statusCode: 400, statusMessage: 'El total debe ser mayor a cero.' })
@@ -57,6 +59,26 @@ export default defineEventHandler(async (event) => {
   try {
     await client.query('begin')
     const cashSessionId = await requireOpenCashSession(client, session.storeId)
+
+    if (clientOperationId) {
+      const existingSale = await client.query<{ id: string }>(
+        `
+          select id
+          from venta
+          where tienda_id = $1
+            and numero = $2
+          limit 1
+        `,
+        [session.storeId, clientOperationId],
+      )
+
+      if (existingSale.rowCount) {
+        const overview = await getCashOverview(client, session.storeId)
+        await client.query('commit')
+        return { ...overview, saleNumber: clientOperationId }
+      }
+    }
+
     const saleCodeResult = await client.query<{ sequence: number; saleTime: string }>(
       `
         select
@@ -72,7 +94,7 @@ export default defineEventHandler(async (event) => {
     const saleSequence = saleCodeResult.rows[0]?.sequence ?? 1
     const saleTime = saleCodeResult.rows[0]?.saleTime ?? new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
     const cashSaleCode = `C${saleSequence} ${saleTime}`
-    const saleNumber = `C${saleSequence}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
+    const saleNumber = clientOperationId || `C${saleSequence}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
 
     const saleResult = await client.query<{ id: string }>(
       `
@@ -254,6 +276,10 @@ export default defineEventHandler(async (event) => {
     return { ...overview, saleNumber: cashSaleCode }
   } catch (error) {
     await client.query('rollback')
+    if (clientOperationId && typeof error === 'object' && error && 'code' in error && error.code === '23505') {
+      const overview = await getCashOverview(client, session.storeId)
+      return { ...overview, saleNumber: clientOperationId }
+    }
     throw error
   } finally {
     client.release()

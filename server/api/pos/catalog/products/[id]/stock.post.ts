@@ -1,6 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../../utils/db'
-import { cleanText, nullableText, numberOrZero, requireStoreSession } from '../../../../../utils/posCatalog'
+import { cleanText, nullableText, numberOrZero, requireStoreAccess } from '../../../../../utils/posCatalog'
 
 const adjustmentTypes = ['sumar', 'restar', 'fijar'] as const
 const adjustmentReasons = ['compra_recibida', 'producto_daniado', 'devolucion', 'recuento', 'traslado', 'otro'] as const
@@ -50,7 +50,7 @@ function movementType(type: AdjustmentType) {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'producto.gestionar')
   await ensureDatabase()
 
   const productId = getRouterParam(event, 'id')

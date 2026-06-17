@@ -1,10 +1,10 @@
 import { createError, getRouterParam } from 'h3'
 import { ensureDatabase, pool } from '../../../../utils/db'
-import { requireStoreSession } from '../../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../../utils/posCatalog'
 
 // Elimina (baja lógica) un trabajador de la tienda.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   const id = getRouterParam(event, 'id')
   await ensureDatabase()
 

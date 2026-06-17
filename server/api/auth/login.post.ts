@@ -14,12 +14,13 @@ export default defineEventHandler(async (event) => {
   await ensureDatabase()
 
   const body = await readBody<LoginBody>(event)
-  // Se acepta correo o carnet de identidad (CI) como identificador de acceso.
+  // Se acepta correo, carnet de identidad (CI) o celular como identificador.
   const identificador = (body.identificador ?? body.email ?? '').trim()
+  const identificadorTelefono = identificador.replace(/\D/g, '')
   const password = body.password ?? ''
 
   if (!identificador || !password) {
-    throw createError({ statusCode: 400, statusMessage: 'Correo/CI y contraseña son requeridos.' })
+    throw createError({ statusCode: 400, statusMessage: 'Correo/CI/celular y contraseña son requeridos.' })
   }
 
   const rateLimitKey = getLoginRateLimitKey(event, identificador.toLowerCase())
@@ -34,11 +35,26 @@ export default defineEventHandler(async (event) => {
     `
       select id, email, nombre as name, password_hash
       from usuario
-      where (lower(email) = lower($1) or ci = $1)
+      where (
+          lower(email) = lower($1)
+          or ci = $1
+          or ($2 <> '' and telefono = $2)
+          or (
+            $2 <> ''
+            and length($2) >= 7
+            and right(telefono, length($2)) = $2
+            and (
+              select count(*)
+              from usuario u2
+              where u2.estado = 'activo'
+                and right(u2.telefono, length($2)) = $2
+            ) = 1
+          )
+        )
         and estado = 'activo'
       limit 1
     `,
-    [identificador],
+    [identificador, identificadorTelefono],
   )
 
   const user = userResult.rows[0]
@@ -71,7 +87,7 @@ export default defineEventHandler(async (event) => {
 
   setCookie(event, 'nexa_session_token', token, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     expires: expiresAt,

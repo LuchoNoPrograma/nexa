@@ -3,15 +3,15 @@
 
 do $$
 declare
-  legacy_table text;
+  old_table text;
 begin
-  foreach legacy_table in array array[
+  foreach old_table in array array[
     'ken' || 'chita_chat_config',
     'ken' || 'chita_mensaje',
     'ken' || 'chita_conversacion'
   ]
   loop
-    execute format('drop table if exists %I cascade', legacy_table);
+    execute format('drop table if exists %I cascade', old_table);
   end loop;
 end $$;
 

@@ -1,6 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../utils/db'
-import { requireStoreSession } from '../../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../../utils/posCatalog'
 
 type EstadoBody = {
   estado?: string
@@ -11,7 +11,7 @@ const ESTADOS_VALIDOS = ['sugerida', 'publicada', 'descartada'] as const
 // Cambia el estado de una publicación: marcarla como publicada (cuando el usuario
 // la comparte) o descartarla. No consume IA.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
 
   const id = getRouterParam(event, 'id')

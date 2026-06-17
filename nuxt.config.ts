@@ -24,8 +24,13 @@ const NexaPrimePreset = definePreset(Aura, {
 export default defineNuxtConfig({
   modules: [
     '@nuxt/content',
+    '@nuxt/icon',
     '@primevue/nuxt-module',
   ],
+  icon: {
+    // Iconos coloridos/3D (Fluent Emoji) servidos localmente, sin llamadas externas.
+    serverBundle: 'local',
+  },
   css: [
     '~/assets/css/main.css',
     'primeicons/primeicons.css',
@@ -74,5 +79,12 @@ export default defineNuxtConfig({
     plugins: [
       tailwindcss(),
     ],
+    optimizeDeps: {
+      // Pre-bundle de devtools para evitar recargas completas en desarrollo.
+      include: [
+        '@vue/devtools-core',
+        '@vue/devtools-kit',
+      ],
+    },
   },
 })

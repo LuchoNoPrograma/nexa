@@ -1,6 +1,7 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
-import { type CurrentSession, requireSession } from '../../utils/session'
+import { requireStoreAccess } from '../../utils/posCatalog'
+import type { CurrentSession } from '../../utils/session'
 
 type ChatBody = {
   conversationId?: string | null
@@ -149,7 +150,6 @@ async function getBusinessContext(storeId: string) {
       price: number
       stock: number
       type: string
-      variablePrice: boolean
     }>(
       `
         select
@@ -157,8 +157,7 @@ async function getBusinessContext(storeId: string) {
           c.nombre as category,
           p.precio_venta::float as price,
           p.stock_actual::float as stock,
-          p.tipo as type,
-          p.precio_variable as "variablePrice"
+          p.tipo as type
         from producto p
         left join categoria c on c.id = p.categoria_id
         where p.tienda_id = $1
@@ -197,7 +196,7 @@ async function getBusinessContext(storeId: string) {
       ? `- Categorias: ${categories.map((item) => `${item.name} (${item.productCount})`).join(', ')}.`
       : '- No hay categorias registradas.',
     products.length
-      ? `- Productos activos: ${products.map((item) => `${item.name} / ${item.category ?? 'sin categoria'} / Bs ${item.price} / stock ${item.stock}${item.variablePrice ? ' / precio variable' : ''}`).join('; ')}.`
+      ? `- Productos activos: ${products.map((item) => `${item.name} / ${item.category ?? 'sin categoria'} / Bs ${item.price} / stock ${item.stock}`).join('; ')}.`
       : '- No hay productos activos registrados.',
   ].join('\n')
 }
@@ -486,12 +485,8 @@ async function summarizeConversationIfNeeded(params: {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireSession(event)
+  const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
-
-  if (!session.storeId) {
-    throw createError({ statusCode: 400, statusMessage: 'Selecciona una tienda antes de usar Haru IA.' })
-  }
 
   const body = await readBody<ChatBody | null>(event)
   const message = normalizeMessage(body?.message)

@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { nullableText, numberOrZero, requireStoreSession } from '../../../utils/posCatalog'
+import { nullableText, numberOrZero, requireStoreAccess } from '../../../utils/posCatalog'
 import { getCashOverview, requireOpenCashSession } from '../../../utils/posCash'
 
 type CloseCashBody = {
@@ -9,7 +9,7 @@ type CloseCashBody = {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'caja.cerrar')
   await ensureDatabase()
 
   const body = await readBody<CloseCashBody>(event)

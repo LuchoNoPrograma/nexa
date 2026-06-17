@@ -17,8 +17,7 @@ export default defineEventHandler(async (event) => {
         c.nombre as category,
         p.precio_venta::float as price,
         p.stock_actual::float as stock,
-        p.tipo as kind,
-        p.precio_variable as "variablePrice"
+        p.tipo as kind
       from producto p
       left join categoria c on c.id = p.categoria_id
       where p.tienda_id = $1
