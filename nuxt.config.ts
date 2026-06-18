@@ -23,7 +23,6 @@ const NexaPrimePreset = definePreset(Aura, {
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
-    '@nuxt/content',
     '@nuxt/icon',
     '@primevue/nuxt-module',
   ],
@@ -61,6 +60,10 @@ export default defineNuxtConfig({
       ],
     },
   },
+  sourcemap: {
+    server: false,
+    client: false,
+  },
   primevue: {
     options: {
       ripple: true,
@@ -76,6 +79,9 @@ export default defineNuxtConfig({
     },
   },
   vite: {
+    build: {
+      sourcemap: false,
+    },
     plugins: [
       tailwindcss(),
     ],
