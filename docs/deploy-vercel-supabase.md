@@ -14,10 +14,10 @@ DATABASE_URL="postgresql://postgres.xxxxx:password@aws-1-us-west-2.pooler.supaba
 
 El proyecto usa `dbmate`. `dbmate` crea su tabla `schema_migrations` y registra cada archivo aplicado. Si lo corres otra vez, salta las migraciones ya aplicadas.
 
-En local, `npm run dev` tambien ejecuta `dbmate` antes de levantar Nuxt. En Vercel se ejecuta automaticamente antes del build porque `vercel.json` usa:
+En local, `npm run dev` tambien ejecuta `dbmate` antes de levantar Nuxt. En Vercel no se deben ejecutar migraciones dentro del build: el build debe quedar solo para compilar Nuxt.
 
 ```bash
-npm run db:migrate && npm run build
+npm run build
 ```
 
 Para demo, este backend usa las tablas `usuario`, `tienda`, `producto`, etc. La fuente de verdad es `database/local/*`; no hay migraciones SQL separadas para Supabase.
@@ -26,7 +26,7 @@ Para demo, este backend usa las tablas `usuario`, `tienda`, `producto`, etc. La 
 
 Configura el proyecto como Nuxt normal:
 
-- Build command: automatico desde `vercel.json`
+- Build command: `npm run build`
 - Output directory: dejar vacio / automatico
 - No usar `npm run generate`
 
@@ -42,7 +42,7 @@ GEMINI_MODEL=gemini-3.5-flash
 
 Notas:
 
-- En Vercel se ejecuta `npm run db:migrate` antes del build. La fuente de verdad son los SQL de `database/local`.
+- Ejecuta `npm run db:migrate` desde tu maquina cuando necesites aplicar cambios de base de datos. No lo pongas como Build Command en Vercel.
 - `GEMINI_API_KEY` no debe llevar prefijo `NUXT_PUBLIC_`; solo se usa en endpoints `server/api`.
 - Si `GEMINI_API_KEY` no existe, Haru responde con fallback local para no romper la demo.
 - Si configuras `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.

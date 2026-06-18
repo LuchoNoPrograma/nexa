@@ -27,8 +27,8 @@ export default defineNuxtConfig({
     '@primevue/nuxt-module',
   ],
   icon: {
-    // Iconos coloridos/3D (Fluent Emoji) servidos localmente, sin llamadas externas.
-    serverBundle: 'local',
+    // Evita que Nitro empaquete colecciones Iconify enormes durante el build en Vercel.
+    serverBundle: 'remote',
   },
   css: [
     '~/assets/css/main.css',

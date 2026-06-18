@@ -13,8 +13,6 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
-    "@iconify-json/fluent-emoji": "^1.2.7",
-    "@iconify-json/fluent-emoji-flat": "^1.2.5",
     "@nuxt/icon": "^2.2.3",
     "@primeuix/themes": "^2.0.3",
     "@tailwindcss/vite": "^4.3.0",
