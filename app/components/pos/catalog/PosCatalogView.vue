@@ -37,10 +37,7 @@ type CatalogProduct = {
   minMargin: number | null
   imageUrl: string | null
   icon: string | null
-  variablePrice: boolean
-  visibleCatalog: boolean
   visiblePos: boolean
-  active: boolean
   variants: ProductVariant[]
 }
 
@@ -71,10 +68,7 @@ type ProductForm = {
   minMargin: number | null
   imageUrl: string
   icon: string
-  variablePrice: boolean
-  visibleCatalog: boolean
   visiblePos: boolean
-  active: boolean
   variants: VariantForm[]
 }
 
@@ -107,8 +101,7 @@ const categoryDialogFromProduct = ref(false)
 
 const searchTerm = ref('')
 const activeChip = ref<ChipKey>('todos')
-const selectedProduct = ref<CatalogProduct | null>(null)
-const viewScope = ref('global')
+const selectedCategoryId = ref<string | null>(null)
 const stockProduct = ref<CatalogProduct | null>(null)
 const stockMode = ref<'sumar' | 'restar' | 'fijar'>('sumar')
 const stockAmount = ref(0)
@@ -128,27 +121,50 @@ const categoryForm = reactive({
 })
 
 const kindOptions = [
-  { label: 'Producto', value: 'producto' },
-  { label: 'Servicio', value: 'servicio' },
-  { label: 'Combo', value: 'combo' },
+  { label: 'Producto', value: 'producto', icon: '📦', hint: 'Algo físico que vendes' },
+  { label: 'Servicio', value: 'servicio', icon: '🛠️', hint: 'Trabajo o atención' },
+  { label: 'Combo', value: 'combo', icon: '🎁', hint: 'Varios productos juntos' },
 ]
 
+// Para productos físicos el dueño elige cómo calcula el costo. Para "servicio"
+// y "combo" el tipo de costeo es automático, por eso no se muestra el selector.
 const costingTypeOptions = [
   {
-    label: 'Reventa simple',
+    label: 'Reventa',
     value: 'reventa',
-    description: 'Compras el producto y lo vendes con margen.',
+    icon: '🛒',
+    description: 'Lo compras hecho y lo revendes con ganancia.',
   },
   {
-    label: 'Preparado / producción',
+    label: 'Producción',
     value: 'produccion',
-    description: 'Usa ingredientes, insumos o rendimiento por lote.',
+    icon: '👩‍🍳',
+    description: 'Lo preparas o armas con insumos.',
   },
-  {
-    label: 'Servicio',
-    value: 'servicio',
-    description: 'Calcula por tiempo, insumos o mano de obra.',
-  },
+]
+
+// Margen de ganancia sugerido según el tipo (el dueño igual puede cambiarlo).
+const defaultMarginByCostingType: Record<CatalogProduct['costingType'], number> = {
+  reventa: 25,
+  produccion: 30,
+  servicio: 30,
+}
+
+// Lista cerrada de unidades de venta para no dejar texto libre.
+const unitOptions = [
+  { label: 'Unidad', value: 'unidad' },
+  { label: 'Kilogramo (kg)', value: 'kg' },
+  { label: 'Gramo (g)', value: 'g' },
+  { label: 'Libra (lb)', value: 'lb' },
+  { label: 'Litro (L)', value: 'litro' },
+  { label: 'Mililitro (ml)', value: 'ml' },
+  { label: 'Metro (m)', value: 'metro' },
+  { label: 'Caja', value: 'caja' },
+  { label: 'Paquete', value: 'paquete' },
+  { label: 'Docena', value: 'docena' },
+  { label: 'Par', value: 'par' },
+  { label: 'Porción', value: 'porcion' },
+  { label: 'Hora', value: 'hora' },
 ]
 
 const stockReasons = [
@@ -161,6 +177,39 @@ const stockReasons = [
 ]
 
 const emojiOptions = ['📦', '🛒', '🥤', '🍞', '🥛', '🧴', '💊', '👕', '🔧', '⚽', '🎁', '🐾', '💄', '🚗', '🍎', '🧼']
+
+const primeIconOptions = [
+  { label: 'Caja', value: 'pi pi-box' },
+  { label: 'Etiqueta', value: 'pi pi-tag' },
+  { label: 'Etiquetas', value: 'pi pi-tags' },
+  { label: 'Carrito', value: 'pi pi-shopping-cart' },
+  { label: 'Bolsa', value: 'pi pi-shopping-bag' },
+  { label: 'Tienda', value: 'pi pi-shop' },
+  { label: 'Café', value: 'pi pi-cup' },
+  { label: 'Gift / Regalo', value: 'pi pi-gift' },
+  { label: 'Estrella', value: 'pi pi-star' },
+  { label: 'Corazón', value: 'pi pi-heart' },
+  { label: 'Rayo', value: 'pi pi-bolt' },
+  { label: 'Llave inglesa', value: 'pi pi-wrench' },
+  { label: 'Maletín', value: 'pi pi-briefcase' },
+  { label: 'Pastilla / Salud', value: 'pi pi-heart-fill' },
+  { label: 'Camión', value: 'pi pi-truck' },
+  { label: 'Casa', value: 'pi pi-home' },
+  { label: 'Reloj', value: 'pi pi-clock' },
+  { label: 'Calendario', value: 'pi pi-calendar' },
+  { label: 'Usuario', value: 'pi pi-user' },
+  { label: 'Cámara', value: 'pi pi-camera' },
+  { label: 'Imagen', value: 'pi pi-image' },
+  { label: 'Móvil', value: 'pi pi-mobile' },
+  { label: 'Escritorio', value: 'pi pi-desktop' },
+  { label: 'Libro', value: 'pi pi-book' },
+  { label: 'Mapa', value: 'pi pi-map-marker' },
+  { label: 'Dinero', value: 'pi pi-dollar' },
+  { label: 'Tarjeta', value: 'pi pi-credit-card' },
+  { label: 'Paleta / Colores', value: 'pi pi-palette' },
+  { label: 'Llave', value: 'pi pi-key' },
+  { label: 'Globo', value: 'pi pi-globe' },
+]
 
 const session = usePosSession()
 const storeDefaultMargin = computed(() => session.value?.defaultMargin ?? 20)
@@ -175,14 +224,8 @@ function toggleSection(key: keyof typeof sections) {
   sections[key] = !sections[key]
 }
 
-const viewScopes = [
-  { label: 'Vista global', value: 'global' },
-  { label: 'Solo visibles en POS', value: 'pos' },
-  { label: 'Solo catálogo público', value: 'catalog' },
-]
-
 const productFilters: { key: ChipKey; label: string }[] = [
-  { key: 'todos', label: 'Todos' },
+  { key: 'todos', label: 'Todo' },
   { key: 'productos', label: 'Productos' },
   { key: 'servicios', label: 'Servicios' },
   { key: 'stockBajo', label: 'Stock bajo' },
@@ -191,14 +234,31 @@ const productFilters: { key: ChipKey; label: string }[] = [
 
 const form = reactive<ProductForm>(emptyProductForm())
 
+// Emoji libre fuera del catálogo: refleja form.icon cuando no es uno de los predefinidos
+const customEmojiModel = computed({
+  get: () => (form.icon && !emojiOptions.includes(form.icon) ? form.icon : ''),
+  set: (value: string) => {
+    form.icon = value.trim()
+  },
+})
+
+// Si un producto viejo tiene una unidad que no está en la lista cerrada, la
+// agregamos para no perderla al editar.
+const unitSelectOptions = computed(() => {
+  const known = unitOptions.some((option) => option.value === form.unit)
+  if (form.unit && !known) {
+    return [...unitOptions, { label: form.unit, value: form.unit }]
+  }
+  return unitOptions
+})
+
 const lowStockCount = computed(() =>
-  products.value.filter((product) => product.active && product.kind === 'producto' && product.stock <= product.minStock).length,
+  products.value.filter((product) => product.kind === 'producto' && product.stock <= product.minStock).length,
 )
 const noStockCount = computed(() =>
-  products.value.filter((product) => product.active && product.kind === 'producto' && product.stock <= 0).length,
+  products.value.filter((product) => product.kind === 'producto' && product.stock <= 0).length,
 )
-const stockManagedProducts = computed(() => products.value.filter((product) => product.active && product.kind !== 'servicio'))
-const inventoryCost = computed(() => stockManagedProducts.value.reduce((sum, product) => sum + product.cost * product.stock, 0))
+const stockManagedProducts = computed(() => products.value.filter((product) => product.kind !== 'servicio'))
 const inventorySale = computed(() => stockManagedProducts.value.reduce((sum, product) => sum + product.price * product.stock, 0))
 
 const categoryOptions = computed(() => [
@@ -211,27 +271,31 @@ const categoryOptions = computed(() => [
 const chipCounts = computed(() => {
   const counts = {} as Record<ChipKey, number>
   for (const filter of productFilters) {
-    counts[filter.key] = products.value.filter((product) => matchesChip(product, filter.key)).length
+    counts[filter.key] = products.value
+      .filter((product) => matchesCategory(product))
+      .filter((product) => matchesChip(product, filter.key)).length
   }
   return counts
 })
 
-const scopedProducts = computed(() =>
-  products.value.filter((product) => {
-    if (viewScope.value === 'pos') {
-      return product.visiblePos
-    }
-    if (viewScope.value === 'catalog') {
-      return product.visibleCatalog
-    }
-    return true
-  }),
-)
+const categoryFilters = computed(() => [
+  { id: null, name: 'Todas', count: products.value.length },
+  ...categories.value
+    .filter((category) => category.active)
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      count: products.value.filter((product) => product.categoryId === category.id).length,
+    })),
+])
 
 const filteredProducts = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
 
-  return scopedProducts.value.filter((product) => {
+  return products.value.filter((product) => {
+    if (!matchesCategory(product)) {
+      return false
+    }
     if (!matchesChip(product, activeChip.value)) {
       return false
     }
@@ -246,7 +310,7 @@ const filteredProducts = computed(() => {
 
 const statsLine = computed(() => {
   const shown = filteredProducts.value.length
-  return `${products.value.length} ítems · mostrando ${shown} · ${lowStockCount.value} con stock bajo · ${noStockCount.value} sin stock`
+  return `${shown} de ${products.value.length} ítems visibles`
 })
 
 const stockResult = computed(() => {
@@ -285,20 +349,6 @@ watch(
   },
 )
 
-watch(
-  filteredProducts,
-  (list) => {
-    if (!list.length) {
-      selectedProduct.value = null
-      return
-    }
-    if (!selectedProduct.value || !list.some((product) => product.id === selectedProduct.value?.id)) {
-      selectedProduct.value = list[0] ?? null
-    }
-  },
-  { immediate: true },
-)
-
 onMounted(loadCatalog)
 
 function matchesChip(product: CatalogProduct, key: ChipKey) {
@@ -317,6 +367,10 @@ function matchesChip(product: CatalogProduct, key: ChipKey) {
   return true
 }
 
+function matchesCategory(product: CatalogProduct) {
+  return selectedCategoryId.value === null || product.categoryId === selectedCategoryId.value
+}
+
 function emptyProductForm(): ProductForm {
   return {
     id: null,
@@ -328,7 +382,7 @@ function emptyProductForm(): ProductForm {
     kind: 'producto',
     costingType: 'reventa',
     unit: 'unidad',
-    cost: 0,
+    cost: null,
     price: 0,
     stock: 0,
     minStock: 0,
@@ -336,10 +390,7 @@ function emptyProductForm(): ProductForm {
     minMargin: null,
     imageUrl: '',
     icon: '',
-    variablePrice: false,
-    visibleCatalog: false,
     visiblePos: true,
-    active: true,
     variants: [],
   }
 }
@@ -367,7 +418,16 @@ const liveProfit = computed(() => {
   return { profit, margin }
 })
 
-const targetMargin = computed(() => Number(form.minMargin ?? storeDefaultMargin.value ?? 0))
+const costingTypeLabels: Record<CatalogProduct['costingType'], string> = {
+  reventa: 'reventa',
+  produccion: 'producción',
+  servicio: 'servicio',
+}
+const costingTypeLabel = computed(() => costingTypeLabels[form.costingType] ?? 'este tipo')
+const typeDefaultMargin = computed(
+  () => defaultMarginByCostingType[form.costingType] ?? storeDefaultMargin.value ?? 0,
+)
+const targetMargin = computed(() => Number(form.minMargin ?? typeDefaultMargin.value))
 const suggestedPrice = computed(() => {
   const margin = Math.min(Math.max(targetMargin.value, 0), 95)
   if (form.cost <= 0 || margin <= 0) {
@@ -379,6 +439,83 @@ const suggestedProfit = computed(() => Math.max(suggestedPrice.value - form.cost
 
 function applySuggestedPrice() {
   form.price = Number(suggestedPrice.value.toFixed(2))
+}
+
+// --- Foto del producto ---
+// Por ahora la imagen se guarda comprimida dentro de la base de datos (base64).
+// Más adelante migraremos a un storage de archivos real.
+const imageInput = ref<HTMLInputElement | null>(null)
+const imageProcessing = ref(false)
+
+function pickImage() {
+  imageInput.value?.click()
+}
+
+function clearImage() {
+  form.imageUrl = ''
+  if (imageInput.value) {
+    imageInput.value.value = ''
+  }
+}
+
+async function onImagePick(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+
+  catalogError.value = ''
+
+  if (!file.type.startsWith('image/')) {
+    catalogError.value = 'El archivo debe ser una imagen.'
+    return
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    catalogError.value = 'La imagen es muy pesada. Usa una foto de menos de 8 MB.'
+    return
+  }
+
+  imageProcessing.value = true
+  try {
+    form.imageUrl = await compressImage(file)
+    form.icon = ''
+  } catch {
+    catalogError.value = 'No se pudo procesar la imagen. Intenta con otra.'
+  } finally {
+    imageProcessing.value = false
+    input.value = ''
+  }
+}
+
+// Reduce la foto a 480px de lado máximo y la exporta como JPEG para que el
+// base64 quede liviano (≈30-80 KB) antes de guardarlo.
+function compressImage(file: File, maxSize = 480, quality = 0.72): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+        const width = Math.round(image.width * scale)
+        const height = Math.round(image.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const context = canvas.getContext('2d')
+        if (!context) {
+          reject(new Error('canvas'))
+          return
+        }
+        context.drawImage(image, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      image.onerror = () => reject(new Error('image'))
+      image.src = reader.result as string
+    }
+    reader.onerror = () => reject(new Error('reader'))
+    reader.readAsDataURL(file)
+  })
 }
 
 function addVariant() {
@@ -426,10 +563,7 @@ function openEditProduct(product: CatalogProduct | null) {
     minMargin: product.minMargin,
     imageUrl: product.imageUrl ?? '',
     icon: product.icon ?? '',
-    variablePrice: product.variablePrice,
-    visibleCatalog: product.visibleCatalog,
     visiblePos: product.visiblePos,
-    active: product.active,
     variants: (product.variants ?? []).map((variant) => ({
       name: variant.name,
       sku: variant.sku ?? '',
@@ -476,10 +610,6 @@ function margin(product: CatalogProduct | null) {
     return '0%'
   }
   return `${Math.round(((product.price - product.cost) / product.price) * 100)}%`
-}
-
-function costingLabel(type: CatalogProduct['costingType']) {
-  return costingTypeOptions.find(option => option.value === type)?.label ?? 'Reventa simple'
 }
 
 function isLowStock(product: CatalogProduct) {
@@ -576,10 +706,7 @@ async function saveProduct() {
     minMargin: form.minMargin,
     imageUrl: form.imageUrl,
     icon: form.icon,
-    variablePrice: form.variablePrice,
-    visibleCatalog: form.visibleCatalog,
     visiblePos: form.visiblePos,
-    active: form.active,
     variants: form.variants
       .filter((variant) => variant.name.trim())
       .map((variant) => ({
@@ -721,72 +848,64 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 <template>
   <section class="catalog-workspace">
-    <div class="catalog-breadcrumb">
-      <nav class="crumbs" aria-label="Ruta del catálogo">
-        <span>Catálogo</span>
-        <i class="pi pi-angle-right" aria-hidden="true" />
-        <strong>Productos</strong>
-      </nav>
-
-      <div class="crumb-actions">
-        <Button type="button" text size="small" icon="pi pi-tags" label="Categorías" @click="openCreateCategory()" />
-        <Select v-model="viewScope" :options="viewScopes" optionLabel="label" optionValue="value" size="small" />
-        <Button
-          type="button"
-          text
-          rounded
-          icon="pi pi-refresh"
-          :loading="loading"
-          aria-label="Recargar catálogo"
-          @click="loadCatalog"
-        />
-      </div>
-    </div>
-
-    <div class="catalog-heading">
-      <div class="catalog-heading__text">
-        <h2>Productos</h2>
-        <p>{{ statsLine }}</p>
+    <header class="catalog-header">
+      <div class="catalog-heading">
+        <span class="catalog-eyebrow">Inventario</span>
+        <h2>Productos y servicios</h2>
       </div>
 
-      <div class="catalog-heading__actions">
-        <Button type="button" icon="pi pi-plus" label="Nuevo producto" @click="openCreateProduct" />
+      <div class="catalog-primary-actions">
+        <Button type="button" text size="small" icon="pi pi-refresh" label="Actualizar" :loading="loading" @click="loadCatalog" />
+        <Button type="button" icon="pi pi-plus" label="Nuevo producto" class="new-product-button" @click="openCreateProduct" />
       </div>
-    </div>
+    </header>
 
     <Message v-if="catalogError" severity="error" :closable="false">
       {{ catalogError }}
     </Message>
 
-    <section class="catalog-metrics" aria-label="Resumen del catálogo">
+    <section class="catalog-summary" aria-label="Resumen del inventario">
       <article>
-        <span>Ítems registrados</span>
+        <span>Ítems</span>
         <strong>{{ products.length }}</strong>
-        <small>productos, servicios y combos</small>
       </article>
       <article>
-        <span>Valor a costo</span>
-        <strong>Bs {{ money(inventoryCost) }}</strong>
-        <small>solo stock físico</small>
+        <span>Stock bajo</span>
+        <strong :class="{ 'is-danger': lowStockCount > 0 }">{{ lowStockCount }}</strong>
       </article>
       <article>
-        <span>Valor a precio venta</span>
+        <span>Sin stock</span>
+        <strong :class="{ 'is-danger': noStockCount > 0 }">{{ noStockCount }}</strong>
+      </article>
+      <article>
+        <span>Valor venta</span>
         <strong>Bs {{ money(inventorySale) }}</strong>
-        <small>solo stock físico</small>
-      </article>
-      <article :class="{ 'is-alert': lowStockCount > 0 }">
-        <span>Alertas de stock</span>
-        <strong>{{ lowStockCount }}</strong>
-        <small>{{ lowStockCount > 0 ? 'requieren atención' : 'todo en orden' }}</small>
       </article>
     </section>
 
-    <div class="catalog-toolbar">
+    <section class="category-strip" aria-label="Categorías">
+      <div class="category-strip__list">
+        <button
+          v-for="category in categoryFilters"
+          :key="category.id ?? 'all'"
+          type="button"
+          class="category-pill"
+          :class="{ 'is-active': selectedCategoryId === category.id }"
+          @click="selectedCategoryId = category.id"
+        >
+          <span>{{ category.name }}</span>
+          <small>{{ category.count }}</small>
+        </button>
+      </div>
+      <Button type="button" text size="small" icon="pi pi-tags" label="Nueva categoría" @click="openCreateCategory()" />
+    </section>
+
+    <section class="catalog-toolbar" aria-label="Búsqueda y filtros">
       <IconField class="catalog-search">
         <InputIcon>
           <i class="pi pi-search" />
         </InputIcon>
-        <InputText v-model="searchTerm" placeholder="Buscar por nombre, SKU o código de barras..." />
+        <InputText v-model="searchTerm" placeholder="Buscar producto, SKU o código de barras" />
       </IconField>
 
       <div class="catalog-chips" role="tablist" aria-label="Filtros rápidos">
@@ -804,184 +923,143 @@ async function openStockHistory(product: CatalogProduct | null) {
           <span class="chip__count">{{ chipCounts[chip.key] }}</span>
         </button>
       </div>
-    </div>
+    </section>
 
-    <div class="catalog-body">
-      <div class="catalog-table-card">
-        <DataTable
-          v-model:selection="selectedProduct"
-          :value="filteredProducts"
-          :loading="loading"
-          dataKey="id"
-          selectionMode="single"
-          :metaKeySelection="false"
-          size="small"
-          paginator
-          :rows="12"
-          class="catalog-table"
-        >
-          <template #empty>No hay productos que coincidan con el filtro.</template>
-          <template #loading>Cargando catálogo...</template>
+    <section class="product-list-panel" aria-label="Lista de productos">
+      <header class="product-list-head">
+        <strong>{{ statsLine }}</strong>
+        <span>Precio, costo y stock listos para venta</span>
+      </header>
 
-          <Column header="Producto" style="min-width: 16rem">
-            <template #body="{ data }">
-              <div class="product-cell">
-                <span class="product-thumb">
-                  <img v-if="data.imageUrl" :src="data.imageUrl" :alt="data.name" />
-                  <span v-else-if="data.icon" class="thumb-emoji">{{ data.icon }}</span>
-                  <i v-else :class="productIcon(data)" aria-hidden="true" />
-                </span>
-                <div class="product-cell__text">
-                  <strong>{{ data.name }}</strong>
-                  <small>{{ data.sku ? `#${data.sku}` : 'Sin SKU' }}</small>
-                </div>
-              </div>
-            </template>
-          </Column>
-
-          <Column header="Categoría" style="min-width: 9rem">
-            <template #body="{ data }">
-              <span class="cell-muted">{{ data.categoryName || 'Sin categoría' }}</span>
-            </template>
-          </Column>
-
-          <Column field="price" header="Precio" sortable style="min-width: 7rem">
-            <template #body="{ data }">
-              <strong class="cell-price">Bs {{ money(data.price) }}</strong>
-            </template>
-          </Column>
-
-          <Column field="cost" header="Costo" sortable style="min-width: 7rem">
-            <template #body="{ data }">
-              <span class="cell-muted">Bs {{ money(data.cost) }}</span>
-            </template>
-          </Column>
-
-          <Column field="stock" header="Stock" sortable style="min-width: 6rem">
-            <template #body="{ data }">
-              <span v-if="data.kind === 'servicio'" class="cell-muted">No aplica</span>
-              <span v-else :class="{ 'stock-low': isLowStock(data) }">{{ data.stock }}</span>
-            </template>
-          </Column>
-
-          <Column header="Acciones" style="min-width: 12rem">
-            <template #body="{ data }">
-              <div class="row-actions">
-                <Button type="button" size="small" outlined severity="secondary" label="Editar" @click.stop="openEditProduct(data)" />
-                <Button
-                  type="button"
-                  size="small"
-                  outlined
-                  severity="secondary"
-                  label="Stock"
-                  :disabled="data.kind === 'servicio'"
-                  @click.stop="openStockAdjustment(data)"
-                />
-                <Button
-                  type="button"
-                  size="small"
-                  text
-                  icon="pi pi-chart-line"
-                  label="Historial"
-                  :disabled="data.kind === 'servicio'"
-                  @click.stop="openStockHistory(data)"
-                />
-              </div>
-            </template>
-          </Column>
-        </DataTable>
-      </div>
-
-      <aside class="catalog-detail" aria-label="Detalle del producto">
-        <template v-if="selectedProduct">
-          <div class="detail-head">
-            <span class="detail-thumb">
-              <img v-if="selectedProduct.imageUrl" :src="selectedProduct.imageUrl" :alt="selectedProduct.name" />
-              <span v-else-if="selectedProduct.icon" class="thumb-emoji">{{ selectedProduct.icon }}</span>
-              <i v-else :class="productIcon(selectedProduct)" aria-hidden="true" />
-            </span>
-            <div class="detail-head__text">
-              <strong>{{ selectedProduct.name }}</strong>
-              <small>
-                {{ selectedProduct.sku ? `#${selectedProduct.sku}` : 'Sin SKU' }}
-                · {{ selectedProduct.categoryName || 'Sin categoría' }}
-              </small>
-            </div>
-          </div>
-
-          <div class="detail-grid">
-            <div>
-              <span>Precio venta</span>
-              <strong>Bs {{ money(selectedProduct.price) }}</strong>
-            </div>
-            <div>
-              <span>Costo</span>
-              <strong>Bs {{ money(selectedProduct.cost) }}</strong>
-            </div>
-            <div>
-              <span>Margen real</span>
-              <strong>{{ margin(selectedProduct) }}</strong>
-            </div>
-            <div>
-              <span>Costeo</span>
-              <strong>{{ costingLabel(selectedProduct.costingType) }}</strong>
-            </div>
-            <div>
-              <span>Stock total</span>
-              <strong v-if="selectedProduct.kind === 'servicio'" class="cell-muted">No aplica</strong>
-              <strong v-else :class="{ 'stock-low': isLowStock(selectedProduct) }">{{ selectedProduct.stock }}</strong>
-            </div>
-          </div>
-
-          <div class="detail-actions">
-            <Button
-              type="button"
-              icon="pi pi-sliders-h"
-              label="Ajustar stock"
-              :disabled="selectedProduct.kind === 'servicio'"
-              @click="openStockAdjustment(selectedProduct)"
-            />
-            <Button type="button" outlined severity="secondary" icon="pi pi-pencil" label="Editar" @click="openEditProduct(selectedProduct)" />
-            <Button
-              type="button"
-              outlined
-              severity="secondary"
-              icon="pi pi-history"
-              label="Historial"
-              :disabled="selectedProduct.kind === 'servicio'"
-              @click="openStockHistory(selectedProduct)"
-            />
+      <DataTable
+        :value="filteredProducts"
+        :loading="loading"
+        dataKey="id"
+        size="small"
+        paginator
+        :rows="12"
+        class="catalog-table"
+      >
+        <template #empty>
+          <div class="empty-products">
+            <i class="pi pi-box" aria-hidden="true" />
+            <strong>No hay productos con estos filtros</strong>
+            <span>Cambia la búsqueda o crea un producto nuevo.</span>
+            <Button type="button" icon="pi pi-plus" label="Nuevo producto" @click="openCreateProduct" />
           </div>
         </template>
+        <template #loading>Cargando productos...</template>
 
-        <div v-else class="detail-empty">
-          <i class="pi pi-inbox" aria-hidden="true" />
-          <p>Selecciona un producto para ver su detalle.</p>
-        </div>
-      </aside>
-    </div>
+        <Column header="Producto" style="min-width: 18rem">
+          <template #body="{ data }">
+            <div class="product-cell">
+              <span class="product-thumb">
+                <img v-if="data.imageUrl" :src="data.imageUrl" :alt="data.name" />
+                <span v-else-if="data.icon" class="thumb-emoji">{{ data.icon }}</span>
+                <i v-else :class="productIcon(data)" aria-hidden="true" />
+              </span>
+              <div class="product-cell__text">
+                <strong>{{ data.name }}</strong>
+                <small>{{ data.categoryName || 'Sin categoría' }} · {{ data.sku ? `SKU ${data.sku}` : 'Sin SKU' }}</small>
+              </div>
+            </div>
+          </template>
+        </Column>
+
+        <Column field="price" header="Precio venta" sortable style="min-width: 8rem">
+          <template #body="{ data }">
+            <span class="cell-label">Precio venta</span>
+            <strong class="cell-price">Bs {{ money(data.price) }}</strong>
+          </template>
+        </Column>
+
+        <Column field="cost" header="Costo" sortable style="min-width: 7rem">
+          <template #body="{ data }">
+            <span class="cell-label">Costo</span>
+            <span class="cell-muted">Bs {{ money(data.cost) }}</span>
+          </template>
+        </Column>
+
+        <Column header="Margen" style="min-width: 6.5rem">
+          <template #body="{ data }">
+            <span class="cell-label">Margen</span>
+            <span class="margin-pill">{{ margin(data) }}</span>
+          </template>
+        </Column>
+
+        <Column field="stock" header="Stock" sortable style="min-width: 7rem">
+          <template #body="{ data }">
+            <span class="cell-label">Stock</span>
+            <span v-if="data.kind === 'servicio'" class="cell-muted">No aplica</span>
+            <span v-else class="stock-pill" :class="{ 'is-low': isLowStock(data) }">{{ data.stock }}</span>
+          </template>
+        </Column>
+
+        <Column header="Señales" style="min-width: 9rem">
+          <template #body="{ data }">
+            <span class="cell-label">Señales</span>
+            <div class="signal-badges">
+              <span v-if="data.visiblePos" class="signal-badge is-sale">A la venta</span>
+              <span v-if="isLowStock(data)" class="signal-badge is-low">Stock bajo</span>
+            </div>
+          </template>
+        </Column>
+
+        <Column header="Acciones" style="min-width: 13rem">
+          <template #body="{ data }">
+            <div class="row-actions">
+              <Button type="button" size="small" icon="pi pi-pencil" label="Editar" outlined severity="secondary" @click.stop="openEditProduct(data)" />
+              <Button
+                type="button"
+                size="small"
+                icon="pi pi-sliders-h"
+                label="Stock"
+                outlined
+                severity="secondary"
+                :disabled="data.kind === 'servicio'"
+                @click.stop="openStockAdjustment(data)"
+              />
+              <Button
+                type="button"
+                size="small"
+                text
+                icon="pi pi-history"
+                aria-label="Historial"
+                :disabled="data.kind === 'servicio'"
+                @click.stop="openStockHistory(data)"
+              />
+            </div>
+          </template>
+        </Column>
+      </DataTable>
+    </section>
 
     <Dialog
       v-model:visible="productDialogOpen"
       modal
-      :header="form.id ? 'Editar producto' : 'Nuevo producto'"
+      :header="form.id ? 'Editar producto' : 'Crear producto'"
       class="product-dialog"
       :style="{ width: 'min(620px, calc(100vw - 32px))' }"
     >
       <form class="pform" @submit.prevent="saveProduct">
         <div class="pform-body">
           <!-- Tipo -->
-          <div class="kind-toggle">
-            <button
-              v-for="option in kindOptions"
-              :key="option.value"
-              type="button"
-              class="kind-toggle__btn"
-              :class="{ 'is-active': form.kind === option.value }"
-              @click="form.kind = option.value as ProductForm['kind']"
-            >
-              {{ option.label }}
-            </button>
+          <div class="pfield">
+            <label>¿Qué vas a registrar?</label>
+            <div class="kind-toggle">
+              <button
+                v-for="option in kindOptions"
+                :key="option.value"
+                type="button"
+                class="kind-toggle__btn"
+                :class="{ 'is-active': form.kind === option.value }"
+                @click="form.kind = option.value as ProductForm['kind']"
+              >
+                <span class="kind-toggle__icon">{{ option.icon }}</span>
+                <strong>{{ option.label }}</strong>
+                <small>{{ option.hint }}</small>
+              </button>
+            </div>
           </div>
 
           <!-- Nombre -->
@@ -1005,8 +1083,8 @@ async function openStockHistory(product: CatalogProduct | null) {
             </div>
           </div>
 
-          <div class="pfield">
-            <label>Forma de calcular costo</label>
+          <div v-if="form.kind === 'producto'" class="pfield">
+            <label>¿Cómo lo obtienes?</label>
             <div class="costing-toggle">
               <button
                 v-for="option in costingTypeOptions"
@@ -1016,6 +1094,7 @@ async function openStockHistory(product: CatalogProduct | null) {
                 :class="{ 'is-active': form.costingType === option.value }"
                 @click="form.costingType = option.value as ProductForm['costingType']"
               >
+                <span class="costing-toggle__icon">{{ option.icon }}</span>
                 <strong>{{ option.label }}</strong>
                 <span>{{ option.description }}</span>
               </button>
@@ -1044,10 +1123,10 @@ async function openStockHistory(product: CatalogProduct | null) {
                 suffix=" %"
                 :min="0"
                 :max="95"
-                :placeholder="`Por defecto: ${storeDefaultMargin}%`"
+                :placeholder="`Sugerido: ${typeDefaultMargin}%`"
                 fluid
               />
-              <small class="field-help">NEXA calcula el precio desde este margen real.</small>
+              <small class="field-help">Sugerido para {{ costingTypeLabel }}: {{ typeDefaultMargin }}%. NEXA calcula el precio desde aquí.</small>
             </div>
           </div>
 
@@ -1104,25 +1183,21 @@ async function openStockHistory(product: CatalogProduct | null) {
           <!-- Sección: Códigos e imagen -->
           <button type="button" class="section-toggle" :class="{ 'is-open': sections.codes }" @click="toggleSection('codes')">
             <span><i class="pi pi-chevron-right" aria-hidden="true" /> Códigos e imagen</span>
-            <small>SKU, código de barras, unidad, foto</small>
+            <small>Código de barras, unidad, foto</small>
           </button>
           <div v-show="sections.codes" class="section-body">
             <div class="pgrid">
               <div class="pfield">
-                <label for="product-sku">SKU / Cód. barras</label>
-                <InputText id="product-sku" v-model="form.sku" autocomplete="off" placeholder="Auto si vacío" />
+                <label for="product-barcode">Código de barras</label>
+                <InputText id="product-barcode" v-model="form.barcode" autocomplete="off" placeholder="Escanea o escribe el código" />
               </div>
               <div class="pfield">
-                <label for="product-unit">Unidad</label>
-                <InputText id="product-unit" v-model="form.unit" autocomplete="off" placeholder="unidad" />
+                <label for="product-unit">Unidad de venta</label>
+                <Select id="product-unit" v-model="form.unit" :options="unitSelectOptions" optionLabel="label" optionValue="value" fluid />
               </div>
             </div>
             <div class="pfield">
-              <label for="product-barcode">Código de barras</label>
-              <InputText id="product-barcode" v-model="form.barcode" autocomplete="off" />
-            </div>
-            <div class="pfield">
-              <label>Imagen</label>
+              <label>Foto del producto</label>
               <div class="image-row">
                 <span class="image-preview">
                   <img v-if="form.imageUrl" :src="form.imageUrl" alt="Vista previa" />
@@ -1130,7 +1205,28 @@ async function openStockHistory(product: CatalogProduct | null) {
                   <i v-else class="pi pi-image" aria-hidden="true" />
                 </span>
                 <div class="image-picker">
-                  <InputText v-model="form.imageUrl" placeholder="URL de la foto (opcional)" />
+                  <input ref="imageInput" type="file" accept="image/*" capture="environment" hidden @change="onImagePick" />
+                  <div class="image-actions">
+                    <Button
+                      type="button"
+                      size="small"
+                      icon="pi pi-camera"
+                      :label="form.imageUrl ? 'Cambiar foto' : 'Subir foto'"
+                      :loading="imageProcessing"
+                      @click="pickImage"
+                    />
+                    <Button
+                      v-if="form.imageUrl"
+                      type="button"
+                      size="small"
+                      icon="pi pi-trash"
+                      label="Quitar"
+                      outlined
+                      severity="secondary"
+                      @click="clearImage"
+                    />
+                  </div>
+                  <small class="field-help">Toma o elige una foto. Si no, usa un emoji:</small>
                   <div class="emoji-grid">
                     <button
                       v-for="emoji in emojiOptions"
@@ -1142,6 +1238,24 @@ async function openStockHistory(product: CatalogProduct | null) {
                     >
                       {{ emoji }}
                     </button>
+                    <span
+                      v-if="form.icon && !emojiOptions.includes(form.icon)"
+                      class="emoji-btn is-active is-custom"
+                    >
+                      {{ form.icon }}
+                    </span>
+                  </div>
+                  <div class="emoji-custom">
+                    <input
+                      v-model="customEmojiModel"
+                      type="text"
+                      class="emoji-custom__input"
+                      inputmode="text"
+                      maxlength="8"
+                      placeholder="Otro emoji 😀"
+                      aria-label="Escribe o pega otro emoji"
+                    >
+                    <small class="field-help">Abre el teclado de emojis del sistema (Win + . / ⌘ + Ctrl + Espacio) y elige el que quieras.</small>
                   </div>
                 </div>
               </div>
@@ -1169,10 +1283,13 @@ async function openStockHistory(product: CatalogProduct | null) {
               <Textarea id="product-description" v-model="form.description" rows="2" autoResize />
             </div>
             <div class="check-row">
-              <label><Checkbox v-model="form.visiblePos" binary /> <span>Visible en POS</span></label>
-              <label><Checkbox v-model="form.visibleCatalog" binary /> <span>Catálogo público</span></label>
-              <label><Checkbox v-model="form.variablePrice" binary /> <span>Precio variable</span></label>
-              <label><Checkbox v-model="form.active" binary /> <span>Activo</span></label>
+              <label>
+                <Checkbox v-model="form.visiblePos" binary />
+                <span>
+                  Mostrar en la pantalla de venta
+                  <small>Si lo apagas, no aparece para cobrar.</small>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -1190,7 +1307,6 @@ async function openStockHistory(product: CatalogProduct | null) {
           <div v-show="sections.variants" class="section-body">
             <div v-for="(variant, index) in form.variants" :key="index" class="variant-row">
               <InputText v-model="variant.name" placeholder="Nombre (ej. Talla M)" class="variant-name" />
-              <InputText v-model="variant.sku" placeholder="SKU" class="variant-sku" />
               <InputNumber v-model="variant.cost" mode="decimal" :min="0" :minFractionDigits="2" :maxFractionDigits="2" placeholder="Costo" class="variant-cost" />
               <InputNumber v-model="variant.price" mode="decimal" :min="0" :minFractionDigits="2" :maxFractionDigits="2" placeholder="Precio" class="variant-price" />
               <InputNumber v-model="variant.stock" :min="0" :maxFractionDigits="2" placeholder="Stock" class="variant-stock" />
@@ -1202,7 +1318,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 
         <footer class="pform-footer">
           <Button type="button" outlined label="Cancelar" severity="secondary" @click="productDialogOpen = false" />
-          <Button type="submit" :label="form.id ? 'Guardar cambios' : 'Guardar'" :loading="saving" />
+          <Button type="submit" :label="form.id ? 'Guardar cambios' : 'Crear producto'" :loading="saving" />
         </footer>
       </form>
     </Dialog>
@@ -1291,7 +1407,38 @@ async function openStockHistory(product: CatalogProduct | null) {
         </div>
         <div class="field">
           <label for="category-icon">Icono Prime</label>
-          <InputText id="category-icon" v-model="categoryForm.icon" autocomplete="off" placeholder="pi pi-box" />
+          <div class="icon-picker">
+            <span class="icon-picker__preview" aria-hidden="true">
+              <i v-if="categoryForm.icon" :class="categoryForm.icon" />
+              <i v-else class="pi pi-image is-empty" />
+            </span>
+            <Select
+              id="category-icon"
+              v-model="categoryForm.icon"
+              :options="primeIconOptions"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Elegí un icono"
+              showClear
+              filter
+              :filterFields="['label', 'value']"
+              class="icon-picker__select"
+            >
+              <template #value="{ value, placeholder }">
+                <span v-if="value" class="icon-option">
+                  <i :class="value" aria-hidden="true" />
+                  <span>{{ primeIconOptions.find((opt) => opt.value === value)?.label ?? value }}</span>
+                </span>
+                <span v-else class="icon-option icon-option--placeholder">{{ placeholder }}</span>
+              </template>
+              <template #option="{ option }">
+                <span class="icon-option">
+                  <i :class="option.value" aria-hidden="true" />
+                  <span>{{ option.label }}</span>
+                </span>
+              </template>
+            </Select>
+          </div>
         </div>
         <label class="category-active">
           <Checkbox v-model="categoryForm.active" binary />
@@ -1349,165 +1496,121 @@ async function openStockHistory(product: CatalogProduct | null) {
   --catalog-accent-strong: #066322;
   --catalog-accent-soft: #e4f4ea;
   display: grid;
-  gap: 14px;
-  padding: 12px 0 0;
-}
-
-/* --- Breadcrumb --- */
-.catalog-breadcrumb {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  padding: 8px 0 0;
 }
 
-.crumbs {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #64748b;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.crumbs strong {
-  color: #0f172a;
-}
-
-.crumbs i {
-  font-size: 0.7rem;
-  color: #94a3b8;
-}
-
-.crumb-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* --- Heading --- */
-.catalog-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+.catalog-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
+  align-items: end;
 }
 
-.catalog-heading__text h2 {
-  margin: 0;
-  color: #071327;
-  font-size: 1.6rem;
-  font-weight: 900;
-}
-
-.catalog-heading__text p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.catalog-heading__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-/* --- Metrics --- */
-.catalog-metrics {
+.catalog-heading {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 4px;
 }
 
-.catalog-metrics article {
-  display: grid;
-  gap: 6px;
-  padding: 16px 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
-}
-
-.catalog-metrics span {
-  color: #64748b;
+.catalog-eyebrow {
+  color: var(--catalog-accent-strong);
   font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.catalog-metrics strong {
-  color: #0f172a;
-  font-size: 1.55rem;
-  font-weight: 900;
+.catalog-heading h2 {
+  margin: 0;
+  color: #071327;
+  font-size: clamp(1.4rem, 2.2vw, 2rem);
+  font-weight: 950;
   line-height: 1.05;
 }
 
-.catalog-metrics small {
-  color: #94a3b8;
-  font-size: 0.74rem;
-  font-weight: 600;
+.catalog-heading p {
+  margin: 0;
+  max-width: 62ch;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
-.catalog-metrics .is-alert strong {
-  color: #dc2626;
-}
-
-/* --- Toolbar (search + chips) --- */
-.catalog-toolbar {
-  display: flex;
+.catalog-primary-actions {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.catalog-search {
-  flex: 1 1 280px;
-  max-width: 420px;
+.new-product-button {
+  min-height: 42px;
+  font-weight: 900 !important;
+}
+
+.catalog-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 460px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
 }
 
 .catalog-search :deep(.p-inputtext) {
   width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 650;
 }
 
-.catalog-chips {
-  display: inline-flex;
+.catalog-chips,
+.category-strip__list {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.chip {
+.chip,
+.category-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 14px;
-  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+  border: 1px solid #dfe7e2;
   border-radius: 999px;
   background: #ffffff;
   color: #475569;
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
-.chip:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
+.chip {
+  padding: 8px 13px;
 }
 
-.chip.is-active {
+.category-pill {
+  padding: 7px 12px;
+}
+
+.chip:hover,
+.category-pill:hover {
+  border-color: #b9d9c2;
+  background: #f5fbf6;
+}
+
+.chip.is-active,
+.category-pill.is-active {
   border-color: var(--catalog-accent);
   background: var(--catalog-accent);
   color: #ffffff;
 }
 
-.chip__count {
+.chip__count,
+.category-pill small {
   display: inline-grid;
   place-items: center;
   min-width: 20px;
@@ -1517,86 +1620,206 @@ async function openStockHistory(product: CatalogProduct | null) {
   background: #eef2f6;
   color: #475569;
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.chip.is-active .chip__count {
+.chip.is-active .chip__count,
+.category-pill.is-active small {
   background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
 }
 
-/* --- Body: table + detail --- */
-.catalog-body {
+.catalog-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 14px;
-  align-items: start;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.catalog-table-card {
+.catalog-summary article {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #ffffff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.catalog-summary span {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.catalog-summary strong {
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 950;
+}
+
+.catalog-summary .is-danger {
+  color: #b45309;
+}
+
+.category-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.product-list-panel {
   overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.product-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.product-list-head strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.product-list-head span {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 650;
 }
 
 .catalog-table {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
+}
+
+.cell-label {
+  display: none;
+}
+
+.catalog-table :deep(.p-datatable-thead > tr > th) {
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .catalog-table :deep(.p-datatable-tbody > tr) {
   cursor: pointer;
 }
 
-.catalog-table :deep(.p-datatable-tbody > tr[aria-selected='true']) {
-  box-shadow: inset 3px 0 0 #0f172a;
+.catalog-table :deep(.p-datatable-tbody > tr:hover) {
+  background: #f8fcf9;
 }
 
 .product-cell {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.product-thumb,
-.detail-thumb {
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  min-width: 0;
+  gap: 11px;
 }
 
 .product-thumb {
-  width: 36px;
-  height: 36px;
-  font-size: 0.95rem;
-  flex-shrink: 0;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  font-size: 1rem;
+}
+
+.product-cell__text {
+  min-width: 0;
 }
 
 .product-cell__text strong {
   display: block;
+  overflow: hidden;
   color: #0f172a;
-  font-size: 0.86rem;
-  font-weight: 700;
+  font-size: 0.92rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .product-cell__text small {
   display: block;
-  color: #94a3b8;
-  font-size: 0.74rem;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 0.75rem;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cell-muted {
   color: #64748b;
+  font-weight: 650;
 }
 
 .cell-price {
   color: #0f172a;
-  font-weight: 800;
+  font-weight: 950;
+}
+
+.margin-pill,
+.stock-pill,
+.signal-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.margin-pill {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.stock-pill {
+  color: #0f172a;
+  background: #eef2f6;
+}
+
+.stock-pill.is-low {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.signal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signal-badge.is-sale {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.signal-badge.is-low {
+  color: #92400e;
+  background: #fef3c7;
 }
 
 .stock-low {
@@ -1608,106 +1831,31 @@ async function openStockHistory(product: CatalogProduct | null) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
-/* --- Detail panel --- */
-.catalog-detail {
-  position: sticky;
-  top: 14px;
+.empty-products {
   display: grid;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
-}
-
-.detail-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.detail-thumb {
-  width: 56px;
-  height: 56px;
-  font-size: 1.4rem;
-  flex-shrink: 0;
-}
-
-.detail-head__text strong {
-  display: block;
-  color: #0f172a;
-  font-size: 1.05rem;
-  font-weight: 800;
-}
-
-.detail-head__text small {
-  display: block;
-  margin-top: 2px;
-  color: #94a3b8;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.detail-grid > div {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid #eef2f6;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.detail-grid span {
+  justify-items: center;
+  gap: 8px;
+  padding: 34px 16px;
   color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.detail-grid strong {
-  color: #0f172a;
-  font-size: 1.1rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.detail-actions {
-  display: grid;
-  gap: 8px;
-}
-
-.detail-actions :deep(.p-button) {
-  width: 100%;
-}
-
-.detail-empty {
-  display: grid;
-  place-items: center;
-  gap: 8px;
-  padding: 30px 10px;
-  color: #94a3b8;
   text-align: center;
 }
 
-.detail-empty i {
-  font-size: 1.8rem;
+.empty-products i {
+  color: #94a3b8;
+  font-size: 2rem;
 }
 
-.detail-empty p {
-  margin: 0;
-  font-size: 0.84rem;
-  font-weight: 600;
+.empty-products strong {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.empty-products span {
+  margin-bottom: 6px;
+  font-size: 0.86rem;
 }
 
 /* Botones blancos nítidos (Escanear, Importar, Editar, Stock) como el mockup */
@@ -1730,13 +1878,6 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 /* --- Dialog forms --- */
-.catalog-form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  min-width: min(760px, calc(100vw - 44px));
-}
-
 .category-form {
   display: grid;
   gap: 14px;
@@ -1746,6 +1887,49 @@ async function openStockHistory(product: CatalogProduct | null) {
 .field {
   display: grid;
   gap: 6px;
+}
+
+.icon-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-picker__preview {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 1.25rem;
+}
+
+.icon-picker__preview .is-empty {
+  color: #94a3b8;
+}
+
+.icon-picker__select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icon-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-option i {
+  font-size: 1.05rem;
+  color: #334155;
+}
+
+.icon-option--placeholder {
+  color: #94a3b8;
 }
 
 .field.wide,
@@ -1790,15 +1974,13 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 /* --- Thumbnails (imagen / emoji) --- */
-.product-thumb img,
-.detail-thumb img {
+.product-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.product-thumb,
-.detail-thumb {
+.product-thumb {
   overflow: hidden;
 }
 
@@ -1808,10 +1990,6 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .product-thumb .thumb-emoji {
   font-size: 1.1rem;
-}
-
-.detail-thumb .thumb-emoji {
-  font-size: 1.7rem;
 }
 
 /* --- Diálogo de producto (registro amigable) --- */
@@ -1841,33 +2019,62 @@ async function openStockHistory(product: CatalogProduct | null) {
   border-top: 1px solid #eef2f6;
 }
 
-/* Toggle de tipo */
+/* Toggle de tipo (tarjetas con icono) */
 .kind-toggle {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .kind-toggle__btn {
-  flex: 1;
-  height: 34px;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-height: 78px;
+  padding: 10px 6px;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
   color: #0f172a;
-  font-size: 0.82rem;
-  font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  text-align: center;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .kind-toggle__btn:hover {
+  border-color: #86efac;
   background: #f8fafc;
+}
+
+.kind-toggle__btn:focus-visible,
+.costing-toggle__btn:focus-visible {
+  outline: none;
+  border-color: var(--catalog-accent);
+  box-shadow: 0 0 0 3px var(--catalog-accent-soft);
 }
 
 .kind-toggle__btn.is-active {
   border-color: var(--catalog-accent);
-  background: var(--catalog-accent);
-  color: #ffffff;
+  background: var(--catalog-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--catalog-accent);
+}
+
+.kind-toggle__icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.kind-toggle__btn strong {
+  font-size: 0.82rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.kind-toggle__btn small {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.15;
 }
 
 /* Campos */
@@ -1921,7 +2128,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .costing-toggle {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1931,11 +2138,16 @@ async function openStockHistory(product: CatalogProduct | null) {
   min-height: 82px;
   padding: 11px;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
   color: #0f172a;
   cursor: pointer;
   text-align: left;
+}
+
+.costing-toggle__icon {
+  font-size: 1.3rem;
+  line-height: 1;
 }
 
 .costing-toggle__btn:hover {
@@ -1978,6 +2190,12 @@ async function openStockHistory(product: CatalogProduct | null) {
   align-items: center;
   min-width: 0;
   gap: 10px;
+}
+
+/* El botón no debe encogerse ni truncarse ("Aplica" en vez de "Aplicar"). */
+.price-helper :deep(.p-button) {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .price-helper__icon {
@@ -2132,6 +2350,12 @@ async function openStockHistory(product: CatalogProduct | null) {
   gap: 8px;
 }
 
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .emoji-grid {
   display: flex;
   flex-wrap: wrap;
@@ -2158,26 +2382,65 @@ async function openStockHistory(product: CatalogProduct | null) {
   background: var(--catalog-accent-soft);
 }
 
+.emoji-btn.is-custom {
+  display: inline-grid;
+  place-items: center;
+}
+
+.emoji-custom {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.emoji-custom__input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 1.1rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.emoji-custom__input:focus {
+  border-color: var(--catalog-accent);
+  box-shadow: 0 0 0 3px var(--catalog-accent-soft);
+}
+
 /* Checks */
 .check-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 18px;
+  display: grid;
+  gap: 12px;
 }
 
 .check-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.82rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.check-row label span {
+  display: grid;
+  gap: 2px;
+}
+
+.check-row label small {
+  font-size: 0.72rem;
   font-weight: 600;
-  color: #334155;
+  color: #94a3b8;
 }
 
 /* Variantes */
 .variant-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.2fr) minmax(90px, 0.8fr) 100px 100px 90px auto;
+  grid-template-columns: minmax(150px, 1.6fr) 100px 100px 90px auto;
   gap: 8px;
   align-items: center;
 }
@@ -2359,34 +2622,134 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 @media (max-width: 1100px) {
-  .catalog-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .catalog-body {
+  .catalog-toolbar {
     grid-template-columns: 1fr;
   }
 
-  .catalog-detail {
-    position: static;
+  .catalog-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .category-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .category-strip :deep(.p-button) {
+    justify-self: start;
   }
 }
 
 @media (max-width: 720px) {
-  .catalog-heading {
-    flex-direction: column;
+  .catalog-header {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
-  .catalog-heading__actions {
+  .catalog-primary-actions {
+    width: 100%;
+    justify-content: space-between;
     flex-wrap: wrap;
   }
 
-  .catalog-metrics {
-    grid-template-columns: 1fr;
+  .new-product-button {
+    flex: 1 1 180px;
   }
 
-  .catalog-form {
+  .catalog-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .product-list-head {
+    display: grid;
+  }
+
+  /* La tabla se convierte en tarjetas apiladas (como el carrito en venta) */
+  .cell-label {
+    display: inline-flex;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .catalog-table :deep(.p-datatable-thead) {
+    display: none;
+  }
+
+  .catalog-table :deep(.p-datatable-table),
+  .catalog-table :deep(.p-datatable-tbody),
+  .catalog-table :deep(.p-datatable-tbody > tr) {
+    display: block;
+    width: 100%;
+  }
+
+  .catalog-table :deep(.p-datatable-tbody > tr) {
+    margin: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+  }
+
+  .catalog-table :deep(.p-datatable-tbody > tr > td) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0 !important;
+    width: 100%;
+    border: none;
+    padding: 10px 14px;
+    text-align: right;
+  }
+
+  /* Celda Producto: encabezado de la tarjeta, ocupa toda la fila */
+  .catalog-table :deep(.p-datatable-tbody > tr > td:first-child) {
+    justify-content: flex-start;
+    text-align: left;
+    background: #f8fafc;
+    border-bottom: 1px solid #eef2f6;
+  }
+
+  /* Celda Acciones: botones a lo ancho */
+  .catalog-table :deep(.p-datatable-tbody > tr > td:last-child) {
+    border-top: 1px solid #eef2f6;
+  }
+
+  .row-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .pgrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .row-actions :deep(.p-button-label) {
+    display: none;
+  }
+
+  .row-actions :deep(.p-button) {
+    width: 2.25rem;
+    padding-inline: 0;
+  }
+
+  /* En móvil la tarjeta de precio recomendado se apila: el botón "Aplicar"
+     pasa abajo a todo el ancho para no comprimirse contra el texto. */
+  .price-helper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .price-helper :deep(.p-button) {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

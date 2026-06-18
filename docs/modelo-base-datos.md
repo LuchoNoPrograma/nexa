@@ -32,7 +32,7 @@ Archivos vigentes:
 - Toda tabla privada de negocio lleva `tienda_id`, salvo tablas hijas que se
   aislan por su padre.
 - El POS es soporte operativo para generar datos, no el producto principal.
-- Haru IA, calculadora, catalogo publico y analisis son el nucleo del MVP.
+- Haru IA, calculadora, marketing operativo y analisis son el nucleo del MVP.
 - No crear tablas contables paralelas si `venta`, `pago` y `caja_movimiento`
   cubren el caso.
 - No modelar facturacion legal, pasarela, contabilidad completa ni
@@ -188,14 +188,14 @@ Campos clave:
 - `orden_catalogo`
 - `imagen_url`
 - `icono`
-- `visible_catalogo`
 - `visible_pos`
 - `activo`
 
 Reglas:
 
 - `visible_pos` controla si aparece en venta interna.
-- `visible_catalogo` queda para catalogo publico.
+- `activo` queda como bandera tecnica para ocultar registros retirados sin
+  romper historial.
 - `sku` y `codigo_barras` son unicos por tienda cuando existen.
 
 ### `producto_variante`

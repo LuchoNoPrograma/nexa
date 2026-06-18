@@ -157,7 +157,6 @@ create table productos (
   stock integer default 0,
   stock_minimo integer default 0,
   imagen_url text,
-  visible_catalogo boolean default false,
   activo boolean default true,
   created_at timestamptz default now(),
   unique (tienda_id, sku),
@@ -298,9 +297,6 @@ create policy "tienda propia" on tiendas for all using (id = current_tienda_id()
 -- compra_items -> compras
 -- combo_items -> productos del combo
 -- haru_mensaje -> haru_conversacion
-
-create policy "catalogo publico" on productos
-  for select using (visible_catalogo = true and activo = true);
 ```
 
 No crear tablas separadas para cotizaciones si no es necesario: usar `ventas.estado = 'cotizacion'`.
@@ -316,6 +312,7 @@ No crear tabla de descuentos al inicio: descuento manual en `ventas.descuento` b
 - En soporte, priorizar flujo usable sobre perfeccion visual.
 - En landing y Haru IA, priorizar claridad, impacto y acabado profesional.
 - Antes de ampliar la BD, verificar si una columna o estado resuelve el caso de forma mas simple.
+- Ejecutar tests de frontend solo cuando se pida explicitamente; no correrlos por iniciativa propia al verificar o cerrar un cambio.
 
 ## 6. Fuera de alcance del MVP
 
@@ -328,3 +325,4 @@ No crear tabla de descuentos al inicio: descuento manual en `ventas.descuento` b
 - Inventario como producto principal.
 
 NO HACER COMPILACIONES DE PRUEBA NI EMPAQUETAR A MENOS QUE SE PIDA EXPLICITAMENTE
+NO EJECUTAR TESTS DE FRONTEND A MENOS QUE SE PIDA EXPLICITAMENTE

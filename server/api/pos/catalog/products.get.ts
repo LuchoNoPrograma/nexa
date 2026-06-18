@@ -27,7 +27,6 @@ export default defineEventHandler(async (event) => {
         p.imagen_url as "imageUrl",
         p.icono as icon,
         p.visible_pos as "visiblePos",
-        p.activo as active,
         p.updated_at as "updatedAt",
         coalesce(v.variants, '[]'::json) as variants
       from producto p
@@ -49,7 +48,8 @@ export default defineEventHandler(async (event) => {
         where pv.producto_id = p.id and pv.activo = true
       ) v on true
       where p.tienda_id = $1
-      order by p.activo desc, p.orden_catalogo asc, p.nombre asc
+        and p.activo = true
+      order by p.orden_catalogo asc, p.nombre asc
     `,
     [session.storeId],
   )

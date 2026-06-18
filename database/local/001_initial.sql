@@ -170,7 +170,6 @@ create table if not exists producto (
   orden_catalogo integer not null default 0,
   imagen_url text,
   icono text,
-  visible_catalogo boolean not null default false,
   visible_pos boolean not null default true,
   activo boolean not null default true,
   created_at timestamptz not null default now(),
@@ -628,7 +627,6 @@ create index if not exists proveedor_tienda_idx on proveedor (tienda_id, nombre)
 create index if not exists categoria_tienda_idx on categoria (tienda_id, activo, orden);
 create index if not exists producto_tienda_nombre_idx on producto (tienda_id, nombre);
 create index if not exists producto_pos_idx on producto (tienda_id, visible_pos, activo, orden_catalogo);
-create index if not exists producto_catalogo_idx on producto (tienda_id, visible_catalogo, activo, orden_catalogo);
 create index if not exists producto_variante_producto_idx on producto_variante (producto_id, activo, orden);
 create index if not exists combo_item_combo_idx on combo_item (combo_id);
 create index if not exists caja_sesion_tienda_idx on caja_sesion (tienda_id, estado, abierta_at desc);

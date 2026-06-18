@@ -33,7 +33,6 @@ type ProductBody = {
   imageUrl?: string | null
   icon?: string | null
   visiblePos?: boolean
-  active?: boolean
   variants?: unknown
 }
 
@@ -74,7 +73,6 @@ export default defineEventHandler(async (event) => {
           imagen_url = $16,
           icono = $17,
           visible_pos = $18,
-          activo = $19,
           updated_at = now()
         where id = $1
           and tienda_id = $2
@@ -99,7 +97,6 @@ export default defineEventHandler(async (event) => {
         nullableText(body.imageUrl),
         nullableText(body.icon),
         booleanOrDefault(body.visiblePos, true),
-        booleanOrDefault(body.active, true),
       ],
     )
 
