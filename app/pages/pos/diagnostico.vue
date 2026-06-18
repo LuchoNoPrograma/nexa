@@ -836,14 +836,17 @@ function areaScore(key: keyof AreaScores) {
 /* ---------- Wizard ---------- */
 .diag-wizard {
   padding: clamp(18px, 2.4vw, 28px);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 18px;
-  /* El card llena el alto visible de la pantalla (igual que .pos-content-shell:
-     100dvh - topbar/paddings). Es un MÍNIMO: si el contenido es más alto,
-     el card crece y la página hace scroll. Así el footer queda fijo abajo
-     sin saltos y sin números mágicos. */
-  min-height: calc(100dvh - 130px);
+  height: calc(100dvh - 130px);
+  min-height: 520px;
+  overflow: hidden;
+}
+
+.diag--full .diag-wizard {
+  height: calc(100dvh - clamp(16px, 4vw, 40px) * 2 - 46px);
+  min-height: 0;
 }
 
 .diag-wizard__head {
@@ -920,12 +923,33 @@ function areaScore(key: keyof AreaScores) {
   font-weight: 800;
 }
 
-/* Contenedor estable: toma el alto sobrante (footer siempre abajo) y
-   recorta/contiene la animación de cambio de pregunta. */
+/* Contenedor estable: el contenido de preguntas scrollea; el footer de Haru
+   queda visible al fondo de la tarjeta. */
 .diag-question-wrap {
   position: relative;
-  flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.diag-question-wrap::-webkit-scrollbar {
+  width: 8px;
+}
+
+.diag-question-wrap::-webkit-scrollbar-track {
+  background: #f1f5f1;
+  border-radius: 999px;
+}
+
+.diag-question-wrap::-webkit-scrollbar-thumb {
+  background: #c6d8ca;
+  border-radius: 999px;
+}
+
+.diag-question-wrap::-webkit-scrollbar-thumb:hover {
+  background: #9fc5a8;
 }
 
 .diag-question {
@@ -1003,6 +1027,7 @@ function areaScore(key: keyof AreaScores) {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 14px;
+  padding-top: 2px;
 }
 
 .diag-jaguar-tip {
@@ -1656,6 +1681,22 @@ function areaScore(key: keyof AreaScores) {
 @media (max-width: 640px) {
   .diag-result__title { flex-direction: column; align-items: stretch; }
   .diag-result__start { width: 100%; }
+  .diag--full { padding: 12px; }
+  .diag--full .diag-wizard { height: calc(100dvh - 24px - 42px); }
+  .diag-wizard {
+    gap: 12px;
+    padding: 16px;
+  }
+  .diag-steps { gap: 6px; }
+  .diag-step {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .diag-progress__meta {
+    display: grid;
+    gap: 4px;
+  }
   .diag-wizard__foot { grid-template-columns: 1fr 1fr; }
   .diag-jaguar-tip { grid-column: 1 / -1; order: -1; }
   .diag-areas__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

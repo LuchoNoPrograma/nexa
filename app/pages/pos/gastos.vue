@@ -155,9 +155,9 @@ const operativeCategories = computed(() => {
 })
 
 const metrics = computed<MetricCard[]>(() => [
-  { label: 'Total gastado', value: money(total.value), meta: `${rows.value.length} gastos en el periodo`, icon: 'pi pi-wallet', tone: 'red' },
-  { label: 'Compras de inventario', value: money(inventoryTotal.value), meta: `${sharePercent(inventoryTotal.value)}% · sube tu stock`, icon: 'pi pi-box', tone: 'blue' },
-  { label: 'Gastos operativos', value: money(operativeTotal.value), meta: `${sharePercent(operativeTotal.value)}% · dinero consumido`, icon: 'pi pi-bolt', tone: 'orange' },
+  { label: 'Total gastado', value: money(total.value), meta: `${rows.value.length} gastos en el periodo`, icon: 'fluent-emoji:money-with-wings', tone: 'red' },
+  { label: 'Compras de inventario', value: money(inventoryTotal.value), meta: `${sharePercent(inventoryTotal.value)}% · sube tu stock`, icon: 'fluent-emoji:package', tone: 'blue' },
+  { label: 'Gastos operativos', value: money(operativeTotal.value), meta: `${sharePercent(operativeTotal.value)}% · dinero consumido`, icon: 'fluent-emoji:high-voltage', tone: 'orange' },
 ])
 
 const kindFilters = computed<{ value: KindFilter, label: string, count: number }[]>(() => [
@@ -284,14 +284,13 @@ function methodIcon(method: Method) {
     </section>
 
     <section class="period-switch" aria-label="Periodo de gastos">
-      <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />
-      <small>La estructura se mantiene igual; solo cambia el nivel de detalle.</small>
+      <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />`
     </section>
 
     <section class="expense-metrics" aria-label="Resumen de gastos">
       <article v-for="card in metrics" :key="card.label" class="expense-metric">
         <span class="expense-metric__icon" :class="`is-${card.tone}`">
-          <i :class="card.icon" aria-hidden="true" />
+          <Icon :name="card.icon" aria-hidden="true" />
         </span>
         <div>
           <small>{{ card.label }}</small>
@@ -305,7 +304,7 @@ function methodIcon(method: Method) {
     <section class="expense-split" aria-label="Tipos de gasto">
       <article class="split-card is-inventory">
         <header>
-          <span class="split-card__icon"><i class="pi pi-box" aria-hidden="true" /></span>
+          <span class="split-card__icon"><Icon name="fluent-emoji:package" aria-hidden="true" /></span>
           <div>
             <small>Compras de inventario</small>
             <strong>{{ money(inventoryTotal) }}</strong>
@@ -338,7 +337,7 @@ function methodIcon(method: Method) {
 
       <article class="split-card is-operative">
         <header>
-          <span class="split-card__icon"><i class="pi pi-bolt" aria-hidden="true" /></span>
+          <span class="split-card__icon"><Icon name="fluent-emoji:high-voltage" aria-hidden="true" /></span>
           <div>
             <small>Gastos operativos</small>
             <strong>{{ money(operativeTotal) }}</strong>
@@ -579,7 +578,7 @@ function methodIcon(method: Method) {
 
 .expense-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -610,6 +609,13 @@ function methodIcon(method: Method) {
   place-items: center;
   border-radius: 999px;
   font-size: 1.18rem;
+}
+
+/* Iconos de las 3 tarjetas: grandes en desktop/tablet (se reducen en móvil). */
+.expense-metric__icon {
+  width: 58px;
+  height: 58px;
+  font-size: 2.3rem;
 }
 
 .expense-metric__icon.is-green,
@@ -691,12 +697,12 @@ function methodIcon(method: Method) {
 
 .split-card__icon {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 50px;
+  height: 50px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 12px;
-  font-size: 1.25rem;
+  font-size: 1.9rem;
 }
 
 .split-card.is-inventory .split-card__icon {
@@ -1131,11 +1137,6 @@ function methodIcon(method: Method) {
 }
 
 /* --- Responsivo --- */
-@media (max-width: 1320px) {
-  .expense-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
 /* Tablet y móvil: las tarjetas pasan a 1 columna */
 @media (max-width: 1024px) {
@@ -1157,9 +1158,42 @@ function methodIcon(method: Method) {
     width: 100%;
   }
 
-  .expense-metrics,
   .ai-advice {
     grid-template-columns: 1fr;
+  }
+
+  /* Las 3 tarjetas se mantienen en una fila también en móvil, compactas. */
+  .expense-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .expense-metric {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-height: 0;
+    padding: 12px 10px;
+  }
+
+  .expense-metric__icon {
+    width: 38px;
+    height: 38px;
+    font-size: 1.4rem;
+  }
+
+  .expense-metric strong {
+    margin-top: 2px;
+    font-size: 0.92rem;
+  }
+
+  .expense-metric small {
+    font-size: 0.62rem;
+  }
+
+  .expense-metric em {
+    margin-top: 4px;
+    font-size: 0.62rem;
   }
 
   .panel-head {

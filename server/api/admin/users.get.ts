@@ -11,6 +11,9 @@ export default defineEventHandler(async (event) => {
         u.id,
         u.nombre as name,
         u.email,
+        u.ci,
+        u.telefono as phone,
+        coalesce(u.email, u.ci, u.telefono, 'Sin identificador') as access,
         coalesce(string_agg(distinct t.nombre, ', ') filter (where t.id is not null), 'Plataforma') as store,
         coalesce(platform_role.codigo, max(store_role.codigo), 'usuario') as role,
         u.estado as status

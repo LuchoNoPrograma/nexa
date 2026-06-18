@@ -151,24 +151,24 @@ const todayTransactions = computed(() => todaySales.reduce((sum, row) => sum + r
 const metrics = computed<MetricCard[]>(() => {
   if (activePeriod.value === 'today') {
     return [
-      { label: 'Total vendido', value: money(todayTotal.value), meta: '+14.6% vs. ayer', icon: 'pi pi-wallet', tone: 'green' },
-      { label: 'Número de ventas', value: String(todayTransactions.value), meta: '3 más que ayer', icon: 'pi pi-receipt', tone: 'blue' },
-      { label: 'Producto más vendido', value: 'Bowl Açaí', meta: '4 unidades vendidas', icon: 'pi pi-star', tone: 'orange' },
+      { label: 'Total vendido', value: money(todayTotal.value), meta: '+14.6% vs. ayer', icon: 'fluent-emoji:money-bag', tone: 'green' },
+      { label: 'Número de ventas', value: String(todayTransactions.value), meta: '3 más que ayer', icon: 'fluent-emoji:receipt', tone: 'blue' },
+      { label: 'Producto más vendido', value: 'Bowl Açaí', meta: '4 unidades vendidas', icon: 'fluent-emoji:star', tone: 'orange' },
     ]
   }
 
   if (activePeriod.value === 'week') {
     return [
-      { label: 'Total semanal', value: money(trendTotal.value), meta: '+8.2% vs. semana anterior', icon: 'pi pi-wallet', tone: 'green' },
-      { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Promedio diario: 10', icon: 'pi pi-receipt', tone: 'blue' },
-      { label: 'Mejor día', value: bestTrendRow.value.label, meta: money(bestTrendRow.value.sales), icon: 'pi pi-calendar-plus', tone: 'orange' },
+      { label: 'Total semanal', value: money(trendTotal.value), meta: '+8.2% vs. semana anterior', icon: 'fluent-emoji:money-bag', tone: 'green' },
+      { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Promedio diario: 10', icon: 'fluent-emoji:receipt', tone: 'blue' },
+      { label: 'Mejor día', value: bestTrendRow.value.label, meta: money(bestTrendRow.value.sales), icon: 'fluent-emoji:spiral-calendar', tone: 'orange' },
     ]
   }
 
   return [
-    { label: 'Total mensual', value: money(trendTotal.value), meta: '+16.8% vs. mes anterior', icon: 'pi pi-wallet', tone: 'green' },
-    { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'pi pi-receipt', tone: 'blue' },
-    { label: 'Mejor mes reciente', value: bestMonthRow.value.label, meta: money(bestMonthRow.value.sales), icon: 'pi pi-trophy', tone: 'orange' },
+    { label: 'Total mensual', value: money(trendTotal.value), meta: '+16.8% vs. mes anterior', icon: 'fluent-emoji:money-bag', tone: 'green' },
+    { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'fluent-emoji:receipt', tone: 'blue' },
+    { label: 'Mejor mes reciente', value: bestMonthRow.value.label, meta: money(bestMonthRow.value.sales), icon: 'fluent-emoji:trophy', tone: 'orange' },
   ]
 })
 
@@ -232,13 +232,12 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 
     <section class="period-switch" aria-label="Periodo de ingresos">
       <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />
-      <small>La estructura se mantiene igual; solo cambia el nivel de detalle.</small>
     </section>
 
     <section class="income-metrics" aria-label="Resumen de ingresos">
       <article v-for="card in metrics" :key="card.label" class="income-metric">
         <span class="income-metric__icon" :class="`is-${card.tone}`">
-          <i :class="card.icon" aria-hidden="true" />
+          <Icon :name="card.icon" aria-hidden="true" />
         </span>
         <div>
           <small>{{ card.label }}</small>
@@ -470,7 +469,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 
 .income-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -500,6 +499,13 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   place-items: center;
   border-radius: 999px;
   font-size: 1.18rem;
+}
+
+/* Iconos de las 3 tarjetas: grandes en desktop/tablet (se reducen en móvil). */
+.income-metric__icon {
+  width: 58px;
+  height: 58px;
+  font-size: 2.3rem;
 }
 
 .income-metric__icon.is-green,
@@ -908,10 +914,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
 }
 
 @media (max-width: 1320px) {
-  .income-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .income-grid {
     grid-template-columns: 1fr;
   }
@@ -930,9 +932,42 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
     width: 100%;
   }
 
-  .income-metrics,
   .ai-advice {
     grid-template-columns: 1fr;
+  }
+
+  /* Las 3 tarjetas se mantienen en una fila también en móvil, compactas. */
+  .income-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .income-metric {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-height: 0;
+    padding: 12px 10px;
+  }
+
+  .income-metric__icon {
+    width: 38px;
+    height: 38px;
+    font-size: 1.4rem;
+  }
+
+  .income-metric strong {
+    margin-top: 2px;
+    font-size: 0.92rem;
+  }
+
+  .income-metric small {
+    font-size: 0.62rem;
+  }
+
+  .income-metric em {
+    margin-top: 4px;
+    font-size: 0.62rem;
   }
 
   .main-panel {

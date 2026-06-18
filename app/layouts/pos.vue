@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import type { MenuItem } from 'primevue/menuitem'
+
 const route = useRoute()
 const router = useRouter()
 const session = usePosSession()
 const { puede } = useAcceso()
+const { open: openHaru } = useHaruChat()
 const isReady = ref(false)
 const isRouteLoading = ref(false)
 const mobileMenuOpen = ref(false)
+const moreMenuOpen = ref(false)
 const sidebarCollapsed = ref(false)
 const sidebarWidth = ref(250)
 const isResizingSidebar = ref(false)
@@ -128,15 +132,31 @@ function onSidebarResizeKeydown(event: KeyboardEvent) {
 
 // `acceso` es una expresión que evalúa `tieneAcceso`. Un cajero solo cumple
 // CAJA y VENDER, así que ve únicamente esos módulos (más Inicio, sin gating).
-const sidebarItems = [
+interface SidebarItem {
+  label: string
+  icon: string
+  to?: string
+  acceso?: string
+  activePaths?: string[]
+  children?: SidebarItem[]
+}
+
+const sidebarItems: SidebarItem[] = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA' },
   { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER' },
   { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO' },
-  { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
-  { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE' },
-  { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE' },
+  {
+    label: 'Finanzas',
+    icon: 'pi pi-chart-pie',
+    acceso: 'REPORTE',
+    children: [
+      { label: 'Resumen', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
+      { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE' },
+      { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE' },
+    ],
+  },
   { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG' },
   { label: 'Reportes', icon: 'pi pi-chart-bar', acceso: 'REPORTE' },
   { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG' },
@@ -147,15 +167,55 @@ const sidebarItems = [
 // Módulos visibles según el rol/permiso de la sesión.
 const visibleSidebarItems = computed(() => sidebarItems.filter(item => puede(item.acceso)))
 
+// Bottom nav móvil: Inicio · Caja · [Vender FAB] · Inventario · Más.
+// Vender es la acción principal, va en el FAB central elevado.
+const bottomNavLeft = computed(() =>
+  [
+    { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
+    { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA' },
+  ].filter(item => puede(item.acceso))
+)
+
+const bottomNavRight = computed(() =>
+  [
+    { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO' },
+  ].filter(item => puede(item.acceso))
+)
+
+const canSell = computed(() => puede('VENDER'))
+
+const moreNavItems = computed(() =>
+  [
+    { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
+    { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
+    { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG' },
+    { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG' },
+    { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes', acceso: 'CONFIG' },
+    { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', acceso: 'CONFIG' },
+  ].filter(item => puede(item.acceso))
+)
+
+function isBottomNavActive(item: { to: string }) {
+  if (item.to === '/pos/finanzas') {
+    return ['/pos/finanzas', '/pos/ingresos', '/pos/gastos'].includes(route.path)
+  }
+  return route.path === item.to
+}
+
+const isSellActive = computed(() => route.path === '/pos')
+
 // Acceso requerido por ruta, para bloquear navegación directa (URL) a un módulo
 // sin permiso. Incluye la ruta principal y sus `activePaths`.
 const accesoPorRuta = new Map<string, string | undefined>()
 for (const item of sidebarItems) {
-  if (item.to) {
-    accesoPorRuta.set(item.to, item.acceso)
-  }
-  for (const path of item.activePaths ?? []) {
-    accesoPorRuta.set(path, item.acceso)
+  const entradas = item.children ?? [item]
+  for (const entrada of entradas) {
+    if (entrada.to) {
+      accesoPorRuta.set(entrada.to, entrada.acceso)
+    }
+    for (const path of entrada.activePaths ?? []) {
+      accesoPorRuta.set(path, entrada.acceso)
+    }
   }
 }
 
@@ -292,8 +352,48 @@ function isActive(item: { to?: string, activePaths?: string[] }) {
   return Boolean(item.to && (route.path === item.to || item.activePaths?.includes(route.path)))
 }
 
+// Grupos desplegables (p. ej. Finanzas). Mostramos solo los hijos permitidos.
+function visibleChildren(item: SidebarItem) {
+  return (item.children ?? []).filter(child => puede(child.acceso))
+}
+
+function isGroupActive(item: SidebarItem) {
+  return visibleChildren(item).some(child => isActive(child))
+}
+
+// Modelo que consume PrimeVue PanelMenu: un nodo raíz (Finanzas) con sus hijos.
+// `command` navega y `class` marca el hijo activo para pintarlo de verde.
+function groupModel(item: SidebarItem): MenuItem[] {
+  return [{
+    key: item.label,
+    label: item.label,
+    icon: item.icon,
+    items: visibleChildren(item).map(child => ({
+      key: child.label,
+      label: child.label,
+      icon: child.icon,
+      class: isActive(child) ? 'is-active' : undefined,
+      command: () => selectModule(child.to),
+    })),
+  }]
+}
+
+// Estado de apertura controlado por PanelMenu. Lo abrimos automáticamente la
+// primera vez que una de sus rutas está activa; después manda el usuario (por
+// eso el guard `=== undefined`: no reabrimos un grupo que el usuario cerró).
+const expandedKeys = ref<Record<string, boolean>>({})
+
+watch(() => route.path, () => {
+  for (const item of sidebarItems) {
+    if (item.children && isGroupActive(item) && expandedKeys.value[item.label] === undefined) {
+      expandedKeys.value = { ...expandedKeys.value, [item.label]: true }
+    }
+  }
+}, { immediate: true })
+
 function selectModule(to?: string) {
   mobileMenuOpen.value = false
+  moreMenuOpen.value = false
 
   if (to) {
     void navigateTo(to)
@@ -317,17 +417,28 @@ function selectModule(to?: string) {
       </template>
 
       <nav class="drawer-nav" aria-label="Navegación móvil del POS">
-        <Button
-          v-for="item in visibleSidebarItems"
-          :key="item.label"
-          type="button"
-          text
-          :severity="isActive(item) ? 'success' : 'secondary'"
-          :class="{ 'is-active': isActive(item), 'is-disabled': !item.to }"
-          :icon="item.icon"
-          :label="item.label"
-          @click="selectModule(item.to)"
-        />
+        <template v-for="item in visibleSidebarItems" :key="item.label">
+          <!-- Grupo desplegable (Finanzas: Resumen / Ingresos / Gastos) -->
+          <PanelMenu
+            v-if="item.children"
+            :model="groupModel(item)"
+            v-model:expandedKeys="expandedKeys"
+            multiple
+            class="sidebar-panelmenu drawer-panelmenu"
+            :class="{ 'is-section-active': isGroupActive(item) }"
+          />
+          <!-- Item simple -->
+          <Button
+            v-else
+            type="button"
+            text
+            :severity="isActive(item) ? 'success' : 'secondary'"
+            :class="{ 'is-active': isActive(item), 'is-disabled': !item.to }"
+            :icon="item.icon"
+            :label="item.label"
+            @click="selectModule(item.to)"
+          />
+        </template>
       </nav>
     </Drawer>
 
@@ -350,18 +461,41 @@ function selectModule(to?: string) {
       </div>
 
       <nav class="sidebar-nav">
-        <Button
-          v-for="item in visibleSidebarItems"
-          :key="item.label"
-          type="button"
-          text
-          v-tooltip.right="sidebarCollapsed ? item.label : undefined"
-          :severity="isActive(item) ? 'success' : 'secondary'"
-          :class="{ 'is-active': isActive(item), 'is-disabled': !item.to }"
-          :icon="item.icon"
-          :label="sidebarCollapsed ? undefined : item.label"
-          @click="selectModule(item.to)"
-        />
+        <template v-for="item in visibleSidebarItems" :key="item.label">
+          <!-- Grupo desplegable (Finanzas: Resumen / Ingresos / Gastos) -->
+          <!-- Replegado: un solo ícono que lleva al primer hijo -->
+          <Button
+            v-if="item.children && sidebarCollapsed"
+            type="button"
+            text
+            v-tooltip.right="item.label"
+            :severity="isGroupActive(item) ? 'success' : 'secondary'"
+            :class="{ 'is-active': isGroupActive(item) }"
+            :icon="item.icon"
+            @click="selectModule(visibleChildren(item)[0]?.to)"
+          />
+          <!-- Expandido: PanelMenu de PrimeVue (colapso + animación nativos) -->
+          <PanelMenu
+            v-else-if="item.children"
+            :model="groupModel(item)"
+            v-model:expandedKeys="expandedKeys"
+            multiple
+            class="sidebar-panelmenu"
+            :class="{ 'is-section-active': isGroupActive(item) }"
+          />
+          <!-- Item simple -->
+          <Button
+            v-else
+            type="button"
+            text
+            v-tooltip.right="sidebarCollapsed ? item.label : undefined"
+            :severity="isActive(item) ? 'success' : 'secondary'"
+            :class="{ 'is-active': isActive(item), 'is-disabled': !item.to }"
+            :icon="item.icon"
+            :label="sidebarCollapsed ? undefined : item.label"
+            @click="selectModule(item.to)"
+          />
+        </template>
       </nav>
 
       <div class="sidebar-foot">
@@ -446,6 +580,102 @@ function selectModule(to?: string) {
         </Transition>
       </div>
     </section>
+
+    <!-- Bottom navigation (mobile only): Inicio · Caja · [Vender] · Inventario · Más -->
+    <nav class="pos-bottom-nav" aria-label="Accesos rápidos">
+      <button
+        v-for="item in bottomNavLeft"
+        :key="item.to"
+        type="button"
+        class="bottom-nav-item"
+        :class="{ 'is-active': isBottomNavActive(item) }"
+        :aria-label="item.label"
+        @click="selectModule(item.to)"
+      >
+        <i :class="item.icon" aria-hidden="true" />
+        <span>{{ item.label }}</span>
+      </button>
+
+      <!-- FAB central: Vender (acción principal) -->
+      <div v-if="canSell" class="bottom-nav-fab-slot">
+        <button
+          type="button"
+          class="bottom-nav-fab"
+          :class="{ 'is-active': isSellActive }"
+          aria-label="Vender"
+          @click="selectModule('/pos')"
+        >
+          <i class="pi pi-shopping-cart" aria-hidden="true" />
+        </button>
+        <span class="bottom-nav-fab-label">Vender</span>
+      </div>
+
+      <button
+        v-for="item in bottomNavRight"
+        :key="item.to"
+        type="button"
+        class="bottom-nav-item"
+        :class="{ 'is-active': isBottomNavActive(item) }"
+        :aria-label="item.label"
+        @click="selectModule(item.to)"
+      >
+        <i :class="item.icon" aria-hidden="true" />
+        <span>{{ item.label }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="bottom-nav-item"
+        :class="{ 'is-active': moreMenuOpen }"
+        aria-label="Más opciones"
+        @click="moreMenuOpen = true"
+      >
+        <i class="pi pi-th-large" aria-hidden="true" />
+        <span>Más</span>
+      </button>
+    </nav>
+
+    <!-- More options bottom sheet (mobile only) -->
+    <Drawer v-model:visible="moreMenuOpen" position="bottom" class="pos-more-drawer">
+      <template #header>
+        <span class="more-drawer-title">Más opciones</span>
+      </template>
+      <div class="more-drawer-grid">
+        <button
+          v-for="item in moreNavItems"
+          :key="item.to"
+          type="button"
+          class="more-drawer-item"
+          :class="{ 'is-active': isActive(item) }"
+          @click="selectModule(item.to)"
+        >
+          <span class="more-drawer-icon">
+            <i :class="item.icon" aria-hidden="true" />
+          </span>
+          <span class="more-drawer-label">{{ item.label }}</span>
+        </button>
+        <button
+          type="button"
+          class="more-drawer-item more-drawer-item--haru"
+          @click="moreMenuOpen = false; openHaru()"
+        >
+          <span class="more-drawer-icon more-drawer-icon--haru">
+            <img src="/haru-chat.png" alt="" aria-hidden="true" class="more-drawer-haru-img" />
+          </span>
+          <span class="more-drawer-label">Haru IA</span>
+        </button>
+        <button
+          type="button"
+          class="more-drawer-item more-drawer-item--logout"
+          @click="logout"
+        >
+          <span class="more-drawer-icon">
+            <i class="pi pi-sign-out" aria-hidden="true" />
+          </span>
+          <span class="more-drawer-label">Cerrar sesión</span>
+        </button>
+      </div>
+    </Drawer>
   </main>
 
   <main v-if="!isReady" class="pos-loading">
@@ -467,6 +697,9 @@ function selectModule(to?: string) {
 <style scoped>
 .pos-page {
   --sidebar-w: 250px;
+  /* Alto del menú inferior móvil; 0 en desktop/tablet (nav oculto). Lo consume
+     la vista de Vender para apilar su barra de carrito por encima del menú. */
+  --pos-bottom-nav-h: 0px;
   position: relative;
   min-height: 100dvh;
   display: grid;
@@ -684,6 +917,152 @@ function selectModule(to?: string) {
 .drawer-nav :deep(.p-button.is-disabled:hover) {
   color: #203049 !important;
   background: transparent !important;
+}
+
+/* --- Grupo desplegable con PrimeVue PanelMenu (Finanzas) --- */
+/* Quitamos fondos/bordes/padding del preset para que se funda con el sidebar. */
+.sidebar-panelmenu,
+.sidebar-panelmenu :deep(.p-panelmenu-panel),
+.sidebar-panelmenu :deep(.p-panelmenu-content) {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+/* Los wrappers -content traen su propio hover claro del preset: lo anulamos,
+   así el estado (hover/activo) lo lleva solo el -link de abajo. */
+.sidebar-panelmenu :deep(.p-panelmenu-header-content),
+.sidebar-panelmenu :deep(.p-panelmenu-header-content:hover),
+.sidebar-panelmenu :deep(.p-panelmenu-item-content),
+.sidebar-panelmenu :deep(.p-panelmenu-item-content:hover) {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+/* Cabecera e ítems con el mismo aspecto que los demás botones del nav. */
+.sidebar-panelmenu :deep(.p-panelmenu-header-link),
+.sidebar-panelmenu :deep(.p-panelmenu-item-link) {
+  min-height: 31px;
+  gap: 8px;
+  padding: 0 8px !important;
+  border-radius: 8px !important;
+  font-size: 0.82rem !important;
+  font-weight: 800 !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Mismo tono que los <Button> del nav: Aura pinta los spans de ícono/label con
+   su color "muted" propio, así que forzamos el color en TODOS los elementos. */
+.sidebar-panelmenu :deep(.p-panelmenu-header-link),
+.sidebar-panelmenu :deep(.p-panelmenu-header-icon),
+.sidebar-panelmenu :deep(.p-panelmenu-header-label),
+.sidebar-panelmenu :deep(.p-panelmenu-submenu-icon),
+.sidebar-panelmenu :deep(.p-panelmenu-item-link),
+.sidebar-panelmenu :deep(.p-panelmenu-item-icon),
+.sidebar-panelmenu :deep(.p-panelmenu-item-label) {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.sidebar-panelmenu :deep(.p-panelmenu-header-content:hover) *,
+.sidebar-panelmenu :deep(.p-panelmenu-item-content:hover) * {
+  color: #ffffff !important;
+}
+
+.sidebar-panelmenu :deep(.p-panelmenu-header-link:hover),
+.sidebar-panelmenu :deep(.p-panelmenu-item-link:hover) {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* El chevron (PrimeVue alterna right/down) va a la derecha. */
+.sidebar-panelmenu :deep(.p-panelmenu-header-icon) {
+  order: 0;
+}
+.sidebar-panelmenu :deep(.p-panelmenu-header-label) {
+  order: 1;
+}
+.sidebar-panelmenu :deep(.p-panelmenu-submenu-icon) {
+  order: 2;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-left: auto;
+}
+
+/* Padre con una ruta hija activa: solo texto blanco, sin relleno. */
+.sidebar-panelmenu.is-section-active :deep(.p-panelmenu-header-link),
+.sidebar-panelmenu.is-section-active :deep(.p-panelmenu-header-icon),
+.sidebar-panelmenu.is-section-active :deep(.p-panelmenu-header-label),
+.sidebar-panelmenu.is-section-active :deep(.p-panelmenu-submenu-icon) {
+  color: #ffffff !important;
+}
+
+/* Submenú indentado con guía vertical a la izquierda. */
+.sidebar-panelmenu :deep(.p-panelmenu-root-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 5px 0 0 16px;
+  padding-left: 9px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  list-style: none;
+}
+
+.sidebar-panelmenu :deep(.p-panelmenu-item-link) {
+  min-height: 29px;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+}
+
+/* Hijo activo: la pastilla verde (mismo gradiente que el resto). */
+.sidebar-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-link),
+.sidebar-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-icon),
+.sidebar-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-label) {
+  color: #ffffff !important;
+}
+.sidebar-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-link) {
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-600) 100%) !important;
+  box-shadow: 0 8px 16px rgba(3, 24, 9, 0.4) !important;
+}
+
+/* --- Variante del drawer móvil (fondo claro -> texto oscuro) --- */
+.drawer-panelmenu :deep(.p-panelmenu-header-link),
+.drawer-panelmenu :deep(.p-panelmenu-header-icon),
+.drawer-panelmenu :deep(.p-panelmenu-header-label),
+.drawer-panelmenu :deep(.p-panelmenu-submenu-icon),
+.drawer-panelmenu :deep(.p-panelmenu-item-link),
+.drawer-panelmenu :deep(.p-panelmenu-item-icon),
+.drawer-panelmenu :deep(.p-panelmenu-item-label) {
+  color: #203049 !important;
+}
+
+.drawer-panelmenu :deep(.p-panelmenu-header-content:hover) *,
+.drawer-panelmenu :deep(.p-panelmenu-item-content:hover) * {
+  color: var(--primary-700) !important;
+}
+
+.drawer-panelmenu :deep(.p-panelmenu-header-link:hover),
+.drawer-panelmenu :deep(.p-panelmenu-item-link:hover) {
+  background: #edfdf5 !important;
+}
+
+.drawer-panelmenu.is-section-active :deep(.p-panelmenu-header-link),
+.drawer-panelmenu.is-section-active :deep(.p-panelmenu-header-icon),
+.drawer-panelmenu.is-section-active :deep(.p-panelmenu-header-label),
+.drawer-panelmenu.is-section-active :deep(.p-panelmenu-submenu-icon) {
+  color: var(--primary-700) !important;
+}
+
+.drawer-panelmenu :deep(.p-panelmenu-root-list) {
+  border-left-color: rgba(32, 48, 73, 0.16);
+}
+
+.drawer-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-link),
+.drawer-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-icon),
+.drawer-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-label) {
+  color: #ffffff !important;
+}
+.drawer-panelmenu :deep(.p-panelmenu-item.is-active > .p-panelmenu-item-content .p-panelmenu-item-link) {
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-800) 100%) !important;
+  box-shadow: 0 8px 16px rgba(10, 111, 31, 0.24) !important;
 }
 
 /* --- Item de soporte al final --- */
@@ -1133,6 +1512,11 @@ function selectModule(to?: string) {
   .pos-route-feedback-leave-active {
     transition: none;
   }
+
+  .bottom-nav-fab,
+  .bottom-nav-fab i {
+    transition: none;
+  }
 }
 
 @media (max-width: 1120px) {
@@ -1144,7 +1528,8 @@ function selectModule(to?: string) {
 @media (max-width: 760px) {
   .pos-page {
     grid-template-columns: 1fr;
-    padding: 8px;
+    padding: 8px 8px 0;
+    --pos-bottom-nav-h: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-sidebar {
@@ -1156,94 +1541,288 @@ function selectModule(to?: string) {
   }
 
   .mobile-menu-button {
-    display: grid !important;
+    display: none !important;
   }
 
+  /* Header oculto en mobile — bottom nav lo reemplaza */
   .pos-topbar {
-    display: grid;
-    grid-template-columns: 68px minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "menu title"
-      "menu actions";
-    align-items: stretch;
-    gap: 10px 12px;
-    min-height: 126px;
-    padding: 12px;
-  }
-
-  .topbar-title {
-    grid-area: title;
-    width: auto;
-    min-width: 0;
-    align-self: end;
-  }
-
-  .topbar-title__text {
-    min-width: 0;
-  }
-
-  .topbar-title__text h1,
-  .topbar-title__text small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .topbar-actions {
-    grid-area: actions;
-    width: auto;
-    min-width: 0;
-    justify-content: flex-start;
-    align-self: start;
-    gap: 8px;
-  }
-
-  .mobile-menu-button {
-    grid-area: menu;
-    display: grid !important;
-    place-items: center;
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 102px;
-    padding: 0 !important;
-    border-radius: 14px !important;
-    font-size: 1.25rem !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-
-  .mobile-menu-button i {
-    display: block;
-    font-size: 1.35rem;
-    line-height: 1;
-    margin: 0;
-  }
-
-  /* La tienda ya se ve en el subtítulo del encabezado. */
-  .topbar-location {
     display: none;
   }
 
-  .user-chip {
-    min-width: 0;
+  /* Espacio inferior para no quedar detrás del bottom nav */
+  .pos-workspace {
+    padding-bottom: var(--pos-bottom-nav-h);
+    padding-top: 0;
   }
 
-  .user-chip__meta {
-    min-width: 0;
-  }
-
-  .user-chip__meta strong,
-  .user-chip__meta small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .pos-content-shell {
+    min-height: calc(100dvh - 76px);
   }
 }
 
-@media (max-width: 420px) {
-  .user-chip__meta {
-    display: none;
+/* ─── Bottom nav ─────────────────────────────────────────────────── */
+.pos-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .pos-bottom-nav {
+    display: flex;
+    align-items: stretch;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    background: #ffffff;
+    border-top: 1px solid #e4ebe6;
+    box-shadow: 0 -4px 20px rgba(11, 31, 58, 0.09);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* el FAB central sobresale por encima del borde superior */
+    overflow: visible;
   }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 10px 4px;
+    min-height: 60px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9aabb5;
+    transition: color 0.15s ease;
+  }
+
+  .bottom-nav-item i {
+    font-size: 1.3rem;
+    line-height: 1;
+    transition: transform 0.15s ease;
+  }
+
+  .bottom-nav-item span {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .bottom-nav-item.is-active {
+    color: var(--primary-600);
+  }
+
+  .bottom-nav-item.is-active i {
+    transform: translateY(-2px);
+  }
+
+  .bottom-nav-item:hover {
+    color: var(--primary-500);
+  }
+
+  /* ── FAB central: Vender ───────────────────────────────────────── */
+  .bottom-nav-fab-slot {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 60px;
+    padding-bottom: 8px;
+  }
+
+  .bottom-nav-fab {
+    position: absolute;
+    top: -24px;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    /* el aro blanco lo funde con la barra (efecto "encastrado") */
+    border: 4px solid #ffffff;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-400) 0%, var(--primary-600) 100%);
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(15, 158, 46, 0.42);
+    transform: translateX(-50%);
+    /* el anclaje (top/tamaño) va lento y con resorte; el feedback táctil rápido */
+    transition:
+      top 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      height 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      border-width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.16s ease,
+      box-shadow 0.28s ease,
+      filter 0.16s ease;
+  }
+
+  .bottom-nav-fab i {
+    font-size: 1.5rem;
+    line-height: 1;
+    transition: font-size 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .bottom-nav-fab:hover {
+    transform: translateX(-50%) translateY(-3px);
+    box-shadow: 0 14px 28px rgba(15, 158, 46, 0.5);
+    filter: brightness(1.04);
+  }
+
+  .bottom-nav-fab:focus-visible {
+    outline: 3px solid var(--primary-200);
+    outline-offset: 3px;
+  }
+
+  /* En la página de Vender el FAB baja al nivel de los demás ítems para no
+     chocar con la barra del carrito, pero conserva su círculo verde. */
+  .bottom-nav-fab.is-active {
+    top: 6px;
+    width: 40px;
+    height: 40px;
+    border-width: 0;
+    box-shadow: 0 4px 12px rgba(15, 158, 46, 0.32);
+  }
+
+  .bottom-nav-fab.is-active i {
+    font-size: 1.15rem;
+  }
+
+  .bottom-nav-fab.is-active:hover {
+    transform: translateX(-50%) translateY(-2px);
+    box-shadow: 0 7px 16px rgba(15, 158, 46, 0.4);
+  }
+
+  .bottom-nav-fab-label {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: var(--primary-600);
+  }
+}
+
+/* ─── More drawer ─────────────────────────────────────────────────
+   El Drawer se teleporta al <body> vía Portal, así que los estilos
+   scoped con :deep() no llegan. Los estilos reales están en el bloque
+   <style> global al final del archivo.
+──────────────────────────────────────────────────────────────────── */
+
+.more-drawer-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f1f17;
+}
+
+.more-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 4px 0 8px;
+}
+
+.more-drawer-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: #f5f7f6;
+  border: 1px solid #e8eee9;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.more-drawer-item:hover {
+  background: #edfdf5;
+  border-color: var(--primary-200);
+}
+
+.more-drawer-item.is-active {
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
+  border-color: transparent;
+}
+
+.more-drawer-item.is-active .more-drawer-icon,
+.more-drawer-item.is-active .more-drawer-label {
+  color: #ffffff;
+}
+
+.more-drawer-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--primary-700);
+  font-size: 1.15rem;
+}
+
+.more-drawer-item.is-active .more-drawer-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.more-drawer-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #203049;
+  letter-spacing: 0.01em;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.more-drawer-item--logout .more-drawer-icon {
+  color: #c0392b;
+}
+
+.more-drawer-item--logout .more-drawer-label {
+  color: #c0392b;
+}
+
+.more-drawer-item--logout:hover {
+  background: #fff5f5;
+  border-color: #f5c6c6;
+}
+
+.more-drawer-icon--haru {
+  background: linear-gradient(135deg, #e8f5fe 0%, #d0eaff 100%);
+}
+
+.more-drawer-haru-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.more-drawer-item--haru:hover {
+  background: #edf6ff;
+  border-color: #b3d9ff;
+}
+
+</style>
+
+<!-- Global: el Drawer se teleporta al <body>, los scoped no aplican -->
+<style>
+/* PrimeVue hardcodea height: 10rem en .p-drawer-bottom .p-drawer.
+   Estos overrides globales lo convierten en auto-height con límite. */
+.pos-more-drawer {
+  height: auto !important;
+  max-height: 80vh !important;
+  border-radius: 20px 20px 0 0 !important;
+}
+
+.pos-more-drawer .p-drawer-content {
+  /* flex-grow: 1 + height: 100% del preset → quita la altura fija */
+  height: auto !important;
+  flex: 0 0 auto !important;
+  overflow-y: auto;
 }
 </style>

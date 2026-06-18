@@ -1,3 +1,5 @@
+import { usePosOfflineCash } from '~/composables/pos/offline/usePosOfflineCash'
+
 export type PosCashStatus = 'abierta' | 'cerrada'
 export type PosCashMovementType = 'Ingreso' | 'Egreso'
 export type PosCashPaymentMethod = 'Efectivo' | 'QR'
@@ -28,12 +30,14 @@ type PosSalePaymentLine = {
 }
 
 type PosSaleLine = {
+  id: string
   name: string
   quantity: number
   price: number
 }
 
 type RegisterSaleInput = {
+  clientOperationId?: string
   number: string
   items: PosSaleLine[]
   paymentLines: PosSalePaymentLine[]
@@ -62,6 +66,8 @@ type CashOverviewPayload = {
 }
 
 export function usePosCashRegister() {
+  const session = usePosSession()
+  const offlineCash = usePosOfflineCash()
   const cashStatus = useState<PosCashStatus>('nexa-pos-cash-status', () => 'cerrada')
   const movements = useState<PosCashMovement[]>('nexa-pos-cash-movements', () => [])
   const productSales = useState<PosCashProductSale[]>('nexa-pos-cash-product-sales', () => [])
@@ -73,6 +79,10 @@ export function usePosCashRegister() {
     cashStatus.value = overview.session?.status ?? 'cerrada'
     movements.value = overview.movements
     productSales.value = overview.productSales
+
+    if (session.value?.storeId) {
+      void offlineCash.saveStatus(session.value.storeId, cashStatus.value).catch(() => null)
+    }
   }
 
   async function loadCashData() {
@@ -80,6 +90,17 @@ export function usePosCashRegister() {
 
     try {
       applyOverview(await $fetch<CashOverviewPayload>('/api/pos/cash'))
+    } catch (error) {
+      if (!session.value?.storeId) {
+        throw error
+      }
+
+      const localStatus = await offlineCash.getStatus(session.value.storeId)
+      if (!localStatus) {
+        throw error
+      }
+
+      cashStatus.value = localStatus
     } finally {
       isLoading.value = false
     }

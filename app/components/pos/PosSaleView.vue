@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { usePosOfflineProducts } from '~/composables/pos/offline/usePosOfflineProducts'
+import { usePosOfflineSales } from '~/composables/pos/offline/usePosOfflineSales'
+
 type Product = {
   id: string
   name: string
@@ -6,7 +9,6 @@ type Product = {
   price: number
   stock: number
   kind: 'producto' | 'servicio' | 'combo'
-  variablePrice?: boolean
 }
 
 type CartLine = Product & {
@@ -43,6 +45,8 @@ type SaleReceipt = {
 
 const session = usePosSession()
 const cashRegister = usePosCashRegister()
+const offlineProducts = usePosOfflineProducts()
+const offlineSales = usePosOfflineSales()
 const search = ref('')
 const discount = ref(0)
 const catalogView = ref<'grid' | 'table'>('grid')
@@ -71,8 +75,12 @@ const manualDiscountValue = ref<number | null>(null)
 const appliedDiscountLabel = ref('')
 const lastReceipt = ref<SaleReceipt | null>(null)
 const products = ref<Product[]>([])
+const productsLoading = ref(true)
 const cart = ref<CartLine[]>([])
 const saleSaveError = ref('')
+const offlineNotice = ref('')
+const pendingSales = ref(0)
+const syncingSales = ref(false)
 const recentAddedProductId = ref('')
 const cartLineFeedback = ref<{ id: number, productId: string, label: string } | null>(null)
 const cartPulse = ref(false)
@@ -82,17 +90,36 @@ let recentAddedTimer: ReturnType<typeof window.setTimeout> | null = null
 let cartFlyTimer: ReturnType<typeof window.setTimeout> | null = null
 let cartLineFeedbackId = 0
 let cartFlyId = 0
+const handleOnline = () => {
+  void syncPendingSales()
+}
 const paymentOptions: Array<{ id: PaymentMethod, icon: string, label: string, detail: string }> = [
   { id: 'efectivo', icon: 'pi pi-money-bill', label: 'Efectivo', detail: 'Bolivianos en mano' },
   { id: 'qr', icon: 'pi pi-mobile', label: 'QR / Transferencia', detail: 'Mostrar QR de pago' },
 ]
+
+// Filtro por categoría (Filtros). '' = todas las categorías.
+const categoryFilter = ref<string>('')
+const filtersActive = computed(() => categoryFilter.value !== '')
+
+// Categorías disponibles, derivadas de los productos cargados.
+const categories = computed(() => {
+  const set = new Set<string>()
+  for (const product of products.value) {
+    if (product.category) {
+      set.add(product.category)
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
 
 const filteredProducts = computed(() => {
   const term = search.value.trim().toLowerCase()
 
   return products.value.filter((product) => {
     const matchesSearch = !term || product.name.toLowerCase().includes(term)
-    return matchesSearch
+    const matchesCategory = !categoryFilter.value || product.category === categoryFilter.value
+    return matchesSearch && matchesCategory
   })
 })
 
@@ -100,8 +127,18 @@ const subtotal = computed(() => cart.value.reduce((sum, line) => sum + line.pric
 const total = computed(() => Math.max(subtotal.value - discount.value, 0))
 const productCount = computed(() => cart.value.reduce((sum, line) => sum + line.quantity, 0))
 const isCashClosed = computed(() => cashRegister.cashStatus.value === 'cerrada')
-const canCharge = computed(() => cart.value.length > 0 && !isCashClosed.value && !cashRegister.isLoading.value)
+// En cotización es solo un presupuesto: no requiere caja abierta.
+const canCharge = computed(() => {
+  if (cart.value.length === 0 || cashRegister.isLoading.value) {
+    return false
+  }
+  return saleMode.value === 'cotizacion' || !isCashClosed.value
+})
 const chargeButtonLabel = computed(() => {
+  if (saleMode.value === 'cotizacion') {
+    return `Guardar cotización · Bs ${money(total.value)}`
+  }
+
   if (isCashClosed.value) {
     return 'Abre caja para vender'
   }
@@ -163,6 +200,13 @@ onMounted(async () => {
     loadProducts(),
     cashRegister.loadCashData().catch(() => null),
   ])
+
+  await refreshPendingSales()
+  await syncPendingSales()
+
+  if (import.meta.client) {
+    window.addEventListener('online', handleOnline)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -180,6 +224,7 @@ onBeforeUnmount(() => {
 
   if (import.meta.client) {
     document.body.classList.remove('pos-cart-sheet-open')
+    window.removeEventListener('online', handleOnline)
   }
 })
 
@@ -254,12 +299,88 @@ function clearSale() {
   cart.value = []
   discount.value = 0
   appliedDiscountLabel.value = ''
+  saleMode.value = 'venta'
   resetCheckout()
   cartOpen.value = false
 }
 
 function openCart() {
   cartOpen.value = true
+}
+
+// Interruptor Venta <-> Cotización. El flujo de cotización ya existe en el panel
+// de cobro; aquí damos un acceso claro con aviso para usuarios no técnicos.
+async function startQuote() {
+  if (saleMode.value === 'cotizacion') {
+    saleMode.value = 'venta'
+    return
+  }
+
+  saleMode.value = 'cotizacion'
+
+  const { default: Swal } = await import('sweetalert2')
+  void Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'info',
+    title: 'Estás cotizando',
+    text: 'No se cobrará. Agrega productos y guarda el presupuesto.',
+    showConfirmButton: false,
+    timer: 3200,
+    timerProgressBar: true,
+  })
+
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    openCart()
+  }
+}
+
+// Filtros: popover con las categorías de los productos.
+const filtersPop = ref<{ toggle: (e: Event) => void, hide: () => void } | null>(null)
+
+function toggleFilters(event: Event) {
+  filtersPop.value?.toggle(event)
+}
+
+function pickCategory(category: string) {
+  categoryFilter.value = category
+  filtersPop.value?.hide()
+}
+
+// Scanner por interfaz (lector USB/Bluetooth tipo keyboard-wedge): el lector
+// "teclea" el código en el buscador enfocado y manda Enter. Armar el scanner
+// solo enfoca el buscador y deja todo listo para escanear en cadena.
+const searchInputRef = ref<{ $el?: HTMLInputElement } | null>(null)
+const scannerArmed = ref(false)
+
+function armScanner() {
+  scannerArmed.value = !scannerArmed.value
+
+  if (scannerArmed.value) {
+    search.value = ''
+    nextTick(() => searchInputRef.value?.$el?.focus())
+  }
+}
+
+// Enter en el buscador: con el lector equivale a "fin de código". Agrega el
+// único/primer producto coincidente al carrito y limpia para el siguiente.
+function onScanEnter() {
+  const matches = filteredProducts.value
+
+  if (!matches.length) {
+    return
+  }
+
+  const product = matches[0]
+
+  if (product) {
+    addProduct(product)
+    search.value = ''
+  }
+
+  if (scannerArmed.value) {
+    nextTick(() => searchInputRef.value?.$el?.focus())
+  }
 }
 
 function closeCart() {
@@ -286,15 +407,53 @@ async function confirmCharge() {
   saleSaveError.value = ''
 
   if (receipt.mode === 'venta') {
+    const clientOperationId = offlineSales.createOperationId(session.value?.storeId)
+    receipt = {
+      ...receipt,
+      number: clientOperationId,
+    }
+
     try {
-      const saleResult = await cashRegister.registerSale(receipt)
+      const saleResult = await cashRegister.registerSale({ ...receipt, clientOperationId })
       receipt = {
         ...receipt,
         number: saleResult.saleNumber ?? receipt.number,
       }
+      applyLocalStock(receipt.items)
+      void saveProductsLocally().catch(() => null)
+      void refreshPendingSales()
     } catch {
-      saleSaveError.value = 'No se pudo guardar la venta. Revisa la conexión e intenta nuevamente.'
-      return
+      const storeId = session.value?.storeId
+
+      if (!storeId) {
+        saleSaveError.value = 'No se pudo guardar la venta porque no hay tienda activa.'
+        return
+      }
+
+      try {
+        await offlineSales.queueCreate(storeId, {
+          clientOperationId,
+          number: receipt.number,
+          items: receipt.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+          paymentLines: receipt.paymentLines,
+          subtotal: receipt.subtotal,
+          discount: receipt.discount,
+          total: receipt.total,
+        })
+      } catch {
+        saleSaveError.value = 'No se pudo guardar la venta ni en servidor ni en este dispositivo.'
+        return
+      }
+
+      applyLocalStock(receipt.items)
+      void saveProductsLocally().catch(() => null)
+      await refreshPendingSales()
+      offlineNotice.value = 'Venta guardada localmente. Se sincronizará cuando vuelva internet.'
     }
   }
 
@@ -304,8 +463,11 @@ async function confirmCharge() {
   receiptOpen.value = true
 }
 
+// OJO: no reseteamos saleMode aquí. resetCheckout se llama al ABRIR el cobro
+// (chargeSale), y borrar el modo cotización justo antes de mostrar el diálogo
+// hacía que el tab volviera a "Venta". El modo se reinicia en clearSale (al
+// terminar/limpiar la venta).
 function resetCheckout() {
-  saleMode.value = 'venta'
   paymentMethod.value = 'efectivo'
   splitPayment.value = false
   clearSplitPayment()
@@ -624,8 +786,77 @@ function money(value: number) {
 }
 
 async function loadProducts() {
-  const response = await $fetch<{ products: Product[] }>('/api/pos/products')
-  products.value = response.products
+  productsLoading.value = true
+  offlineNotice.value = ''
+
+  try {
+    const response = await $fetch<{ products: Product[] }>('/api/pos/products')
+    products.value = response.products
+    void saveProductsLocally().catch(() => null)
+  }
+  catch {
+    const storeId = session.value?.storeId
+    const localProducts = storeId ? await offlineProducts.list(storeId).catch(() => []) : []
+    products.value = localProducts
+    offlineNotice.value = localProducts.length
+      ? 'Catálogo cargado desde este dispositivo. Los cambios se actualizarán al volver internet.'
+      : 'No se pudo cargar el catálogo. Abre el POS con internet al menos una vez para vender offline.'
+  }
+  finally {
+    productsLoading.value = false
+  }
+}
+
+async function saveProductsLocally() {
+  const storeId = session.value?.storeId
+  if (!storeId) {
+    return
+  }
+
+  await offlineProducts.save(storeId, products.value)
+}
+
+function applyLocalStock(items: CartLine[]) {
+  for (const item of items) {
+    if (item.kind === 'servicio') {
+      continue
+    }
+
+    const product = products.value.find((current) => current.id === item.id)
+    if (product) {
+      product.stock = Math.max(product.stock - item.quantity, 0)
+    }
+  }
+}
+
+async function refreshPendingSales() {
+  const storeId = session.value?.storeId
+  try {
+    pendingSales.value = storeId ? await offlineSales.pendingCount(storeId) : 0
+  } catch {
+    pendingSales.value = 0
+  }
+}
+
+async function syncPendingSales() {
+  const storeId = session.value?.storeId
+  if (!storeId || syncingSales.value) {
+    return
+  }
+
+  const count = await offlineSales.pendingCount(storeId).catch(() => 0)
+  if (!count) {
+    pendingSales.value = 0
+    return
+  }
+
+  syncingSales.value = true
+  try {
+    await offlineSales.sync(storeId, (payload) => cashRegister.registerSale(payload))
+  } finally {
+    syncingSales.value = false
+    await refreshPendingSales()
+  }
 }
 
 function showCartFeedback(line: CartLine, label: string, event?: Event) {
@@ -668,13 +899,19 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   const sourceRect = source.getBoundingClientRect()
   const targetRect = target.getBoundingClientRect()
 
+  // El chip mide hasta 178px y se centra con translate(-50%): para que no se
+  // salga de la pantalla, acotamos su X al ancho del viewport (con margen).
+  const CHIP_HALF = 95
+  const MARGIN = 10
+  const clampX = (x: number) => Math.min(Math.max(x, CHIP_HALF + MARGIN), window.innerWidth - CHIP_HALF - MARGIN)
+
   cartFlyId += 1
   cartFlyFeedback.value = {
     id: cartFlyId,
     name: line.name,
-    fromX: sourceRect.left + Math.min(sourceRect.width / 2, 58),
+    fromX: clampX(sourceRect.left + Math.min(sourceRect.width / 2, 58)),
     fromY: sourceRect.top + Math.min(sourceRect.height / 2, 52),
-    toX: targetRect.left + 34,
+    toX: clampX(targetRect.left + 34),
     toY: targetRect.top + targetRect.height / 2,
   }
 
@@ -684,7 +921,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
   cartFlyTimer = window.setTimeout(() => {
     cartFlyFeedback.value = null
-  }, 1200)
+  }, 1700)
 }
 
 </script>
@@ -692,26 +929,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 <template>
   <div class="sale-content">
     <section class="catalog-area">
-      <header class="pos-toolbar">
-        <div class="toolbar-group">
-          <span class="toolbar-label">
-            <i class="pi pi-layers" aria-hidden="true" />
-            Herramientas
-          </span>
-
-          <label class="toolbar-search">
-            <i class="pi pi-search" aria-hidden="true" />
-            <InputText v-model="search" type="search" placeholder="Buscar" autocomplete="off" unstyled />
-          </label>
-
-          <Button type="button" class="toolbar-action" icon="pi pi-barcode" label="Scanner" outlined size="small" />
-          <Button type="button" class="toolbar-action" icon="pi pi-star" label="Accesos" outlined size="small" />
-          <Button type="button" class="toolbar-action" icon="pi pi-filter" label="Filtros" outlined size="small" />
-        </div>
-
-        <Button type="button" class="quote-button" icon="pi pi-file-edit" label="Cotizaciones" outlined size="small" />
-      </header>
-
       <div class="pos-titlebar">
         <div>
           <span>{{ session?.store }}</span>
@@ -738,8 +955,136 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         </div>
       </div>
 
+      <header class="pos-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">
+            <i class="pi pi-layers" aria-hidden="true" />
+            Herramientas
+          </span>
+
+          <IconField class="toolbar-search">
+            <InputIcon class="pi pi-search" />
+            <InputText
+              ref="searchInputRef"
+              v-model="search"
+              type="search"
+              placeholder="Buscar nombre o escanear"
+              autocomplete="off"
+              @keyup.enter="onScanEnter"
+              @blur="scannerArmed = false"
+            />
+          </IconField>
+
+          <Button
+            type="button"
+            class="toolbar-action"
+            :class="{ 'is-armed': scannerArmed }"
+            icon="pi pi-barcode"
+            :label="scannerArmed ? 'Escaneando…' : 'Scanner'"
+            outlined
+            size="small"
+            @click="armScanner"
+          />
+          <Button
+            type="button"
+            class="toolbar-action"
+            :class="{ 'is-armed': filtersActive }"
+            icon="pi pi-filter"
+            :label="filtersActive ? categoryFilter : 'Filtros'"
+            outlined
+            size="small"
+            @click="toggleFilters"
+          />
+        </div>
+
+        <Button
+          type="button"
+          class="quote-button"
+          :class="{ 'is-active': saleMode === 'cotizacion' }"
+          icon="pi pi-file-edit"
+          :label="saleMode === 'cotizacion' ? 'Cotizando' : 'Cotizar'"
+          outlined
+          size="small"
+          @click="startQuote"
+        />
+      </header>
+
+      <Popover ref="filtersPop" class="filters-pop">
+        <div class="filters-pop__panel">
+          <strong class="filters-pop__title">Filtrar por categoría</strong>
+          <button
+            type="button"
+            class="filters-pop__item"
+            :class="{ 'is-active': categoryFilter === '' }"
+            @click="pickCategory('')"
+          >
+            <i class="pi pi-th-large" aria-hidden="true" />
+            Todas las categorías
+          </button>
+          <button
+            v-for="category in categories"
+            :key="category"
+            type="button"
+            class="filters-pop__item"
+            :class="{ 'is-active': categoryFilter === category }"
+            @click="pickCategory(category)"
+          >
+            <i class="pi pi-tag" aria-hidden="true" />
+            {{ category }}
+          </button>
+          <p v-if="!categories.length" class="filters-pop__empty">
+            Tus productos aún no tienen categorías.
+          </p>
+        </div>
+      </Popover>
+
+      <Message v-if="offlineNotice" severity="warn" size="small" icon="pi pi-wifi">
+        {{ offlineNotice }}
+      </Message>
+
+      <Message v-if="pendingSales" severity="info" size="small" icon="pi pi-cloud-upload">
+        {{ pendingSales }} venta{{ pendingSales === 1 ? '' : 's' }} pendiente{{ pendingSales === 1 ? '' : 's' }} de sincronizar.
+        <Button
+          type="button"
+          text
+          size="small"
+          icon="pi pi-refresh"
+          :label="syncingSales ? 'Sincronizando' : 'Sincronizar'"
+          :loading="syncingSales"
+          @click="syncPendingSales"
+        />
+      </Message>
+
       <div class="catalog-scroll" :class="{ 'is-table': catalogView === 'table' }">
-        <section v-if="catalogView === 'grid'" class="product-grid" aria-label="Productos disponibles">
+        <!-- Cargando catálogo -->
+        <div v-if="productsLoading" class="catalog-empty" role="status" aria-live="polite">
+          <span class="catalog-empty__icon"><i class="pi pi-spin pi-spinner" aria-hidden="true" /></span>
+          <h3>Cargando tu catálogo…</h3>
+          <p>Estamos trayendo tus productos.</p>
+        </div>
+
+        <!-- Sin productos en el inventario -->
+        <div v-else-if="!products.length" class="catalog-empty">
+          <span class="catalog-empty__icon"><i class="pi pi-box" aria-hidden="true" /></span>
+          <h3>Aún no tienes productos</h3>
+          <p>Agrega productos a tu inventario para empezar a vender desde el catálogo.</p>
+          <NuxtLink to="/pos/catalogo" class="catalog-empty__cta">
+            <i class="pi pi-plus" aria-hidden="true" />Ir a inventario
+          </NuxtLink>
+        </div>
+
+        <!-- Búsqueda sin coincidencias -->
+        <div v-else-if="!filteredProducts.length" class="catalog-empty">
+          <span class="catalog-empty__icon"><i class="pi pi-search" aria-hidden="true" /></span>
+          <h3>Sin resultados</h3>
+          <p v-if="search.trim()">No encontramos productos para “{{ search }}”. Prueba con otro término.</p>
+          <p v-else-if="filtersActive">No hay productos en “{{ categoryFilter }}”.</p>
+          <button v-if="filtersActive" type="button" class="catalog-empty__cta" @click="pickCategory('')">
+            <i class="pi pi-times" aria-hidden="true" />Quitar filtro
+          </button>
+        </div>
+
+        <section v-else-if="catalogView === 'grid'" class="product-grid" aria-label="Productos disponibles">
           <article
             v-for="product in filteredProducts"
             :key="product.id"
@@ -750,11 +1095,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             @click="addProduct(product, $event)"
             @keydown="handleProductCardKeydown($event, product)"
           >
-            <span class="product-card__icon" :class="{ 'is-combo': product.kind === 'combo' }">
-              <i :class="product.kind === 'combo' ? 'pi pi-box' : 'pi pi-cube'" aria-hidden="true" />
-            </span>
-
-            <span class="product-card__kind">{{ product.kind }}</span>
             <button
               type="button"
               class="product-card__info"
@@ -766,9 +1106,11 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
             <strong>{{ product.name }}</strong>
 
-            <span v-if="product.variablePrice" class="product-chip">
-              <i class="pi pi-sparkles" aria-hidden="true" />
-              Precio por variante
+            <span class="product-card__meta">
+              <span class="product-card__icon" :class="{ 'is-combo': product.kind === 'combo' }">
+                <i :class="product.kind === 'combo' ? 'pi pi-box' : 'pi pi-cube'" aria-hidden="true" />
+              </span>
+              <span class="product-card__kind">{{ product.kind }}</span>
             </span>
 
             <span class="product-card__footer">
@@ -803,7 +1145,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             <div class="product-row__info">
               <strong>
                 {{ product.name }}
-                <span v-if="product.variablePrice" class="product-row__tag">Var</span>
                 <span v-if="product.kind === 'combo'" class="product-row__tag is-combo">Combo</span>
               </strong>
               <button type="button" @click.stop="openProductInfo(product)">Ver info</button>
@@ -826,13 +1167,13 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
     </section>
 
-    <aside ref="cartPanelEl" class="cart-panel" :class="{ 'is-pulsing': cartPulse, 'is-open': cartOpen }">
+    <aside ref="cartPanelEl" class="cart-panel" :class="{ 'is-pulsing': cartPulse, 'is-open': cartOpen, 'is-quote': saleMode === 'cotizacion' }">
       <span class="cart-sheet-handle" aria-hidden="true" />
       <header class="cart-header">
         <div class="flex gap-1 items-center">
-          <i class="pi pi-shopping-cart" aria-hidden="true" />
-          <strong>Carrito</strong>
-          <Badge :value="productCount" severity="success" />
+          <i :class="saleMode === 'cotizacion' ? 'pi pi-file-edit' : 'pi pi-shopping-cart'" aria-hidden="true" />
+          <strong>{{ saleMode === 'cotizacion' ? 'Cotización' : 'Carrito' }}</strong>
+          <Badge :value="productCount" :severity="saleMode === 'cotizacion' ? 'warn' : 'success'" />
         </div>
         <button type="button" class="cart-sheet-close" aria-label="Cerrar carrito" @click="closeCart">
           <i class="pi pi-chevron-down" aria-hidden="true" />
@@ -970,17 +1311,17 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
       ref="mobileCartBarEl"
       type="button"
       class="mobile-cart-bar"
-      :class="{ 'is-empty': !cart.length }"
+      :class="{ 'is-empty': !cart.length, 'is-quote': saleMode === 'cotizacion' }"
       :aria-label="cart.length ? `Ver carrito, ${productCount} artículos, total Bs ${money(total)}` : 'Carrito vacío'"
       @click="openCart"
     >
       <span class="mobile-cart-bar__icon">
-        <i class="pi pi-shopping-cart" aria-hidden="true" />
+        <i :class="saleMode === 'cotizacion' ? 'pi pi-file-edit' : 'pi pi-shopping-cart'" aria-hidden="true" />
         <span v-if="productCount" class="mobile-cart-bar__count">{{ productCount }}</span>
       </span>
       <span class="mobile-cart-bar__copy">
-        <strong>{{ cart.length ? 'Ver carrito' : 'Carrito vacío' }}</strong>
-        <small>{{ cart.length ? `${productCount} ${productCount === 1 ? 'artículo' : 'artículos'}` : 'Agrega productos del catálogo' }}</small>
+        <strong>{{ saleMode === 'cotizacion' ? (cart.length ? 'Ver cotización' : 'Cotización') : (cart.length ? 'Ver carrito' : 'Carrito vacío') }}</strong>
+        <small>{{ cart.length ? `${productCount} ${productCount === 1 ? 'artículo' : 'artículos'}` : (saleMode === 'cotizacion' ? 'Agrega productos al presupuesto' : 'Agrega productos del catálogo') }}</small>
       </span>
       <span class="mobile-cart-bar__total">
         <small>Total</small>
@@ -1122,8 +1463,8 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
       <div ref="checkoutScroll" class="checkout-panel__scroll">
         <header class="checkout-header">
           <div>
-            <span>Cobro de venta</span>
-            <h3>Cobrar venta</h3>
+            <span>{{ saleMode === 'cotizacion' ? 'Generar cotización' : 'Cobro de venta' }}</span>
+            <h3>{{ saleMode === 'cotizacion' ? 'Guardar cotización' : 'Cobrar venta' }}</h3>
           </div>
 
           <button type="button" aria-label="Cerrar cobro" @click="checkoutOpen = false">
@@ -1556,45 +1897,122 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   overflow-x: auto;
 }
 
-.toolbar-label,
-.toolbar-search {
+.toolbar-label {
   display: inline-flex;
   height: 34px;
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  border: 1px solid #d9e1ea;
+  border: 1px solid transparent;
   border-radius: 999px;
   background: #ffffff;
+  color: #8091a8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Buscador con IconField de PrimeVue: el InputText lleva la píldora. */
+.toolbar-search {
+  display: block;
+  flex: 0 0 auto;
+  width: 200px;
+}
+
+.toolbar-search :deep(.p-inputtext) {
+  width: 100%;
+  height: 34px;
+  padding-block: 0;
+  border-radius: 999px;
+  border-color: #d9e1ea;
   color: #17335c;
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-.toolbar-label {
-  border-color: transparent;
+.toolbar-search :deep(.p-inputtext::placeholder) {
+  color: #9aa7b8;
+  font-weight: 600;
+}
+
+.toolbar-search :deep(.p-inputicon) {
   color: #8091a8;
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.toolbar-search {
-  min-width: 142px;
-  padding: 0 12px;
-}
-
-.toolbar-search input {
-  width: 82px;
-  border: 0;
-  outline: 0;
-  background: transparent;
 }
 
 .quote-button {
   border-color: #f3c15e !important;
   color: #a65300 !important;
   background: #fffaf0 !important;
+}
+
+/* Scanner armado / filtro activo: resaltado verde. */
+.toolbar-action.is-armed {
+  border-color: var(--primary-500) !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-700)) !important;
+}
+
+/* Cotizar activo: el botón ámbar se rellena para indicar el modo. */
+.quote-button.is-active {
+  color: #ffffff !important;
+  border-color: #d98b1e !important;
+  background: linear-gradient(135deg, #f3a83a, #d97a14) !important;
+}
+
+/* Popover de filtros por categoría. */
+.filters-pop__panel {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.filters-pop__title {
+  padding: 2px 6px 6px;
+  color: #6b778a;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filters-pop__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f5f8fb;
+  color: #17335c;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.filters-pop__item:hover {
+  background: #eef4fa;
+}
+
+.filters-pop__item.is-active {
+  color: #ffffff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-700));
+}
+
+.filters-pop__item i {
+  font-size: 0.95rem;
+}
+
+.filters-pop__empty {
+  margin: 0;
+  padding: 8px 6px;
+  color: #6b778a;
+  font-size: 0.82rem;
 }
 
 .pos-titlebar {
@@ -1666,6 +2084,64 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   overscroll-behavior: contain;
 }
 
+/* --- Estado vacío / feedback inicial del catálogo --- */
+.catalog-empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 280px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.catalog-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: #e8f6ec;
+  color: #1c7a2c;
+  font-size: 1.6rem;
+}
+
+.catalog-empty h3 {
+  margin: 4px 0 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #1f2a22;
+}
+
+.catalog-empty p {
+  margin: 0;
+  max-width: 380px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #5c6b60;
+  line-height: 1.45;
+}
+
+.catalog-empty__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-600) 100%);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 800;
+  box-shadow: 0 8px 16px rgba(3, 24, 9, 0.18);
+  transition: filter 0.15s ease;
+}
+
+.catalog-empty__cta:hover {
+  filter: brightness(1.06);
+}
+
 .product-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(170px, 1fr));
@@ -1676,9 +2152,9 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .product-card {
   position: relative;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-height: 142px;
-  grid-template-rows: auto auto 1fr auto;
   gap: 8px;
   padding: 10px 10px 12px;
   border: 1px solid #dde4ec;
@@ -1700,10 +2176,27 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   box-shadow: 0 14px 28px rgba(15, 158, 46, 0.18);
 }
 
+/* Nombre arriba: ocupa el ancho dejando espacio al botón de info. */
+.product-card strong {
+  padding-right: 30px;
+  color: #071327;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+/* Fila de ícono + tipo, debajo del nombre. */
+.product-card__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .product-card__icon {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
   place-items: center;
   border-radius: 8px;
   color: #ffffff;
@@ -1716,13 +2209,11 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .product-card__kind {
-  position: absolute;
-  top: 14px;
-  left: 64px;
   font-size: 0.55rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #6b778a;
 }
 
 .product-card__info {
@@ -1741,13 +2232,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   cursor: pointer;
 }
 
-.product-card strong {
-  color: #071327;
-  font-size: 0.82rem;
-  font-weight: 900;
-  line-height: 1.25;
-}
-
 .product-chip {
   display: inline-flex;
   width: max-content;
@@ -1764,6 +2248,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .product-card__footer {
   display: flex;
+  margin-top: auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1967,6 +2452,31 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   margin: 0 14px;
   padding: 0;
   border-bottom: 1px solid #dfe7f0;
+}
+
+/* Modo cotización: acento ámbar en el carrito para que se note el cambio. */
+.cart-panel.is-quote {
+  border-color: #f0c277;
+  box-shadow: 0 8px 22px rgba(217, 122, 20, 0.12);
+}
+
+.cart-panel.is-quote .cart-header {
+  border-bottom-color: #f0d49a;
+}
+
+.cart-panel.is-quote .cart-header > div i,
+.cart-panel.is-quote .cart-header > div strong {
+  color: #b9700f;
+}
+
+/* La barra móvil del carrito también vira a ámbar al cotizar. */
+.mobile-cart-bar.is-quote:not(.is-empty) {
+  background: linear-gradient(135deg, #f3a83a, #d97a14);
+  box-shadow: 0 14px 30px rgba(217, 122, 20, 0.34);
+}
+
+.mobile-cart-bar.is-quote .mobile-cart-bar__count {
+  color: #b9700f;
 }
 
 .cart-lines {
@@ -3770,11 +4280,11 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .cart-fly-enter-active {
-  animation: fly-to-cart 1200ms cubic-bezier(0.18, 0.82, 0.22, 1) forwards;
+  animation: fly-to-cart 1700ms cubic-bezier(0.18, 0.82, 0.22, 1) forwards;
 }
 
 .cart-fly-enter-active span {
-  animation: fly-to-cart-scale 1200ms ease forwards;
+  animation: fly-to-cart-scale 1700ms ease forwards;
 }
 
 @keyframes fly-to-cart {
@@ -3783,12 +4293,18 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
     transform: translate3d(var(--from-x), var(--from-y), 0) translate(-50%, -50%) scale(0.76);
   }
 
-  16% {
+  12% {
     opacity: 1;
   }
 
-  58% {
+  /* Se mantiene visible y casi quieto un momento antes de salir disparado. */
+  62% {
+    opacity: 1;
     transform: translate3d(var(--from-x), calc(var(--from-y) - 42px), 0) translate(-50%, -50%) scale(1);
+  }
+
+  82% {
+    opacity: 1;
   }
 
   100% {
@@ -3933,12 +4449,10 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
     order: -1;
     flex: 1 1 100%;
     min-width: 0;
-    height: 42px;
   }
 
-  .toolbar-search input {
-    width: 100%;
-    flex: 1 1 auto;
+  .toolbar-search :deep(.p-inputtext) {
+    height: 42px;
   }
 
   .catalog-area {
@@ -3952,7 +4466,11 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   }
 
   .catalog-scroll.is-table {
-    overflow-x: hidden;
+    /* OJO: overflow-x: hidden + overflow-y: visible hace que el spec convierta
+       el eje Y en `auto`, creando un scroll interno colapsado (el "cuadrito").
+       En móvil las filas son flex y el head se oculta, así que no hay desborde
+       horizontal: dejamos visible para que scrollee con la página. */
+    overflow: visible;
   }
 
   /* El catálogo ocupa todo el ancho disponible sin desbordar en tablet. */
@@ -4092,7 +4610,9 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
     display: flex;
     position: fixed;
     right: var(--bar-gap);
-    bottom: calc(var(--bar-gap) + env(safe-area-inset-bottom));
+    /* Se apila por encima del menú inferior (en móvil --pos-bottom-nav-h > 0).
+       En tablet la variable es 0 y queda pegada al borde como antes. */
+    bottom: calc(var(--pos-bottom-nav-h, 0px) + var(--bar-gap));
     left: calc(var(--sheet-left) + var(--bar-gap));
     z-index: 40;
     align-items: center;
@@ -4208,7 +4728,9 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   .sale-content {
     --sheet-left: 0px;
     --bar-gap: 8px;
-    padding-bottom: calc(82px + env(safe-area-inset-bottom));
+    /* El menú inferior ya lo libra el padding del workspace (--pos-bottom-nav-h).
+       Aquí solo reservamos el alto de la barra de carrito que flota encima. */
+    padding-bottom: 88px;
   }
 
   .product-grid {

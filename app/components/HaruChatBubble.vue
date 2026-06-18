@@ -60,6 +60,8 @@ const previewDescription = computed(() => {
   return lastAssistantMessage.value || 'Tu conversacion sigue abierta. Puedes retomarla cuando quieras.'
 })
 
+const { trigger: haruTrigger } = useHaruChat()
+
 onMounted(() => {
   isCollapsed.value = localStorage.getItem(COLLAPSED_KEY) === '1'
   isChatOpen.value = localStorage.getItem(CHAT_OPEN_KEY) === '1'
@@ -67,6 +69,10 @@ onMounted(() => {
   if (isChatOpen.value) {
     void loadLatestConversation()
   }
+})
+
+watch(haruTrigger, () => {
+  openChat()
 })
 
 watch(messages, () => {
@@ -1029,6 +1035,13 @@ function onComposerKeydown(event: KeyboardEvent) {
   40% {
     opacity: 1;
     transform: translateY(-3px);
+  }
+}
+
+@media (max-width: 760px) {
+  /* En mobile el acceso es por el menú inferior — el flotante estorba */
+  .haru-chat:not(.is-open) {
+    display: none;
   }
 }
 

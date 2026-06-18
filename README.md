@@ -61,7 +61,7 @@ Los submodulos de Ingresos y Gastos son reportes:
 - `@primevue/nuxt-module`.
 - `@primeuix/themes/aura`.
 - Tailwind v4 con `@tailwindcss/vite` y `tailwindcss-primeui`.
-- PostgreSQL local/Supabase futuro.
+- PostgreSQL local o Supabase usado como PostgreSQL gestionado.
 - Gemini desde endpoints `server/api/`.
 - Deploy futuro en Vercel.
 
@@ -80,11 +80,15 @@ psql "$DATABASE_URL" -f database/reset.sql
 npm run db:migrate
 ```
 
-Para Supabase, ejecutar en el SQL Editor:
+Para Supabase no se usa el SQL Editor como fuente de verdad. Configura
+`DATABASE_URL` con la connection string de Supabase y ejecuta:
 
 ```bash
-supabase/reset-and-bootstrap.sql
+npm run db:migrate
 ```
+
+No hay una carpeta SQL separada para Supabase: se usa el mismo flujo de
+migraciones con `DATABASE_URL`.
 
 Documento tecnico:
 

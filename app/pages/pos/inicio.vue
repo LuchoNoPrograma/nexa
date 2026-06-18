@@ -42,18 +42,20 @@ const nf = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFra
 const salesText = computed(() => nf.format(salesTotal.value))
 
 // Accesos rápidos: pocos, grandes y reconocibles (Nielsen: reconocer > recordar).
+// Iconos 3D a color (Fluent Emoji) para una lectura inmediata y amigable.
 const quickActions: { label: string; icon: string; to?: string }[] = [
-  { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos' },
-  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja' },
-  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo' },
-  { label: 'Finanzas', icon: 'pi pi-chart-pie' },
+  { label: 'Ventas', icon: 'fluent-emoji:shopping-cart', to: '/pos' },
+  { label: 'Caja', icon: 'fluent-emoji:money-bag', to: '/pos/caja' },
+  { label: 'Inventario', icon: 'fluent-emoji:package', to: '/pos/catalogo' },
+  { label: 'Finanzas', icon: 'fluent-emoji:chart-increasing' },
 ]
 
 // Sugerencias en forma de pregunta: lenguaje cercano para gente de 20 a 60.
-const helpCards: { title: string; desc: string; icon: string; tone: string; action: string; to?: string }[] = [
-  { title: '¿Estoy ganando o perdiendo?', desc: 'Revisa tus ingresos y gastos del mes.', icon: 'pi pi-chart-line', tone: 'green', action: 'Ver finanzas', to: '/pos/finanzas' },
-  { title: '¿Cómo vendo más?', desc: 'Recibe ideas para atraer compradores.', icon: 'pi pi-users', tone: 'amber', action: 'Empezar', to: '/pos/diagnostico' },
-  { title: '¿Qué publico en mis redes?', desc: 'Haru te crea publicaciones listas para compartir.', icon: 'pi pi-megaphone', tone: 'green', action: 'Crear publicación', to: '/pos/marketing' },
+// `img`: ilustración de Haru (320x320 PNG transparente en /public/haru/).
+const helpCards: { title: string; img: string; tone: string; to?: string }[] = [
+  { title: '¿Estoy ganando o perdiendo?', img: '/haru/finanzas.png', tone: 'green', to: '/pos/finanzas' },
+  { title: '¿Cómo vendo más?', img: '/haru/clientes.png', tone: 'amber', to: '/pos/diagnostico' },
+  { title: '¿Qué publico en mis redes?', img: '/haru/marketing.png', tone: 'green', to: '/pos/marketing' },
 ]
 
 function go(to?: string) {
@@ -61,6 +63,9 @@ function go(to?: string) {
     void navigateTo(to)
   }
 }
+
+// Abre la burbuja de chat de Haru (mismo trigger que usa el menú/layout).
+const { open: openHaru } = useHaruChat()
 </script>
 
 <template>
@@ -93,15 +98,15 @@ function go(to?: string) {
           type="button"
           @click="go(action.to)"
         >
-          <span class="qa-icon"><i :class="action.icon" aria-hidden="true" /></span>
-          {{ action.label }}
+          <span class="qa-icon"><Icon :name="action.icon" aria-hidden="true" /></span>
+          <span class="md:text-base">{{ action.label }}</span>
         </button>
       </div>
     </section>
 
     <!-- Diagnóstico: CTA puntual, solo si aún no lo completa -->
     <NuxtLink v-if="diagnosticoEstado !== 'completado'" to="/pos/diagnostico" class="diag-cta">
-      <span class="diag-cta__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
+      <span class="diag-cta__icon"><Icon name="fluent-emoji:magnifying-glass-tilted-left" aria-hidden="true" /></span>
       <div class="diag-cta__copy">
         <strong>Haz el diagnóstico de tu negocio</strong>
         <small>10 preguntas (2-3 min) y recibes recomendaciones de NEXA.</small>
@@ -121,23 +126,30 @@ function go(to?: string) {
           :class="`is-${card.tone}`"
           @click="go(card.to)"
         >
-          <span class="suggest__icon"><i :class="card.icon" aria-hidden="true" /></span>
+          <span class="suggest__art">
+            <img
+              :src="card.img"
+              :alt="card.title"
+              loading="lazy"
+              decoding="async"
+              @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+            >
+          </span>
           <strong>{{ card.title }}</strong>
-          <small>{{ card.desc }}</small>
-          <span class="suggest__cta">{{ card.action }} <i class="pi pi-arrow-right" aria-hidden="true" /></span>
         </button>
       </div>
     </section>
 
     <!-- Haru: asistente IA -->
-    <section class="naru">
+    <button type="button" class="naru" @click="openHaru">
       <div class="naru__copy">
         <span class="naru__kicker"><i class="pi pi-sparkles" aria-hidden="true" />El asistente IA de NEXA</span>
         <h2>Soy Haru, pregúntame lo que quieras</h2>
         <p>Ideas de venta, precios, promociones o el siguiente paso para tu negocio.</p>
+        <span class="naru__cta">Abrir chat <i class="pi pi-arrow-right" aria-hidden="true" /></span>
       </div>
       <img src="/haru.png" alt="" aria-hidden="true" class="naru__mascot">
-    </section>
+    </button>
   </div>
 </template>
 
@@ -285,12 +297,12 @@ function go(to?: string) {
 .qa-icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: #eaf6e7;
-  color: #1c7a2c;
-  font-size: 1.05rem;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: #f3f8f1;
+  font-size: 2.5rem;
+  line-height: 1;
 }
 
 /* --- Diagnóstico CTA --- */
@@ -315,13 +327,13 @@ function go(to?: string) {
 .diag-cta__icon {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   border-radius: 12px;
   background: #dcefd2;
-  color: #0e8a28;
-  font-size: 1.15rem;
+  font-size: 1.6rem;
+  line-height: 1;
 }
 
 .diag-cta__copy {
@@ -355,8 +367,12 @@ function go(to?: string) {
 }
 
 /* --- Sugerencias --- */
+.suggest {
+  padding-bottom: 18px;
+}
+
 .suggest__title {
-  margin: 0 0 2px;
+  margin: 0 0 10px;
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
   font-size: 1.05rem;
   font-weight: 900;
@@ -369,73 +385,94 @@ function go(to?: string) {
 }
 
 .suggest__card {
+  position: relative;
   display: grid;
-  gap: 6px;
-  padding: 16px;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  padding: 18px 12px;
   border: 1px solid #e7eee8;
-  border-radius: 16px;
-  background: #fff;
-  text-align: left;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7faf6 100%);
+  text-align: center;
   cursor: pointer;
+  overflow: hidden;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+/* Barra de acento superior por tono, sutil hasta el hover. */
+.suggest__card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  opacity: 0.5;
+  transition: opacity 0.18s ease;
+}
+
+.is-green.suggest__card::before {
+  background: linear-gradient(90deg, #0e8a28, #14a634);
+}
+
+.is-amber.suggest__card::before {
+  background: linear-gradient(90deg, #d98b1e, #f3a83a);
 }
 
 .suggest__card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px);
   border-color: #cfe3c6;
-  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.1);
 }
 
-.suggest__icon {
+.suggest__card:hover::before {
+  opacity: 1;
+}
+
+/* Ilustración de Haru con un disco de color suave detrás (le da vida). */
+.suggest__art {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  font-size: 1.25rem;
+  width: 100%;
+  max-width: 150px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  overflow: hidden;
+  transition: transform 0.2s ease;
 }
 
-.is-green .suggest__icon {
-  background: #eaf6e7;
-  color: #1c7a2c;
+.is-green .suggest__art {
+  background: radial-gradient(circle at 50% 42%, #e9f7e6 0%, #f4faf2 70%);
 }
 
-.is-amber .suggest__icon {
-  background: #fdf2dc;
-  color: #b9781a;
+.is-amber .suggest__art {
+  background: radial-gradient(circle at 50% 42%, #fdf0d6 0%, #fbf7ee 70%);
 }
 
-.is-slate .suggest__icon {
-  background: #eef1f4;
-  color: #5b6675;
+.suggest__card:hover .suggest__art {
+  transform: scale(1.05);
+}
+
+.suggest__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .suggest__card strong {
   font-size: 0.92rem;
   font-weight: 900;
   line-height: 1.25;
+  color: #16321f;
+  transition: color 0.18s ease;
 }
 
-.suggest__card small {
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: #6b7a6f;
-  line-height: 1.4;
+.is-green.suggest__card:hover strong {
+  color: #0e7a26;
 }
 
-.suggest__cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 0.76rem;
-  font-weight: 900;
-  color: #1c7a2c;
-}
-
-.is-slate .suggest__cta {
-  color: #8a93a0;
+.is-amber.suggest__card:hover strong {
+  color: #b9781a;
 }
 
 /* --- Haru --- */
@@ -444,13 +481,36 @@ function go(to?: string) {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  width: 100%;
   min-height: 172px;
   overflow: hidden;
   padding: 20px 175px 20px 22px;
+  border: 0;
   border-radius: 18px;
   background: linear-gradient(120deg, #063718, #0e7a26 70%, #14a634);
   color: #fff;
+  text-align: left;
+  cursor: pointer;
   box-shadow: 0 16px 34px rgba(6, 55, 24, 0.26);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.naru:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px rgba(6, 55, 24, 0.32);
+}
+
+.naru__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 8px 15px;
+  width: max-content;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .naru__kicker {
@@ -527,13 +587,25 @@ function go(to?: string) {
   }
 
   .qa-icon {
-    width: 36px;
-    height: 36px;
-    font-size: 0.95rem;
+    width: 38px;
+    height: 38px;
+    font-size: 1.75rem;
   }
 
+  /* Cuadritos: se mantienen 3 en fila también en móvil. */
   .suggest__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .suggest__card {
+    gap: 8px;
+    padding: 10px 8px 12px;
+  }
+
+  .suggest__card strong {
+    font-size: 0.74rem;
+    line-height: 1.2;
   }
 
   .diag-cta {

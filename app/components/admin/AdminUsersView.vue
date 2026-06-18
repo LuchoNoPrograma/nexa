@@ -4,7 +4,10 @@ import { FilterMatchMode } from '@primevue/core/api'
 type UserRow = {
   id: string
   name: string
-  email: string
+  email: string | null
+  ci: string | null
+  phone: string | null
+  access: string
   store: string
   role: 'super_admin' | 'propietario' | 'administrador' | 'cajero'
   status: 'activo' | 'invitado' | 'bloqueado'
@@ -19,15 +22,19 @@ const statusOptions = ['activo', 'invitado', 'bloqueado']
 const filters = ref({
   global: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS },
   name: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS },
-  email: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS },
+  access: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS },
   store: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS },
   role: { value: null as string | null, matchMode: FilterMatchMode.EQUALS },
   status: { value: null as string | null, matchMode: FilterMatchMode.EQUALS },
 })
 
 const activeUserCount = computed(() => users.value.filter((user) => user.status === 'activo').length)
-const pendingUserCount = computed(() => users.value.filter((user) => user.status === 'invitado').length)
 const storeUserCount = computed(() => users.value.filter((user) => user.store !== 'Plataforma').length)
+const usersWithAccessCount = computed(() => users.value.filter((user) => user.email || user.ci || user.phone).length)
+
+function accessLabel(user: UserRow) {
+  return user.email || user.ci || user.phone || 'Sin identificador'
+}
 
 function roleSeverity(role: UserRow['role']) {
   return role === 'super_admin' ? 'contrast' : role === 'propietario' ? 'success' : 'info'
@@ -75,8 +82,8 @@ async function loadUsers() {
         <strong>{{ storeUserCount }}</strong>
       </article>
       <article>
-        <span>Pendientes</span>
-        <strong>{{ pendingUserCount }}</strong>
+        <span>Con acceso</span>
+        <strong>{{ usersWithAccessCount }}</strong>
       </article>
     </section>
 
@@ -90,7 +97,7 @@ async function loadUsers() {
       paginator
       :rows="10"
       stripedRows
-      :globalFilterFields="['name', 'email', 'store', 'role', 'status']"
+      :globalFilterFields="['name', 'email', 'ci', 'phone', 'store', 'role', 'status']"
     >
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -112,9 +119,12 @@ async function loadUsers() {
         </template>
       </Column>
 
-      <Column field="email" header="Correo" :showFilterMenu="false" style="min-width: 14rem">
+      <Column field="access" header="Acceso" :showFilterMenu="false" style="min-width: 14rem">
+        <template #body="{ data }">
+          <span>{{ accessLabel(data) }}</span>
+        </template>
         <template #filter="{ filterModel, filterCallback }">
-          <InputText v-model="filterModel.value" type="text" placeholder="Buscar correo" @input="filterCallback()" />
+          <InputText v-model="filterModel.value" type="text" placeholder="Buscar correo, CI o celular" @input="filterCallback()" />
         </template>
       </Column>
 

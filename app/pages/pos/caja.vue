@@ -147,10 +147,10 @@ const paymentBreakdown = computed(() => paymentMethods.map((method) => {
 
 // Los 4 accesos grandes de la caja (estilo POS profesional).
 const cashTools = computed<{ key: string; label: string; desc: string; icon: string; tone: string; action: () => void }[]>(() => [
-  { key: 'movimiento', label: 'Entrada / salida', desc: 'Dinero que entra o sale', icon: 'pi pi-plus-circle', tone: 'green', action: () => openMovementDialog('Ingreso') },
-  { key: 'producto', label: 'Reporte por producto', desc: 'Qué y cuánto se vendió hoy', icon: 'pi pi-box', tone: 'blue', action: () => { productDialogVisible.value = true } },
-  { key: 'arqueo', label: 'Arqueo de caja', desc: 'Cuenta el efectivo físico', icon: 'pi pi-calculator', tone: 'amber', action: () => { arqueoDialogVisible.value = true } },
-  { key: 'cierre', label: 'Cerrar turno', desc: 'Revisa y termina caja', icon: 'pi pi-file-check', tone: 'slate', action: () => { closeDialogVisible.value = true } },
+  { key: 'movimiento', label: 'Entrada / salida', desc: 'Dinero que entra o sale', icon: 'fluent-emoji:money-with-wings', tone: 'green', action: () => openMovementDialog('Ingreso') },
+  { key: 'producto', label: 'Reporte por producto', desc: 'Qué y cuánto se vendió hoy', icon: 'fluent-emoji:package', tone: 'blue', action: () => { productDialogVisible.value = true } },
+  { key: 'arqueo', label: 'Arqueo de caja', desc: 'Cuenta el efectivo físico', icon: 'fluent-emoji:abacus', tone: 'amber', action: () => { arqueoDialogVisible.value = true } },
+  { key: 'cierre', label: 'Cerrar turno', desc: 'Revisa y termina caja', icon: 'fluent-emoji:check-mark-button', tone: 'slate', action: () => { closeDialogVisible.value = true } },
 ])
 
 const closeReportRows = computed(() => [
@@ -610,7 +610,7 @@ function printProductReport() {
         :disabled="cashStatus === 'cerrada'"
         @click="tool.action"
       >
-        <span class="cash-tool__icon"><i :class="tool.icon" aria-hidden="true" /></span>
+        <span class="cash-tool__icon"><Icon :name="tool.icon" aria-hidden="true" /></span>
         <strong>{{ tool.label }}</strong>
         <small>{{ tool.desc }}</small>
       </button>
@@ -968,10 +968,11 @@ function printProductReport() {
 .cash-tool__icon {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  font-size: 1.35rem;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  font-size: 2.5rem;
+  line-height: 1;
 }
 
 .cash-tool.is-green .cash-tool__icon {
@@ -1340,7 +1341,7 @@ function printProductReport() {
   .cash-tool__icon {
     width: 42px;
     height: 42px;
-    font-size: 1.2rem;
+    font-size: 1.65rem;
   }
 
   .dialog-form,

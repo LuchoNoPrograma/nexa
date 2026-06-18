@@ -62,7 +62,14 @@ const tools = [
             Vende más y pon <span class="text-gradient-warm">precios con cabeza</span>
           </h1>
           <p class="hero2__sub">Tu asesor inteligente con IA, hecho en Cobija para los emprendedores de la Amazonía boliviana.</p>
-          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !mt-2 !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
+          <div class="hero2__cta">
+            <NuxtLink to="/registro" class="inline-flex">
+              <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
+            </NuxtLink>
+            <NuxtLink to="/login" class="hero2__login">
+              <i class="pi pi-sign-in" />Iniciar sesión
+            </NuxtLink>
+          </div>
           <span class="hero2__badge"><i class="pi pi-chart-bar" />Basado en un estudio a 384 negocios de Cobija</span>
         </div>
       </div>
@@ -178,7 +185,9 @@ const tools = [
           <p class="mt-4 max-w-md text-base font-medium text-[#d9f5df]">
             Crea tu cuenta gratis y descubre todo lo que NEXA y Haru pueden hacer por tu negocio.
           </p>
-          <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !mt-7 !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
+          <NuxtLink to="/registro" class="mt-7 inline-flex">
+            <Button label="Comenzar gratis" icon="pi pi-arrow-right" iconPos="right" class="btn-shine !w-max !rounded-full !border-0 !bg-primary-400 !px-7 !py-3.5 !text-base !font-bold !text-[#04200d]" />
+          </NuxtLink>
         </div>
       </div>
     </section>
@@ -338,6 +347,25 @@ const tools = [
   font-weight: 500;
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.9);
+}
+.hero2__cta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 4px;
+}
+.hero2__login {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #eafff0;
+  transition: color 0.2s ease;
+}
+.hero2__login:hover {
+  color: var(--lime);
 }
 .hero2__badge {
   display: inline-flex;
@@ -646,6 +674,10 @@ const tools = [
   }
   .hero2__copy {
     max-width: 100%;
+  }
+  /* en móvil los CTA se apilan: más aire entre "Comenzar gratis" e "Iniciar sesión" */
+  .hero2__cta {
+    gap: 18px 22px;
   }
   .pam-photo {
     min-height: 280px;

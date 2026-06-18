@@ -10,8 +10,8 @@ useHead({
 })
 
 const form = reactive({
-  identificador: 'admin@nexa.bo',
-  password: 'NexaAdmin2026!',
+  identificador: '',
+  password: '',
   remember: false,
 })
 
@@ -35,7 +35,7 @@ async function onSubmit() {
 
     void navigateTo('/pos/inicio')
   } catch {
-    authError.value = 'Credenciales inválidas. Verifica tu correo/CI y contraseña.'
+    authError.value = 'Credenciales inválidas. Verifica tu correo, CI o celular y contraseña.'
   } finally {
     loading.value = false
   }
@@ -91,7 +91,7 @@ async function onSubmit() {
 
         <form class="login-form" @submit.prevent="onSubmit">
           <div class="login-field">
-            <label for="identificador">Correo o carnet (CI)</label>
+            <label for="identificador">Correo, CI o celular</label>
             <span class="login-input">
               <i class="pi pi-user" aria-hidden="true" />
               <input
@@ -99,7 +99,7 @@ async function onSubmit() {
                 v-model="form.identificador"
                 type="text"
                 name="identificador"
-                placeholder="ejemplo@correo.com o tu CI"
+                placeholder="ejemplo@correo.com, CI o celular"
                 autocomplete="username"
                 required
               >
@@ -179,7 +179,7 @@ async function onSubmit() {
 
         <p class="login-register">
           ¿No tienes cuenta?
-          <a href="#registro">Regístrate aquí <span class="login-leaf" aria-hidden="true">🌿</span></a>
+          <NuxtLink to="/registro">Regístrate aquí <span class="login-leaf" aria-hidden="true">🌿</span></NuxtLink>
         </p>
       </div>
     </section>
@@ -416,15 +416,15 @@ async function onSubmit() {
   place-items: center;
   border: 0;
   border-radius: 50%;
-  color: #6f7682;
-  background: transparent;
+  color: var(--brand-700);
+  background: rgba(15, 158, 46, 0.08);
   cursor: pointer;
   transition: background 0.18s ease, color 0.18s ease;
 }
 
 .login-input__toggle:hover {
-  color: var(--brand-700);
-  background: rgba(15, 158, 46, 0.08);
+  color: #ffffff;
+  background: var(--brand-700);
 }
 
 .login-form__row {

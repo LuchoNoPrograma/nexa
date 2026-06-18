@@ -48,10 +48,10 @@ type Modo = 'clientes' | 'sobrante' | 'combo' | 'producto'
 type Objetivo = { id: Modo; titulo: string; desc: string; icon: string }
 
 const OBJETIVOS: Objetivo[] = [
-  { id: 'clientes', titulo: 'Atraer clientes', desc: 'Muestra un producto para que lleguen más compradores.', icon: 'pi pi-users' },
-  { id: 'sobrante', titulo: 'Vender lo que me sobra', desc: 'Una oferta de lo que tienes de más en stock.', icon: 'pi pi-box' },
-  { id: 'combo', titulo: 'Armar un combo', desc: 'Elige los productos y arma una promoción.', icon: 'pi pi-th-large' },
-  { id: 'producto', titulo: 'Promocionar un producto', desc: 'Tú eliges cuál quieres publicar.', icon: 'pi pi-tag' },
+  { id: 'clientes', titulo: 'Atraer clientes', desc: 'Muestra un producto para que lleguen más compradores.', icon: 'fluent-emoji:people-hugging' },
+  { id: 'sobrante', titulo: 'Vender lo que me sobra', desc: 'Una oferta de lo que tienes de más en stock.', icon: 'fluent-emoji:package' },
+  { id: 'combo', titulo: 'Armar un combo', desc: 'Elige los productos y arma una promoción.', icon: 'fluent-emoji:shopping-bags' },
+  { id: 'producto', titulo: 'Promocionar un producto', desc: 'Tú eliges cuál quieres publicar.', icon: 'fluent-emoji:label' },
 ]
 
 // Guía de video: estructura probada para reels/TikTok (gancho → muestra → convence → invita).
@@ -64,10 +64,10 @@ const VIDEO_PASOS = [
 ]
 
 const VIDEO_TIPS = [
-  { icon: 'pi pi-mobile', texto: 'Graba con el celular parado (vertical)' },
-  { icon: 'pi pi-clock', texto: 'Que dure entre 15 y 30 segundos' },
-  { icon: 'pi pi-sun', texto: 'Busca buena luz, de preferencia natural' },
-  { icon: 'pi pi-volume-up', texto: 'Acompáñalo con una canción de moda' },
+  { icon: 'fluent-emoji:mobile-phone', texto: 'Graba con el celular parado (vertical)' },
+  { icon: 'fluent-emoji:stopwatch', texto: 'Que dure entre 15 y 30 segundos' },
+  { icon: 'fluent-emoji:sun', texto: 'Busca buena luz, de preferencia natural' },
+  { icon: 'fluent-emoji:musical-notes', texto: 'Acompáñalo con una canción de moda' },
 ]
 
 type ProductoOpcion = { id: string; name: string; category: string | null; kind: string }
@@ -255,7 +255,7 @@ async function publicarEn(red: RedSocial) {
     <!-- Encabezado: Haru y la acción del día -->
     <header class="mkt-head">
       <div class="mkt-head__copy">
-        <span class="mkt-head__kicker"><i class="pi pi-sparkles" aria-hidden="true" />Haru, tu asistente</span>
+        <span class="mkt-head__kicker"><Icon name="fluent-emoji:sparkles" class="kicker-ic" aria-hidden="true" />Haru, tu asistente</span>
         <h1>Tu publicación de hoy</h1>
         <p>Lista para copiar y compartir. Solo revisa, ajusta si quieres y publica.</p>
       </div>
@@ -267,7 +267,7 @@ async function publicarEn(red: RedSocial) {
 
     <!-- Estado vacío: sin productos -->
     <section v-if="sinProductos" class="empty">
-      <span class="empty__icon"><i class="pi pi-box" aria-hidden="true" /></span>
+      <span class="empty__icon"><Icon name="fluent-emoji:package" aria-hidden="true" /></span>
       <h2>Primero agrega un producto</h2>
       <p>Haru crea las publicaciones a partir de tus productos. Agrega al menos uno en tu inventario.</p>
       <NuxtLink to="/pos/catalogo" class="btn-primary">
@@ -299,7 +299,7 @@ async function publicarEn(red: RedSocial) {
             :disabled="generando"
             @click="objetivoSel = obj"
           >
-            <span class="obj__icon"><i :class="obj.icon" aria-hidden="true" /></span>
+            <span class="obj__icon"><Icon :name="obj.icon" aria-hidden="true" /></span>
             <strong>{{ obj.titulo }}</strong>
             <small>{{ obj.desc }}</small>
           </button>
@@ -362,15 +362,15 @@ async function publicarEn(red: RedSocial) {
       <!-- Datos rápidos de la recomendación -->
       <div class="hints">
         <div class="hint">
-          <i class="pi pi-clock" aria-hidden="true" />
+          <span class="hint__icon"><Icon name="fluent-emoji:alarm-clock" aria-hidden="true" /></span>
           <span><small>Mejor hora</small><strong>{{ post.mejorHora || '19:00' }}</strong></span>
         </div>
         <div v-if="post.audiencia" class="hint">
-          <i class="pi pi-users" aria-hidden="true" />
+          <span class="hint__icon"><Icon name="fluent-emoji:busts-in-silhouette" aria-hidden="true" /></span>
           <span><small>A quién le gusta</small><strong>{{ post.audiencia }}</strong></span>
         </div>
         <div class="hint">
-          <i class="pi pi-star-fill" aria-hidden="true" />
+          <span class="hint__icon"><Icon name="fluent-emoji:star" aria-hidden="true" /></span>
           <span>
             <small>Qué tan bueno se ve</small>
             <strong class="stars">
@@ -512,7 +512,7 @@ async function publicarEn(red: RedSocial) {
         <!-- Tarjeta 2: idea de video + guía para grabar -->
         <section class="card video">
           <div class="video__lead">
-            <span class="video__icon"><i class="pi pi-video" aria-hidden="true" /></span>
+            <span class="video__icon"><Icon name="fluent-emoji:clapper-board" aria-hidden="true" /></span>
             <div>
               <strong>Idea de video</strong>
               <p v-if="post.ideaVideo">{{ post.ideaVideo }}</p>
@@ -534,7 +534,7 @@ async function publicarEn(red: RedSocial) {
 
           <ul class="video__tips">
             <li v-for="tip in VIDEO_TIPS" :key="tip.texto">
-              <i :class="tip.icon" aria-hidden="true" />{{ tip.texto }}
+              <Icon :name="tip.icon" class="tip-ic" aria-hidden="true" />{{ tip.texto }}
             </li>
           </ul>
         </section>
@@ -542,7 +542,7 @@ async function publicarEn(red: RedSocial) {
           <!-- Cuadro: marketing personalizado por WhatsApp -->
           <section class="contacto">
             <div class="contacto__body">
-              <span class="contacto__icon"><i class="pi pi-comments" aria-hidden="true" /></span>
+              <span class="contacto__icon"><Icon name="fluent-emoji:speech-balloon" aria-hidden="true" /></span>
               <strong>¿Quieres algo más personalizado?</strong>
               <p>Cuéntanos qué necesitas y armamos una estrategia de marketing a la medida de tu negocio.</p>
               <a class="contacto__btn" :href="whatsappUrl" target="_blank" rel="noopener">
@@ -587,6 +587,10 @@ async function publicarEn(red: RedSocial) {
   font-size: 0.72rem;
   font-weight: 900;
   color: #1c7a2c;
+}
+
+.kicker-ic {
+  font-size: 1rem;
 }
 
 .mkt-head__copy h1 {
@@ -672,12 +676,12 @@ async function publicarEn(red: RedSocial) {
 .empty__icon {
   display: grid;
   place-items: center;
-  width: 60px;
-  height: 60px;
+  width: 68px;
+  height: 68px;
   border-radius: 18px;
   background: var(--brand-soft-tint);
   color: #1c7a2c;
-  font-size: 1.6rem;
+  font-size: 2.6rem;
 }
 
 .empty h2 {
@@ -798,13 +802,13 @@ async function publicarEn(red: RedSocial) {
 .obj__icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   margin-bottom: 3px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--brand-soft-tint);
   color: #1c7a2c;
-  font-size: 1.1rem;
+  font-size: 2.1rem;
 }
 
 .obj.is-active .obj__icon {
@@ -850,16 +854,16 @@ async function publicarEn(red: RedSocial) {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
 }
 
-.hint > i {
+.hint__icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   flex: 0 0 auto;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--brand-soft-tint);
   color: #1c7a2c;
-  font-size: 1rem;
+  font-size: 1.95rem;
 }
 
 .hint span {
@@ -1338,13 +1342,13 @@ async function publicarEn(red: RedSocial) {
 .video__icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   flex: 0 0 auto;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--brand-soft-2);
   color: var(--brand-accent);
-  font-size: 1.1rem;
+  font-size: 2.1rem;
 }
 
 .video__lead strong {
@@ -1436,9 +1440,9 @@ async function publicarEn(red: RedSocial) {
   color: var(--brand-text-soft);
 }
 
-.video__tips i {
-  color: var(--brand-accent);
-  font-size: 0.95rem;
+.video__tips .tip-ic {
+  flex: 0 0 auto;
+  font-size: 1.45rem;
 }
 
 /* --- Publicar --- */
@@ -1593,13 +1597,13 @@ async function publicarEn(red: RedSocial) {
 .contacto__icon {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 54px;
+  height: 54px;
   margin-bottom: 4px;
-  border-radius: 13px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
-  font-size: 1.3rem;
+  font-size: 2.2rem;
 }
 
 .contacto strong {
@@ -1668,6 +1672,41 @@ async function publicarEn(red: RedSocial) {
 
   .video__tips {
     grid-template-columns: 1fr;
+  }
+
+  /* En móvil los iconos vuelven a su tamaño compacto (no agrandados). */
+  .empty__icon {
+    width: 60px;
+    height: 60px;
+    font-size: 2rem;
+  }
+
+  .obj__icon {
+    width: 38px;
+    height: 38px;
+    font-size: 1.5rem;
+  }
+
+  .hint__icon {
+    width: 38px;
+    height: 38px;
+    font-size: 1.4rem;
+  }
+
+  .video__icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.5rem;
+  }
+
+  .contacto__icon {
+    width: 46px;
+    height: 46px;
+    font-size: 1.7rem;
+  }
+
+  .video__tips .tip-ic {
+    font-size: 1.15rem;
   }
 }
 </style>
