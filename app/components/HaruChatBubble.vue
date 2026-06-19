@@ -26,6 +26,7 @@ type MessageBlock =
 
 const COLLAPSED_KEY = 'nexa-haru-chat-collapsed'
 const CHAT_OPEN_KEY = 'nexa-haru-chat-open'
+const POSITION_KEY = 'nexa-haru-chat-position'
 
 const isCollapsed = ref(false)
 const isChatOpen = ref(false)
@@ -51,25 +52,125 @@ const quickPrompts = [
 
 const chatTitle = computed(() => isSending.value ? 'Haru esta pensando' : 'Haru IA')
 const hasActiveConversation = computed(() => Boolean(conversationId.value) || messages.value.length > 1)
-const lastAssistantMessage = computed(() => [...messages.value].reverse().find((item) => item.role === 'assistant' && !item.pending)?.content ?? '')
-const previewDescription = computed(() => {
-  if (!hasActiveConversation.value) {
-    return 'Estoy listo para ayudarte con precios, ventas, catalogo y decisiones de tu negocio.'
-  }
-
-  return lastAssistantMessage.value || 'Tu conversacion sigue abierta. Puedes retomarla cuando quieras.'
-})
 
 const { trigger: haruTrigger } = useHaruChat()
+
+const asideEl = ref<HTMLElement | null>(null)
+const position = ref<{ left: number; top: number } | null>(null)
+const isDragging = ref(false)
+
+const DRAG_THRESHOLD = 5
+let dragMoved = false
+let dragStart = { px: 0, py: 0, left: 0, top: 0 }
+let dragHandle: HTMLElement | null = null
+let activePointerId: number | null = null
+
+const positionStyle = computed(() => {
+  // Al abrir el chat vuelve a su posición original (esquina); la posición
+  // arrastrada solo aplica a la burbuja.
+  if (!position.value || isChatOpen.value) {
+    return undefined
+  }
+
+  return {
+    left: `${position.value.left}px`,
+    top: `${position.value.top}px`,
+    right: 'auto',
+    bottom: 'auto',
+  }
+})
 
 onMounted(() => {
   isCollapsed.value = localStorage.getItem(COLLAPSED_KEY) === '1'
   isChatOpen.value = localStorage.getItem(CHAT_OPEN_KEY) === '1'
 
+  const savedPosition = localStorage.getItem(POSITION_KEY)
+  if (savedPosition) {
+    try {
+      const parsed = JSON.parse(savedPosition) as { left: number; top: number }
+      if (typeof parsed?.left === 'number' && typeof parsed?.top === 'number') {
+        position.value = clampPosition(parsed.left, parsed.top)
+      }
+    } catch {
+      // posición inválida en storage, la ignoramos
+    }
+  }
+
   if (isChatOpen.value) {
     void loadLatestConversation()
   }
 })
+
+function clampPosition(left: number, top: number) {
+  const el = asideEl.value
+  const width = el?.offsetWidth ?? 0
+  const height = el?.offsetHeight ?? 0
+  const maxLeft = Math.max(8, window.innerWidth - width - 8)
+  const maxTop = Math.max(8, window.innerHeight - height - 8)
+
+  return {
+    left: Math.min(Math.max(8, left), maxLeft),
+    top: Math.min(Math.max(8, top), maxTop),
+  }
+}
+
+function onDragPointerDown(event: PointerEvent) {
+  if (event.button !== 0) {
+    return
+  }
+
+  const el = asideEl.value
+  if (!el) {
+    return
+  }
+
+  const rect = el.getBoundingClientRect()
+  dragStart = { px: event.clientX, py: event.clientY, left: rect.left, top: rect.top }
+  dragMoved = false
+  activePointerId = event.pointerId
+  dragHandle = event.currentTarget as HTMLElement
+  dragHandle.setPointerCapture?.(event.pointerId)
+
+  window.addEventListener('pointermove', onDragPointerMove)
+  window.addEventListener('pointerup', onDragPointerUp)
+  window.addEventListener('pointercancel', onDragPointerUp)
+}
+
+function onDragPointerMove(event: PointerEvent) {
+  const dx = event.clientX - dragStart.px
+  const dy = event.clientY - dragStart.py
+
+  if (!dragMoved && Math.hypot(dx, dy) < DRAG_THRESHOLD) {
+    return
+  }
+
+  dragMoved = true
+  isDragging.value = true
+  position.value = clampPosition(dragStart.left + dx, dragStart.top + dy)
+}
+
+function onDragPointerUp() {
+  window.removeEventListener('pointermove', onDragPointerMove)
+  window.removeEventListener('pointerup', onDragPointerUp)
+  window.removeEventListener('pointercancel', onDragPointerUp)
+
+  if (dragHandle && activePointerId !== null) {
+    try {
+      dragHandle.releasePointerCapture?.(activePointerId)
+    } catch {
+      // el puntero ya pudo haberse liberado
+    }
+  }
+
+  dragHandle = null
+  activePointerId = null
+
+  if (dragMoved && position.value) {
+    localStorage.setItem(POSITION_KEY, JSON.stringify(position.value))
+  }
+
+  isDragging.value = false
+}
 
 watch(haruTrigger, () => {
   openChat()
@@ -304,6 +405,14 @@ async function sendMessage(content = draft.value) {
   }
 }
 
+function onLauncherClick() {
+  if (dragMoved) {
+    return
+  }
+
+  openChat()
+}
+
 function onComposerKeydown(event: KeyboardEvent) {
   if (event.key !== 'Enter' || event.shiftKey) {
     return
@@ -316,59 +425,15 @@ function onComposerKeydown(event: KeyboardEvent) {
 
 <template>
   <ClientOnly>
-    <aside class="haru-chat" :class="{ 'is-collapsed': isCollapsed, 'is-open': isChatOpen }" aria-label="Asistente IA Haru">
+    <aside
+      ref="asideEl"
+      class="haru-chat"
+      :class="{ 'is-collapsed': isCollapsed, 'is-open': isChatOpen, 'is-dragging': isDragging }"
+      :style="positionStyle"
+      aria-label="Asistente IA Haru"
+    >
       <Transition name="haru-state" mode="out-in">
-        <section
-          v-if="!isCollapsed && !isChatOpen"
-          key="preview"
-          class="haru-chat__preview"
-          role="button"
-          tabindex="0"
-          aria-label="Abrir chat con Haru"
-          @click="openChat()"
-          @keydown.enter.prevent="openChat()"
-          @keydown.space.prevent="openChat()"
-        >
-          <button
-            type="button"
-            class="haru-chat__close"
-            aria-label="Cerrar asistente Haru"
-            title="Cerrar"
-            @click.stop="setCollapsed(true)"
-          >
-            <i class="pi pi-times" aria-hidden="true" />
-          </button>
-
-          <span class="haru-chat__avatar-wrap" aria-hidden="true">
-            <img src="/haru-chat.png" alt="" class="haru-chat__avatar">
-          </span>
-
-          <div class="haru-chat__message">
-            <span class="haru-chat__status">
-              <span class="haru-chat__dot" aria-hidden="true" />
-              Haru IA
-            </span>
-            <strong>{{ hasActiveConversation ? 'Chat en curso' : 'Hola, soy Haru' }}</strong>
-            <p>{{ previewDescription }}</p>
-            <span v-if="hasActiveConversation" class="haru-chat__resume">
-              <i class="pi pi-comments" aria-hidden="true" />
-              Continuar chat
-            </span>
-            <div v-if="!hasActiveConversation" class="haru-chat__chips" aria-label="Consultas rapidas">
-              <button
-                v-for="prompt in quickPrompts"
-                :key="prompt"
-                type="button"
-                class="haru-chat__chip"
-                @click.stop="openChat(prompt)"
-              >
-                {{ prompt }}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section v-else-if="isChatOpen" key="chat" class="haru-chat__window">
+        <section v-if="isChatOpen" key="chat" class="haru-chat__window">
           <header class="haru-chat__header">
             <span class="haru-chat__header-avatar" aria-hidden="true">
               <img src="/haru-chat.png" alt="">
@@ -479,10 +544,11 @@ function onComposerKeydown(event: KeyboardEvent) {
           v-else
           key="launcher"
           type="button"
-          class="haru-chat__launcher"
+          class="haru-chat__launcher haru-chat__draggable"
           aria-label="Abrir asistente Haru"
           title="Abrir Haru IA"
-          @click="setCollapsed(false)"
+          @pointerdown="onDragPointerDown"
+          @click="onLauncherClick"
         >
           <span class="haru-chat__launcher-crop" aria-hidden="true">
             <img src="/haru-chat.png" alt="" class="haru-chat__launcher-avatar">
@@ -506,30 +572,30 @@ function onComposerKeydown(event: KeyboardEvent) {
   isolation: isolate;
 }
 
-.haru-chat__preview,
 .haru-chat__window,
 .haru-chat__launcher {
   pointer-events: auto;
 }
 
-.haru-chat__preview {
-  position: relative;
-  display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
-  width: min(386px, calc(100vw - 32px));
-  min-height: 132px;
-  padding: 16px 42px 16px 15px;
-  border: 1px solid rgba(15, 158, 46, 0.2);
-  border-radius: 24px 24px 8px 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 253, 248, 0.96)),
-    radial-gradient(circle at 0% 0%, rgba(47, 224, 74, 0.16), transparent 42%);
-  box-shadow: 0 20px 48px rgba(4, 32, 13, 0.18);
-  backdrop-filter: blur(14px);
-  cursor: pointer;
+.haru-chat__draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.haru-chat__close,
+/* Evita el arrastre nativo de imágenes que dejaba el puntero "pegado". */
+.haru-chat__draggable img {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.haru-chat.is-dragging,
+.haru-chat.is-dragging .haru-chat__draggable {
+  cursor: grabbing;
+}
+
 .haru-chat__header button {
   display: grid;
   place-items: center;
@@ -541,116 +607,26 @@ function onComposerKeydown(event: KeyboardEvent) {
     transform 0.18s ease;
 }
 
-.haru-chat__close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: #eef7ef;
-  color: #31523a;
-}
-
-.haru-chat__close:hover,
 .haru-chat__header button:hover {
   background: #dcfce5;
   color: #0a6f1f;
   transform: translateY(-1px);
 }
 
-.haru-chat__avatar-wrap {
-  align-self: center;
-  display: grid;
-  width: 64px;
-  height: 64px;
-  place-items: center;
-  border: 3px solid #ffffff;
-  border-radius: 999px;
-  background: linear-gradient(145deg, #eaffef, #bdf3cb);
-  box-shadow:
-    0 10px 24px rgba(15, 158, 46, 0.2),
-    inset 0 -8px 14px rgba(10, 111, 31, 0.12);
-  overflow: hidden;
-}
-
-.haru-chat__avatar {
-  width: 68px;
-  height: 63px;
-  object-fit: contain;
-  transform: translateY(3px);
-}
-
-.haru-chat__message {
-  min-width: 0;
-  color: #0b1f3a;
-  overflow-wrap: anywhere;
-}
-
-.haru-chat__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-  color: #0a6f1f;
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
 .haru-chat__dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #22c55e;
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.16);
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.22);
 }
 
-.haru-chat__message strong {
-  display: block;
-  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 1rem;
-  font-weight: 900;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.haru-chat__message p {
-  margin: 5px 0 11px;
-  color: #5f6d7e;
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-}
-
-.haru-chat__resume {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 10px;
-  color: #0a6f1f;
-  font-size: 0.76rem;
-  font-weight: 900;
-}
-
-.haru-chat__resume i {
-  font-size: 0.8rem;
-}
-
-.haru-chat__chips,
 .haru-chat__suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.haru-chat__chip,
 .haru-chat__suggestions button {
   min-height: 28px;
   padding: 0 10px;
@@ -667,7 +643,6 @@ function onComposerKeydown(event: KeyboardEvent) {
     transform 0.18s ease;
 }
 
-.haru-chat__chip:hover,
 .haru-chat__suggestions button:hover:not(:disabled) {
   border-color: rgba(15, 158, 46, 0.45);
   background: #effdf3;
@@ -692,9 +667,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   align-items: center;
   gap: 10px;
   padding: 14px;
-  background:
-    linear-gradient(135deg, rgba(8, 72, 24, 0.96), rgba(10, 111, 31, 0.94)),
-    #084818;
+  background: linear-gradient(185deg, #063718 0%, #04250e 60%, #031f0b 100%);
   color: #ffffff;
 }
 
@@ -870,7 +843,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #22c55e;
+  background: #0f9e2e;
   animation: haru-typing 1s ease-in-out infinite;
 }
 
@@ -940,8 +913,8 @@ function onComposerKeydown(event: KeyboardEvent) {
 }
 
 .haru-chat__composer textarea:focus {
-  border-color: #35d35c;
-  box-shadow: 0 0 0 3px rgba(53, 211, 92, 0.16);
+  border-color: #0f9e2e;
+  box-shadow: 0 0 0 3px rgba(15, 158, 46, 0.16);
 }
 
 .haru-chat__composer button {
@@ -969,7 +942,7 @@ function onComposerKeydown(event: KeyboardEvent) {
   place-items: center;
   border: 3px solid #ffffff;
   border-radius: 999px;
-  background: linear-gradient(145deg, #dffce7, #86e89b);
+  background: linear-gradient(145deg, #35d35c, #0f9e2e);
   box-shadow: 0 16px 36px rgba(4, 32, 13, 0.24);
   cursor: pointer;
 }
@@ -996,8 +969,8 @@ function onComposerKeydown(event: KeyboardEvent) {
   height: 15px;
   border: 3px solid #ffffff;
   border-radius: 999px;
-  background: #22c55e;
-  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.42);
+  background: #0f9e2e;
+  box-shadow: 0 0 0 0 rgba(15, 158, 46, 0.42);
   animation: haru-pulse 1.8s ease-out infinite;
 }
 
@@ -1016,11 +989,11 @@ function onComposerKeydown(event: KeyboardEvent) {
 
 @keyframes haru-pulse {
   70% {
-    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 12px rgba(15, 158, 46, 0);
   }
 
   100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 0 rgba(15, 158, 46, 0);
   }
 }
 
@@ -1049,32 +1022,6 @@ function onComposerKeydown(event: KeyboardEvent) {
   .haru-chat {
     right: 12px;
     bottom: 12px;
-  }
-
-  .haru-chat__preview {
-    grid-template-columns: 58px minmax(0, 1fr);
-    width: calc(100vw - 24px);
-    padding: 13px 38px 13px 12px;
-    border-radius: 20px 20px 8px 20px;
-  }
-
-  .haru-chat__avatar-wrap {
-    width: 52px;
-    height: 52px;
-  }
-
-  .haru-chat__avatar {
-    width: 57px;
-    height: 53px;
-  }
-
-  .haru-chat__chips {
-    gap: 5px;
-  }
-
-  .haru-chat__message p {
-    margin-bottom: 8px;
-    -webkit-line-clamp: 2;
   }
 
   .haru-chat__window {
