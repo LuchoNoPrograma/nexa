@@ -56,7 +56,7 @@ Debe comunicar:
 
 Tomar como referencia visual/funcional el POS de la imagen compartida:
 
-- Vender: scanner/busqueda, catalogo rapido, carrito, descuento, cobro.
+- Ventas: scanner/busqueda, catalogo rapido, carrito, descuento, cobro.
 - Caja: movimientos, apertura/cierre simple.
 - Clientes: registro basico.
 - Catalogo: productos, stock, precios, visibilidad publica.

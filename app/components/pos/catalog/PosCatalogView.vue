@@ -850,8 +850,8 @@ async function openStockHistory(product: CatalogProduct | null) {
   <section class="catalog-workspace">
     <header class="catalog-header">
       <div class="catalog-heading">
-        <span class="catalog-eyebrow">Inventario</span>
-        <h2>Productos y servicios</h2>
+        <span class="catalog-eyebrow">{{ session?.store }}</span>
+        <h2>Inventario</h2>
       </div>
 
       <div class="catalog-primary-actions">
@@ -1513,9 +1513,9 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .catalog-eyebrow {
-  color: var(--catalog-accent-strong);
+  color: #6b778a;
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }

@@ -144,7 +144,7 @@ interface SidebarItem {
 const sidebarItems: SidebarItem[] = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA' },
-  { label: 'Vender', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER' },
+  { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER' },
   { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO' },
   {
@@ -167,8 +167,8 @@ const sidebarItems: SidebarItem[] = [
 // Módulos visibles según el rol/permiso de la sesión.
 const visibleSidebarItems = computed(() => sidebarItems.filter(item => puede(item.acceso)))
 
-// Bottom nav móvil: Inicio · Caja · [Vender FAB] · Inventario · Más.
-// Vender es la acción principal, va en el FAB central elevado.
+// Bottom nav móvil: Inicio · Caja · [Ventas FAB] · Inventario · Más.
+// Ventas es la acción principal, va en el FAB central elevado.
 const bottomNavLeft = computed(() =>
   [
     { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
@@ -224,7 +224,7 @@ function rutaPermitida(path: string) {
   return acceso ? puede(acceso) : true
 }
 
-const activeTitle = computed(() => String(route.meta.posTitle ?? 'Vender'))
+const activeTitle = computed(() => String(route.meta.posTitle ?? 'Ventas'))
 
 const userInitials = computed(() => {
   const name = session.value?.name?.trim()
@@ -581,7 +581,7 @@ function selectModule(to?: string) {
       </div>
     </section>
 
-    <!-- Bottom navigation (mobile only): Inicio · Caja · [Vender] · Inventario · Más -->
+    <!-- Bottom navigation (mobile only): Inicio · Caja · [Ventas] · Inventario · Más -->
     <nav class="pos-bottom-nav" aria-label="Accesos rápidos">
       <button
         v-for="item in bottomNavLeft"
@@ -596,18 +596,18 @@ function selectModule(to?: string) {
         <span>{{ item.label }}</span>
       </button>
 
-      <!-- FAB central: Vender (acción principal) -->
+      <!-- FAB central: Ventas (acción principal) -->
       <div v-if="canSell" class="bottom-nav-fab-slot">
         <button
           type="button"
           class="bottom-nav-fab"
           :class="{ 'is-active': isSellActive }"
-          aria-label="Vender"
+          aria-label="Ventas"
           @click="selectModule('/pos')"
         >
           <i class="pi pi-shopping-cart" aria-hidden="true" />
         </button>
-        <span class="bottom-nav-fab-label">Vender</span>
+        <span class="bottom-nav-fab-label">Ventas</span>
       </div>
 
       <button
@@ -698,7 +698,7 @@ function selectModule(to?: string) {
 .pos-page {
   --sidebar-w: 250px;
   /* Alto del menú inferior móvil; 0 en desktop/tablet (nav oculto). Lo consume
-     la vista de Vender para apilar su barra de carrito por encima del menú. */
+     la vista de Ventas para apilar su barra de carrito por encima del menú. */
   --pos-bottom-nav-h: 0px;
   position: relative;
   min-height: 100dvh;
@@ -1624,7 +1624,7 @@ function selectModule(to?: string) {
     color: var(--primary-500);
   }
 
-  /* ── FAB central: Vender ───────────────────────────────────────── */
+  /* ── FAB central: Ventas ───────────────────────────────────────── */
   .bottom-nav-fab-slot {
     position: relative;
     flex: 1;
@@ -1679,7 +1679,7 @@ function selectModule(to?: string) {
     outline-offset: 3px;
   }
 
-  /* En la página de Vender el FAB baja al nivel de los demás ítems para no
+  /* En la página de Ventas el FAB baja al nivel de los demás ítems para no
      chocar con la barra del carrito, pero conserva su círculo verde. */
   .bottom-nav-fab.is-active {
     top: 6px;

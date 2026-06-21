@@ -88,6 +88,8 @@ function aEmpleado(row: any): Empleado {
 let jss: any = null
 const instancias = new Map<string, any>()
 const gridEls = new Map<string, HTMLElement>()
+let activeGridId: string | null = null
+let dragStart: { empId: string; x: number; y: number; borrar: boolean } | null = null
 
 function setGridEl(id: string, el: any) {
   if (el) {
@@ -169,27 +171,14 @@ function destruirGrid(id: string) {
   instancias.delete(id)
 }
 
-// Al soltar una selección dentro de la hoja, pinta o borra el rango (el modo lo
-// decide la celda de inicio): así "arrastrar" sobre la hoja marca las horas.
-function aplicarSeleccion(emp: Empleado) {
-  const ws = instancias.get(emp.id)
-  if (!ws) {
-    return
-  }
-  const sel = ws.getSelection?.()
-  if (!sel || sel.length < 4) {
-    return
-  }
-  const x1 = Math.max(1, Math.min(sel[0], sel[2]))
-  const x2 = Math.min(DIAS_SEMANA.length, Math.max(sel[0], sel[2]))
-  const y1 = Math.max(0, Math.min(sel[1], sel[3]))
-  const y2 = Math.min(HORAS_DIA.length - 1, Math.max(sel[1], sel[3]))
+function aplicarRango(emp: Empleado, fromX: number, fromY: number, toX: number, toY: number, borrar: boolean) {
+  const x1 = Math.max(1, Math.min(fromX, toX))
+  const x2 = Math.min(DIAS_SEMANA.length, Math.max(fromX, toX))
+  const y1 = Math.max(0, Math.min(fromY, toY))
+  const y2 = Math.min(HORAS_DIA.length - 1, Math.max(fromY, toY))
   if (x1 > DIAS_SEMANA.length || x2 < 1 || y1 > HORAS_DIA.length - 1 || y2 < 0) {
     return
   }
-
-  const anchorKey = slotKey(DIAS_SEMANA[x1 - 1].idx, HORAS_DIA[y1])
-  const borrar = emp.slots.has(anchorKey)
 
   for (let x = x1; x <= x2; x++) {
     for (let y = y1; y <= y2; y++) {
@@ -202,26 +191,171 @@ function aplicarSeleccion(emp: Empleado) {
     }
   }
 
-  ws.resetSelection?.()
+  instancias.get(emp.id)?.resetSelection?.()
   repintar(emp)
   void guardarHorario(emp)
 }
 
-function onDocPointerUp(e: PointerEvent) {
-  if (!jss) {
+function limpiarPreview(empId?: string) {
+  const ids = empId ? [empId] : [...gridEls.keys()]
+  ids.forEach((id) => {
+    gridEls.get(id)?.querySelectorAll('.su-preview-on, .su-preview-off').forEach((cell) => {
+      cell.classList.remove('su-preview-on', 'su-preview-off')
+    })
+  })
+}
+
+function previsualizarRango(emp: Empleado, fromX: number, fromY: number, toX: number, toY: number, borrar: boolean) {
+  const ws = instancias.get(emp.id)
+  if (!ws) {
     return
   }
-  const target = e.target as Node
+
+  limpiarPreview(emp.id)
+
+  const x1 = Math.max(1, Math.min(fromX, toX))
+  const x2 = Math.min(DIAS_SEMANA.length, Math.max(fromX, toX))
+  const y1 = Math.max(0, Math.min(fromY, toY))
+  const y2 = Math.min(HORAS_DIA.length - 1, Math.max(fromY, toY))
+  for (let x = x1; x <= x2; x++) {
+    for (let y = y1; y <= y2; y++) {
+      ws.getCellFromCoords(x, y)?.classList.add(borrar ? 'su-preview-off' : 'su-preview-on')
+    }
+  }
+}
+
+// Fallback para selecciones hechas por jspreadsheet cuando no tenemos una
+// celda inicial capturada, por ejemplo interacciones raras del navegador.
+function aplicarSeleccion(emp: Empleado) {
+  const ws = instancias.get(emp.id)
+  if (!ws) {
+    return
+  }
+  const sel = ws.getSelection?.()
+  if (!sel || sel.length < 4) {
+    return
+  }
+  const x1 = Math.max(1, Math.min(sel[0], sel[2]))
+  const y1 = Math.max(0, Math.min(sel[1], sel[3]))
+  const anchorKey = slotKey(DIAS_SEMANA[x1 - 1].idx, HORAS_DIA[y1])
+  aplicarRango(emp, sel[0], sel[1], sel[2], sel[3], emp.slots.has(anchorKey))
+}
+
+function gridIdFromTarget(target: Node | null) {
+  if (!target) {
+    return null
+  }
   for (const [empId, el] of gridEls) {
     if (el.contains(target)) {
-      const emp = empleados.value.find(x => x.id === empId)
-      if (emp) {
-        // Espera a que jspreadsheet finalice su propia selección del mouseup.
-        setTimeout(() => aplicarSeleccion(emp), 0)
-      }
+      return empId
+    }
+  }
+  return null
+}
+
+function coordsFromTarget(empId: string, target: Node | null) {
+  if (!(target instanceof Element)) {
+    return null
+  }
+  const grid = gridEls.get(empId)
+  const cell = target.closest('td')
+  const row = cell?.parentElement
+  const body = row?.parentElement
+  if (!grid || !cell || !row || body?.tagName !== 'TBODY' || !grid.contains(cell)) {
+    return null
+  }
+  const x = Number(cell.getAttribute('data-x'))
+  const y = Number(cell.getAttribute('data-y') ?? (row as HTMLTableRowElement).sectionRowIndex)
+  if (x < 1 || x > DIAS_SEMANA.length || y < 0 || y >= HORAS_DIA.length) {
+    return null
+  }
+  return { x, y }
+}
+
+function onDocPointerDown(e: PointerEvent) {
+  activeGridId = gridIdFromTarget(e.target as Node)
+  dragStart = null
+
+  if (!activeGridId) {
+    return
+  }
+
+  const coords = coordsFromTarget(activeGridId, e.target as Node)
+  if (!coords) {
+    return
+  }
+
+  const emp = empleados.value.find(x => x.id === activeGridId)
+  if (!emp) {
+    return
+  }
+
+  const key = slotKey(DIAS_SEMANA[coords.x - 1].idx, HORAS_DIA[coords.y])
+  dragStart = { empId: activeGridId, x: coords.x, y: coords.y, borrar: emp.slots.has(key) }
+  previsualizarRango(emp, coords.x, coords.y, coords.x, coords.y, dragStart.borrar)
+}
+
+function onDocPointerMove(e: PointerEvent) {
+  if (!dragStart) {
+    return
+  }
+
+  const emp = empleados.value.find(x => x.id === dragStart?.empId)
+  if (!emp) {
+    return
+  }
+
+  const target = document.elementFromPoint(e.clientX, e.clientY)
+  const end = coordsFromTarget(dragStart.empId, target)
+  if (end) {
+    previsualizarRango(emp, dragStart.x, dragStart.y, end.x, end.y, dragStart.borrar)
+  }
+}
+
+function onDocPointerUp(e: PointerEvent) {
+  if (!jss) {
+    activeGridId = null
+    dragStart = null
+    limpiarPreview()
+    return
+  }
+
+  const empId = activeGridId ?? gridIdFromTarget(e.target as Node)
+  activeGridId = null
+  if (!empId) {
+    dragStart = null
+    limpiarPreview()
+    return
+  }
+
+  const emp = empleados.value.find(x => x.id === empId)
+  if (!emp) {
+    dragStart = null
+    limpiarPreview(empId)
+    return
+  }
+
+  if (dragStart?.empId === empId) {
+    const endTarget = document.elementFromPoint(e.clientX, e.clientY) ?? (e.target as Element | null)
+    const end = coordsFromTarget(empId, endTarget) ?? coordsFromTarget(empId, e.target as Node)
+    if (end) {
+      limpiarPreview(empId)
+      aplicarRango(emp, dragStart.x, dragStart.y, end.x, end.y, dragStart.borrar)
+      dragStart = null
       return
     }
   }
+
+  dragStart = null
+  limpiarPreview(empId)
+  // Espera a que jspreadsheet finalice su propia selección del mouseup.
+  setTimeout(() => aplicarSeleccion(emp), 0)
+}
+
+function onDocPointerCancel() {
+  activeGridId = null
+  dragStart = null
+  limpiarPreview()
 }
 
 async function construirTodos() {
@@ -255,11 +389,17 @@ onMounted(async () => {
   }
 
   await construirTodos()
+  document.addEventListener('pointerdown', onDocPointerDown, true)
+  document.addEventListener('pointermove', onDocPointerMove)
   document.addEventListener('pointerup', onDocPointerUp)
+  document.addEventListener('pointercancel', onDocPointerCancel)
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocPointerDown, true)
+  document.removeEventListener('pointermove', onDocPointerMove)
   document.removeEventListener('pointerup', onDocPointerUp)
+  document.removeEventListener('pointercancel', onDocPointerCancel)
   for (const id of [...instancias.keys()]) {
     destruirGrid(id)
   }
@@ -381,7 +521,7 @@ const infoError = ref('')
 
 const ROLES_OPCIONES = [
   { label: 'Sin acceso', value: '' },
-  { label: 'Cajero (Caja y Vender)', value: 'cajero' },
+  { label: 'Cajero (Caja y Ventas)', value: 'cajero' },
   { label: 'Administrador (acceso completo)', value: 'administrador' },
 ]
 
@@ -757,7 +897,7 @@ function flash(msg: string) {
         <p class="su-form__section">Acceso al sistema</p>
         <p class="su-form__hint">
           Asigna un rol para que el empleado inicie sesión con su <strong>CI</strong> y una contraseña.
-          Un cajero solo accede a <strong>Caja</strong> y <strong>Vender</strong>.
+          Un cajero solo accede a <strong>Caja</strong> y <strong>Ventas</strong>.
         </p>
 
         <div class="su-form__field">
@@ -1186,11 +1326,35 @@ function flash(msg: string) {
 .su-jss :deep(tbody td) {
   cursor: pointer;
   height: 22px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.su-jss :deep(tbody td:not(:first-child)) {
+  touch-action: none;
 }
 
 .su-jss :deep(tbody td.su-on) {
   color: transparent;
   border-color: rgba(0, 0, 0, 0.08);
+}
+
+.su-jss :deep(tbody td.su-preview-on) {
+  background: color-mix(in srgb, var(--c) 72%, #ffffff) !important;
+  outline: 2px solid color-mix(in srgb, var(--c) 76%, #0a6f1f);
+  outline-offset: -2px;
+}
+
+.su-jss :deep(tbody td.su-preview-off) {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.1),
+    rgba(239, 68, 68, 0.1) 5px,
+    rgba(255, 255, 255, 0.82) 5px,
+    rgba(255, 255, 255, 0.82) 10px
+  ) !important;
+  outline: 2px solid rgba(239, 68, 68, 0.45);
+  outline-offset: -2px;
 }
 
 /* La primera columna (HORA) no se pinta ni cambia el cursor. */

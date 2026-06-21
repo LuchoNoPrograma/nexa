@@ -1,7 +1,7 @@
 <script setup lang="ts">
 definePageMeta({
   layout: 'pos',
-  posTitle: 'Vender',
+  posTitle: 'Ventas',
 })
 
 useHead({

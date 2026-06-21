@@ -6,6 +6,7 @@ import {
   type DiagnosticoRespuestas,
   type EtapaNegocio,
 } from '~~/shared/utils/diagnostico'
+import { formatoBs, planPorCodigo } from '~~/shared/utils/planes'
 
 definePageMeta({
   layout: 'pos',
@@ -173,10 +174,26 @@ async function rehacer() {
   }
 }
 
-// "Solo visualización": registramos la elección; el flujo de pago se conecta luego.
+const WHATSAPP_NUMERO = '59171117696'
+
 const planElegido = ref('')
 function onElegirPlan(codigo: string) {
   planElegido.value = codigo
+
+  if (codigo === 'free') {
+    void navigateTo('/pos/inicio')
+    return
+  }
+
+  const plan = planPorCodigo(codigo)
+  if (!plan) {
+    return
+  }
+
+  const negocio = session.value?.store ? ` para mi negocio ${session.value.store}` : ''
+  const precio = `${formatoBs(plan.precioBs)} ${plan.unidad}`
+  const mensaje = `Hola NEXA, quiero activar el plan ${plan.nombre} (${precio})${negocio}.`
+  window.open(`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(mensaje)}`, '_blank', 'noopener,noreferrer')
 }
 
 function animarResultado() {
@@ -589,7 +606,7 @@ function areaScore(key: keyof AreaScores) {
             <h3>Lleva tu negocio al siguiente nivel</h3>
             <p>Estas herramientas te ayudarán a crecer más rápido. Empieza gratis y mejora cuando quieras.</p>
           </header>
-          <PosPlanSelector cta-label="Comenzar ahora" @seleccionar="onElegirPlan" />
+          <PosPlanSelector cta-label="Iniciar mi negocio" @seleccionar="onElegirPlan" />
         </section>
 
         <div class="diag-result__cta">
@@ -607,7 +624,7 @@ function areaScore(key: keyof AreaScores) {
               <i v-else class="pi pi-refresh" /> Reiniciar diagnóstico
             </button>
             <NuxtLink to="/pos/inicio" class="diag-btn diag-btn--primary">
-              Iniciar mi negocion <i class="pi pi-arrow-right" />
+              Iniciar mi negocio <i class="pi pi-arrow-right" />
             </NuxtLink>
           </div>
         </div>

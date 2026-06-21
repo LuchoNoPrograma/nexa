@@ -30,7 +30,7 @@ const { data } = await useFetch<MarketingResponse>('/api/pos/marketing', {
 const post = computed(() => data.value?.actual ?? null)
 const sinProductos = computed(() => (data.value?.totalProductos ?? 0) === 0)
 
-// El texto es editable antes de publicar (Haru deja el borrador, el usuario ajusta).
+// El texto es editable antes de publicar; el usuario puede ajustar el borrador.
 // Incluye los hashtags al final: el usuario edita todo en un solo lugar.
 const textoEditable = ref('')
 
@@ -79,7 +79,7 @@ const mostrarSelector = ref(false)
 const objetivoSel = ref<Objetivo | null>(null)
 const modoActual = computed<Modo | null>(() => objetivoSel.value?.id ?? null)
 
-// Indicación libre del usuario (se manda a Haru tal cual).
+// Indicación libre del usuario para orientar la publicación.
 const nota = ref('')
 
 // Productos para combo / producto específico.
@@ -225,7 +225,7 @@ async function generar(modo: Modo) {
       totalProductos: data.value?.totalProductos ?? 0,
     }
     cerrarSelector()
-    flash('Haru preparó una nueva publicación ✨')
+    flash('Publicación preparada')
   } catch (error: unknown) {
     const message = (error as { data?: { statusMessage?: string } })?.data?.statusMessage
     flash(message ?? 'No se pudo generar la publicación.')
@@ -252,11 +252,11 @@ async function publicarEn(red: RedSocial) {
 
 <template>
   <div class="mkt">
-    <!-- Encabezado: Haru y la acción del día -->
+    <!-- Encabezado: marketing y la acción del día -->
     <header class="mkt-head">
       <div class="mkt-head__copy">
-        <span class="mkt-head__kicker"><Icon name="fluent-emoji:sparkles" class="kicker-ic" aria-hidden="true" />Haru, tu asistente</span>
-        <h1>Tu publicación de hoy</h1>
+        <span class="mkt-head__kicker">NEXA MARKETING</span>
+        <h1>Marketing</h1>
         <p>Lista para copiar y compartir. Solo revisa, ajusta si quieres y publica.</p>
       </div>
       <button v-if="post && !mostrarSelector" type="button" class="btn-ghost" @click="abrirSelector">
@@ -269,7 +269,7 @@ async function publicarEn(red: RedSocial) {
     <section v-if="sinProductos" class="empty">
       <span class="empty__icon"><Icon name="fluent-emoji:package" aria-hidden="true" /></span>
       <h2>Primero agrega un producto</h2>
-      <p>Haru crea las publicaciones a partir de tus productos. Agrega al menos uno en tu inventario.</p>
+      <p>Las publicaciones se crean a partir de tus productos. Agrega al menos uno en tu inventario.</p>
       <NuxtLink to="/pos/catalogo" class="btn-primary">
         <i class="pi pi-plus" aria-hidden="true" />Ir a inventario
       </NuxtLink>
@@ -280,7 +280,7 @@ async function publicarEn(red: RedSocial) {
       <div class="selector__head">
         <div>
           <h2>¿Qué quieres lograr hoy?</h2>
-          <p>Haru arma la publicación con los productos de tu negocio.</p>
+          <p>Arma una publicación con los productos de tu negocio.</p>
         </div>
         <button v-if="post" type="button" class="btn-ghost" :disabled="generando" @click="cerrarSelector">
           <i class="pi pi-arrow-left" aria-hidden="true" />Volver
@@ -339,7 +339,7 @@ async function publicarEn(red: RedSocial) {
 
           <!-- Indicación extra del usuario -->
           <div class="field">
-            <span class="field__label">¿Algo más que Haru deba saber? <small>(opcional)</small></span>
+            <span class="field__label">¿Algo más que debamos saber? <small>(opcional)</small></span>
             <Textarea
               v-model="nota"
               rows="2"
@@ -351,7 +351,7 @@ async function publicarEn(red: RedSocial) {
 
           <button type="button" class="btn-primary" :disabled="generando || !puedeCrear" @click="crear">
             <i :class="generando ? 'pi pi-spin pi-spinner' : 'pi pi-sparkles'" aria-hidden="true" />
-            {{ generando ? 'Haru está creando…' : 'Crear publicación' }}
+            {{ generando ? 'Creando publicación…' : 'Crear publicación' }}
           </button>
         </div>
       </div>
@@ -495,7 +495,7 @@ async function publicarEn(red: RedSocial) {
             <i :class="redActiva.icono" aria-hidden="true" />
             Publicar en {{ redActiva.nombre }}
           </button>
-          <p class="publish-note"><i class="pi pi-info-circle" aria-hidden="true" />Haru solo prepara la publicación y te abre la red; subirla la haces tú.</p>
+          <p class="publish-note"><i class="pi pi-info-circle" aria-hidden="true" />NEXA prepara la publicación y abre la red; subirla la haces tú.</p>
 
           <!-- Tras publicar: la idea se queda en pantalla y se invita a crear otra -->
           <div v-if="publicado" class="done">
@@ -581,24 +581,22 @@ async function publicarEn(red: RedSocial) {
 }
 
 .mkt-head__kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
+  margin-bottom: 4px;
   font-size: 0.72rem;
-  font-weight: 900;
-  color: #1c7a2c;
-}
-
-.kicker-ic {
-  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b778a;
 }
 
 .mkt-head__copy h1 {
-  margin: 6px 0 3px;
+  margin: 0 0 3px;
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 900;
   line-height: 1.15;
+  color: #071327;
 }
 
 .mkt-head__copy p {
@@ -1578,7 +1576,7 @@ async function publicarEn(red: RedSocial) {
   box-shadow: 0 12px 28px rgba(10, 111, 32, 0.22);
 }
 
-/* Velo verde para que el texto se lea y Haru quede más suave al fondo */
+/* Velo verde para que el texto se lea con contraste sobre el fondo */
 .contacto::before {
   content: "";
   position: absolute;
