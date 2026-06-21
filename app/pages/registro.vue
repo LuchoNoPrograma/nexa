@@ -27,29 +27,6 @@ const loading = ref(false)
 const errorMessage = ref('')
 const showPassword = ref(false)
 
-type CountryCode = {
-  name: string
-  iso2: string
-  dialCode: string
-  example: string
-  flagUrl: string
-}
-
-const { data: countryData } = await useFetch<{ countries: CountryCode[] }>('/api/metadata/country-codes', {
-  default: () => ({
-    countries: [
-      { name: 'Bolivia', iso2: 'BO', dialCode: '+591', example: '71234567', flagUrl: '/flags/bo.svg' },
-      { name: 'Peru', iso2: 'PE', dialCode: '+51', example: '987654321', flagUrl: '/flags/pe.svg' },
-      { name: 'Brasil', iso2: 'BR', dialCode: '+55', example: '11987654321', flagUrl: '/flags/br.svg' },
-    ],
-  }),
-})
-
-const countryOptions = computed(() => countryData.value?.countries ?? [])
-const selectedCountry = computed(() =>
-  countryOptions.value.find(country => country.dialCode === form.countryDialCode) ?? countryOptions.value[0],
-)
-
 const canSubmit = computed(() =>
   form.fullName.trim().length >= 3
   && form.phone.replace(/\D/g, '').length >= 7
@@ -82,7 +59,7 @@ async function onSubmit() {
       },
     })
 
-    void navigateTo('/pos/diagnostico')
+    void navigateTo('/pos/inicio')
   } catch (error: any) {
     errorMessage.value = error?.statusMessage || 'No se pudo crear la tienda. Revisa los datos e intenta de nuevo.'
   } finally {
@@ -134,42 +111,14 @@ async function onSubmit() {
 
         <div class="field">
           <label for="phone">Nro. celular</label>
-          <InputGroup class="phone-group">
-            <InputGroupAddon class="phone-prefix">
-              <Select
-                v-model="form.countryDialCode"
-                :options="countryOptions"
-                option-label="name"
-                option-value="dialCode"
-                aria-label="Código de país"
-                class="country-select"
-              >
-                <template #value="{ value }">
-                  <span class="country-value">
-                    <img v-if="selectedCountry" :src="selectedCountry.flagUrl" alt="" aria-hidden="true">
-                    <span>{{ value }}</span>
-                  </span>
-                </template>
-                <template #option="{ option }">
-                  <span class="country-option">
-                    <img :src="option.flagUrl" alt="" aria-hidden="true">
-                    <strong>{{ option.dialCode }}</strong>
-                    <span>{{ option.name }}</span>
-                  </span>
-                </template>
-              </Select>
-            </InputGroupAddon>
-            <input
-              id="phone"
-              v-model="form.phone"
-              class="phone-input"
-              type="tel"
-              name="phone"
-              autocomplete="tel"
-              :placeholder="`Ej. ${selectedCountry?.example ?? '71234567'}`"
-              required
-            >
-          </InputGroup>
+          <SharedPhoneCountryInput
+            v-model:country-dial-code="form.countryDialCode"
+            v-model:phone="form.phone"
+            input-id="phone"
+            name="phone"
+            autocomplete="tel"
+            required
+          />
         </div>
 
         <div class="field">
@@ -204,7 +153,7 @@ async function onSubmit() {
         </div>
 
         <div class="field">
-          <label for="password">Contraseña</label>
+          <label for="password">Crear contraseña</label>
           <span class="input">
             <i class="pi pi-lock" aria-hidden="true" />
             <input
@@ -453,104 +402,6 @@ async function onSubmit() {
 .input-toggle:hover {
   color: #ffffff;
   background: #0b982f;
-}
-
-.phone-group {
-  min-height: 44px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  border: 1.5px solid #dce5df;
-  border-radius: 12px;
-  background: #ffffff;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
-}
-
-.phone-group :deep(.p-inputgroupaddon) {
-  padding: 0;
-  border: 0;
-  border-radius: 10px 0 0 10px;
-  background: #f1f8f3;
-}
-
-.country-select {
-  min-width: 124px;
-  height: 100%;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.country-select :deep(.p-select-label) {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 6px 0 12px;
-  color: #087a28;
-  font-size: 0.9rem;
-  font-weight: 900;
-}
-
-.country-select :deep(.p-select-dropdown) {
-  width: 24px;
-  color: #087a28;
-}
-
-.country-value {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #087a28;
-  font-weight: 900;
-}
-
-.country-value img,
-.country-option img {
-  width: 22px;
-  height: 16px;
-  border-radius: 3px;
-  object-fit: cover;
-  box-shadow: 0 0 0 1px rgba(11, 31, 58, 0.1);
-}
-
-.country-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.country-option strong {
-  color: #087a28;
-}
-
-.phone-input {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 0;
-  border-left: 1px solid #dce5df;
-  border-radius: 0 10px 10px 0;
-  outline: 0;
-  color: #0b1f3a;
-  background: #ffffff;
-  font-size: 0.92rem;
-  font-weight: 700;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.phone-group:focus-within :deep(.p-inputgroupaddon),
-.phone-group:focus-within .phone-input {
-  border-color: rgba(11, 152, 47, 0.24);
-}
-
-.phone-group:focus-within {
-  border-color: #0b982f;
-  box-shadow: 0 0 0 4px rgba(11, 152, 47, 0.12);
-  transform: translateY(-1px);
-}
-
-.phone-input::placeholder {
-  color: #8a93a1;
-  font-weight: 550;
 }
 
 .register-error {

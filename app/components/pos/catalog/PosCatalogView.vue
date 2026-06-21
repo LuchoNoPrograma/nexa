@@ -756,7 +756,7 @@ async function saveCategory() {
       name: categoryForm.name,
       description: categoryForm.description,
       icon: categoryForm.icon,
-      active: categoryForm.active,
+      active: true,
     }
 
     if (categoryForm.id) {
@@ -1046,18 +1046,25 @@ async function openStockHistory(product: CatalogProduct | null) {
           <!-- Tipo -->
           <div class="pfield">
             <label>¿Qué vas a registrar?</label>
-            <div class="kind-toggle">
+            <div class="kind-toggle" role="radiogroup" aria-label="Tipo de registro">
               <button
                 v-for="option in kindOptions"
                 :key="option.value"
                 type="button"
+                role="radio"
                 class="kind-toggle__btn"
                 :class="{ 'is-active': form.kind === option.value }"
+                :aria-checked="form.kind === option.value"
                 @click="form.kind = option.value as ProductForm['kind']"
               >
+                <span class="kind-toggle__check" aria-hidden="true">
+                  <i class="pi pi-check" />
+                </span>
                 <span class="kind-toggle__icon">{{ option.icon }}</span>
-                <strong>{{ option.label }}</strong>
-                <small>{{ option.hint }}</small>
+                <span class="kind-toggle__copy">
+                  <strong>{{ option.label }}</strong>
+                  <small>{{ option.hint }}</small>
+                </span>
               </button>
             </div>
           </div>
@@ -1440,10 +1447,6 @@ async function openStockHistory(product: CatalogProduct | null) {
             </Select>
           </div>
         </div>
-        <label class="category-active">
-          <Checkbox v-model="categoryForm.active" binary />
-          <span>Categoría activa</span>
-        </label>
         <footer class="dialog-actions">
           <Button type="button" label="Cancelar" severity="secondary" outlined @click="categoryDialogOpen = false; categoryDialogFromProduct = false" />
           <Button type="submit" label="Guardar categoría" :loading="saving" />
@@ -1957,15 +1960,6 @@ async function openStockHistory(product: CatalogProduct | null) {
   gap: 8px;
 }
 
-.category-active {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #17233a;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -2023,58 +2017,125 @@ async function openStockHistory(product: CatalogProduct | null) {
 .kind-toggle {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .kind-toggle__btn {
+  position: relative;
   display: grid;
-  gap: 2px;
-  justify-items: center;
-  min-height: 78px;
-  padding: 10px 6px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #ffffff;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 82px;
+  padding: 13px 14px 12px;
+  border: 1.5px solid #dce5df;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdfb 100%);
   color: #0f172a;
   cursor: pointer;
-  text-align: center;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  text-align: left;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
 
 .kind-toggle__btn:hover {
-  border-color: #86efac;
-  background: #f8fafc;
+  border-color: #a7d7b5;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .kind-toggle__btn:focus-visible,
 .costing-toggle__btn:focus-visible {
   outline: none;
   border-color: var(--catalog-accent);
-  box-shadow: 0 0 0 3px var(--catalog-accent-soft);
+  box-shadow: 0 0 0 4px rgba(11, 152, 47, 0.12);
 }
 
 .kind-toggle__btn.is-active {
   border-color: var(--catalog-accent);
-  background: var(--catalog-accent-soft);
-  box-shadow: inset 0 0 0 1px var(--catalog-accent);
+  background:
+    linear-gradient(180deg, rgba(234, 246, 231, 0.95), rgba(255, 255, 255, 0.98)),
+    #ffffff;
+  box-shadow:
+    inset 0 0 0 1px var(--catalog-accent),
+    0 10px 24px rgba(11, 152, 47, 0.14);
+}
+
+.kind-toggle__check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid #dce5df;
+  border-radius: 999px;
+  background: #ffffff;
+  color: transparent;
+  font-size: 0.66rem;
+  transform: scale(0.86);
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.kind-toggle__btn.is-active .kind-toggle__check {
+  border-color: var(--catalog-accent);
+  background: var(--catalog-accent);
+  color: #ffffff;
+  transform: scale(1);
 }
 
 .kind-toggle__icon {
-  font-size: 1.4rem;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f3f7f4;
+  font-size: 1.28rem;
   line-height: 1;
 }
 
+.kind-toggle__btn.is-active .kind-toggle__icon {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #cfe8d1;
+}
+
+.kind-toggle__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
 .kind-toggle__btn strong {
-  font-size: 0.82rem;
-  font-weight: 900;
   color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1.05;
 }
 
 .kind-toggle__btn small {
-  font-size: 0.66rem;
-  font-weight: 700;
   color: #64748b;
-  line-height: 1.15;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.kind-toggle__btn.is-active strong {
+  color: #075f25;
+}
+
+.kind-toggle__btn.is-active small {
+  color: #2c6b3d;
 }
 
 /* Campos */
@@ -2120,9 +2181,19 @@ async function openStockHistory(product: CatalogProduct | null) {
   align-items: center;
 }
 
+.category-picker :deep(.p-select) {
+  min-width: 0;
+  min-height: 44px;
+}
+
+.category-picker :deep(.p-select-label) {
+  display: flex;
+  align-items: center;
+}
+
 .category-picker :deep(.p-button) {
   height: 100%;
-  min-height: 42px;
+  min-height: 44px;
   white-space: nowrap;
 }
 

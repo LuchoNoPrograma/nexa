@@ -146,7 +146,7 @@ async function pickProductos(
     `select ${SELECT_PRODUCTO}
      from producto p
      left join categoria c on c.id = p.categoria_id
-     where p.tienda_id = $1 and p.activo = true and p.tipo = 'producto'
+     where p.tienda_id = $1 and p.activo = true and p.tipo = 'producto' and p.stock_actual > 0
      order by
        (p.id = (
          select producto_id from marketing_publicacion
@@ -164,7 +164,7 @@ async function pickProductos(
 function pistaModo(modo: Modo): string {
   switch (modo) {
     case 'sobrante':
-      return 'Tengo bastante stock de este producto y quiero que salga rápido. Propón una oferta o promoción atractiva (descuento, 2x1, precio especial).'
+      return 'Tengo bastante stock de este producto y quiero que salga rápido. Puedes proponer una oferta atractiva, pero solo como sugerencia comercial; no inventes un descuento exacto si no fue indicado.'
     case 'clientes':
       return 'Quiero atraer clientes nuevos con este producto.'
     case 'producto':
@@ -174,14 +174,18 @@ function pistaModo(modo: Modo): string {
 }
 
 function buildPrompt(modo: Modo, productos: ProductoContexto[], tienda: TiendaContexto, nota: string): string {
-  const cabecera = `Negocio: ${tienda.nombre}${tienda.rubro ? ` (${tienda.rubro})` : ''}, en ${tienda.ciudad}.`
+  const cabecera = [
+    'Usa EXCLUSIVAMENTE los datos reales entregados abajo, que vienen de la base de datos de NEXA.',
+    'Si falta descripción, categoría, precio o stock, no lo inventes ni lo rellenes con suposiciones.',
+    `Negocio: ${tienda.nombre}${tienda.rubro ? ` (${tienda.rubro})` : ''}, en ${tienda.ciudad}.`,
+  ].join('\n')
   const pistaNota = nota ? `Indicación del dueño del negocio (tenla muy en cuenta): "${nota}".` : ''
 
   const esquemaJson = [
     'Devuelve este JSON exacto:',
     '{',
     '  "titulo": "nombre corto y atractivo",',
-    '  "texto": "la publicación lista para copiar (máx 220 caracteres, simple, 1-2 emojis)",',
+    '  "texto": "la publicación lista para copiar (140 a 280 caracteres, simple, 1-2 emojis)",',
     '  "hashtags": ["3 a 5 hashtags, cada uno UNA sola idea: marca, producto/rubro, ciudad y comunidad"],',
     '  "ideaVideo": "una sola frase con una idea sencilla de video",',
     '  "mejorHora": "hora sugerida para publicar en formato HH:MM",',
@@ -194,11 +198,14 @@ function buildPrompt(modo: Modo, productos: ProductoContexto[], tienda: TiendaCo
   if (modo === 'combo') {
     const total = productos.reduce((sum, p) => sum + p.precio, 0)
     const sugerido = Math.max(1, Math.round(total * 0.9))
+    const precioEspecial = total > 0
+      ? `Precio sumado: Bs ${total}. Puedes sugerir un precio especial alrededor de Bs ${sugerido}, dejando claro que es una sugerencia.`
+      : 'No hay precio válido registrado para todos los productos; no inventes precio del combo.'
     return [
       cabecera,
       'Quiero armar un combo o promoción juntando estos productos:',
-      ...productos.map((p) => `- ${p.nombre} (Bs ${p.precio})${p.categoria ? ` · ${p.categoria}` : ''}`),
-      `Precio sumado: Bs ${total}. Puedes sugerir un precio especial alrededor de Bs ${sugerido}.`,
+      ...productos.map((p) => `- ${p.nombre}${p.precio > 0 ? ` (Bs ${p.precio})` : ' (sin precio registrado)'}${p.categoria ? ` · ${p.categoria}` : ''}${p.stock > 0 ? ` · stock: ${p.stock}` : ''}`),
+      precioEspecial,
       'Ponle un nombre llamativo al combo y, en el texto, deja claro por qué estos productos combinan bien juntos (se complementan, son perfectos para una ocasión o momento del día).',
       'Anímalos a llevar todo junto resaltando el ahorro frente a comprarlos por separado.',
       pistaNota,
@@ -212,7 +219,8 @@ function buildPrompt(modo: Modo, productos: ProductoContexto[], tienda: TiendaCo
     cabecera,
     `Producto a promocionar: ${producto.nombre}.`,
     producto.categoria ? `Categoría: ${producto.categoria}.` : '',
-    `Precio: Bs ${producto.precio}.`,
+    producto.precio > 0 ? `Precio: Bs ${producto.precio}.` : 'Precio: no registrado; no menciones precio.',
+    producto.stock > 0 ? `Stock disponible según inventario: ${producto.stock}.` : 'Stock: sin stock positivo registrado; no digas que hay pocas o muchas unidades.',
     producto.descripcion ? `Descripción: ${producto.descripcion}.` : '',
     pistaModo(modo),
     pistaNota,
@@ -254,9 +262,10 @@ function buildDemoPost(modo: Modo, productos: ProductoContexto[], tienda: Tienda
     const total = productos.reduce((sum, p) => sum + p.precio, 0)
     const sugerido = Math.max(1, Math.round(total * 0.9))
     const nombres = productos.map((p) => p.nombre).join(' + ')
+    const precio = total > 0 ? ` por solo Bs ${sugerido}` : ''
     return {
       titulo: 'Combo especial',
-      texto: `🎉 ¡Combo especial! Llévate ${nombres} junto por solo Bs ${sugerido}. Aprovecha hoy.`,
+      texto: `🎉 ¡Combo especial! Llévate ${nombres} junto${precio}. Escríbenos y aprovecha hoy.`,
       hashtags: hashtagsDemo(modo, productos, tienda),
       ideaVideo: 'Muestra los productos del combo juntos sobre la mesa.',
       mejorHora: '19:00',
@@ -268,9 +277,10 @@ function buildDemoPost(modo: Modo, productos: ProductoContexto[], tienda: Tienda
 
   const p = productos[0]!
   if (modo === 'sobrante') {
+    const precio = p.precio > 0 ? ` de Bs ${p.precio}` : ''
     return {
       titulo: p.nombre,
-      texto: `🔥 ¡Oferta en ${p.nombre}! Aprovecha el precio especial de Bs ${p.precio}. Pocas unidades, pásate hoy.`,
+      texto: `🔥 ¡Oferta en ${p.nombre}! Aprovecha el precio especial${precio}. Escríbenos o pásate hoy.`,
       hashtags: hashtagsDemo(modo, productos, tienda),
       ideaVideo: `Graba un video corto mostrando tu ${p.nombre} con el cartel de oferta.`,
       mejorHora: '19:00',
@@ -280,9 +290,10 @@ function buildDemoPost(modo: Modo, productos: ProductoContexto[], tienda: Tienda
     }
   }
 
+  const precio = p.precio > 0 ? ` Precio: Bs ${p.precio}.` : ''
   return {
     titulo: p.nombre,
-    texto: `¡${p.nombre} disponible hoy! 😋 Pásate y pídelo, te va a encantar. Precio: Bs ${p.precio}.`,
+    texto: `¡${p.nombre} disponible hoy! 😋 Pásate y pídelo, te va a encantar.${precio}`,
     hashtags: hashtagsDemo(modo, productos, tienda),
     ideaVideo: `Graba un video corto mostrando tu ${p.nombre} de cerca, que se vea apetitoso.`,
     mejorHora: '19:00',
@@ -304,10 +315,13 @@ async function generarConGemini(prompt: string): Promise<PostGenerado | null> {
     'Eres Haru, marketero profesional de NEXA que ayuda a pequeños negocios de Bolivia a vender más por redes sociales (Facebook, Instagram, TikTok, WhatsApp).',
     'Tu público objetivo son personas jóvenes de 15 a 40 años en Bolivia: escribe cercano, fresco y con la forma de hablar boliviana, sin caer en exceso de modismos.',
     'Aplica técnicas de venta reales: arranca con un GANCHO fuerte en la primera frase (pregunta, antojo o beneficio), muestra el PRECIO como una oportunidad ("solo Bs X", "llévalo por Bs X") y cierra con una LLAMADA A LA ACCIÓN clara (escríbenos, pásate hoy, pídelo ya).',
-    'Si es una oferta o combo, resalta el ahorro o lo limitado para crear urgencia (hoy, pocas unidades, solo esta semana).',
+    'Si es una oferta o combo, resalta el ahorro o la oportunidad. Solo menciona urgencia por stock ("pocas unidades", "últimas unidades") cuando el stock entregado lo justifique.',
     'Escribe para que se lea fácil en el celular: frases cortas, directas y sin palabras técnicas ni rebuscadas.',
     'El texto debe ser breve y fácil de leer (entre 140 y 280 caracteres) y usar 1 o 2 emojis que peguen con el producto, no de relleno.',
-    'No inventes datos del producto: usa solo el nombre, precio y descripción que te doy. Nunca inventes precios.',
+    'Regla crítica de verdad de datos: usa solo nombre, categoría, precio, stock, descripción, negocio, ciudad y nota entregados por el usuario. Todo viene de la base de datos o del dueño.',
+    'No inventes productos, marcas, beneficios, sabores, materiales, disponibilidad, descuentos, precios, stock, ubicación exacta, delivery, horarios ni formas de pago.',
+    'Si un dato no está presente o dice "no registrado", omítelo con naturalidad. Nunca escribas "según la base de datos" en la publicación.',
+    'Si el precio no está registrado, no menciones precio. Si el stock no está registrado o no es positivo, no digas "pocas unidades", "mucho stock" ni "últimas unidades".',
     'HASHTAGS (importante): devuelve de 3 a 5, cada uno con UNA sola idea y en PascalCase. Nunca pegues dos conceptos en una misma etiqueta (MAL: #NavidadCobija, #AbarrotesCobija; BIEN: #Navidad #Cobija #Abarrotes).',
     'Combina estos tipos: 1) de MARCA: el nombre del negocio sin espacios; 2) de PRODUCTO o RUBRO: lo que se promociona (ej. #Combo, #Abarrotes, el producto); 3) LOCAL: la ciudad o zona por separado (ej. #Cobija, #Pando); 4) de COMUNIDAD o intención de compra boliviana (ej. #ComproLocal, #EmprendimientoBoliviano, #OfertasBolivia).',
     'Usa términos que la gente realmente busca; nada de relleno genérico ni repetir la ciudad en cada etiqueta.',
@@ -409,13 +423,33 @@ export default defineEventHandler(async (event) => {
   const productos = await pickProductos(session.storeId, modo, body?.productoId ?? null, productoIds)
 
   if (!productos.length) {
+    const messages: Record<Modo, string> = {
+      producto: 'Haru no encontró el producto elegido. Revisa que siga activo en tu inventario y vuelve a intentarlo.',
+      combo: 'Haru no encontró productos válidos para armar el combo. Elige productos activos de tu inventario.',
+      sobrante: 'Haru no encontró productos con stock disponible para vender lo que sobra.',
+      clientes: 'Haru necesita al menos un producto activo y con stock disponible para crear una publicación.',
+    }
     throw createError({
       statusCode: 400,
-      statusMessage: modo === 'producto'
-        ? 'No se encontró ese producto en tu inventario.'
-        : modo === 'combo'
-          ? 'No se encontraron los productos elegidos para el combo.'
-          : 'Agrega al menos un producto en tu inventario para que Haru cree una publicación.',
+      statusMessage: messages[modo],
+    })
+  }
+
+  if (modo === 'combo' && productos.length < 2) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Haru encontró solo un producto válido. Para armar un combo elige al menos 2 productos activos de tu inventario.',
+    })
+  }
+
+  const sinStock = productos.filter((p) => p.stock <= 0)
+  if (sinStock.length) {
+    const nombres = sinStock.map((p) => p.nombre).slice(0, 3).join(', ')
+    throw createError({
+      statusCode: 400,
+      statusMessage: modo === 'combo'
+        ? `Haru encontró productos sin stock para el combo: ${nombres}. Actualiza el stock o elige otros productos.`
+        : `Haru encontró ${productos[0]!.nombre}, pero no tiene stock disponible. Actualiza el stock antes de promocionarlo.`,
     })
   }
 

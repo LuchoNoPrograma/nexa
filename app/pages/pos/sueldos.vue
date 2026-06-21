@@ -7,7 +7,6 @@ import {
   COLORES_EMPLEADO,
   HORAS_MENSUALES_REFERENCIA,
   SEMANAS_POR_MES,
-  JORNADA_SEMANAL_LEGAL,
   slotKey,
   calcularSueldo,
   valorHora,
@@ -19,9 +18,10 @@ definePageMeta({
   posTitle: 'Planilla',
 })
 
-useHead({ title: 'Planilla | NEXA' })
+useHead({ title: 'Personal y turnos | NEXA' })
 
 type Rol = 'cajero' | 'administrador'
+type PagoModo = 'mensual' | 'turno' | 'hora' | 'solo'
 
 type Empleado = {
   id: string
@@ -36,6 +36,9 @@ type Empleado = {
   ci: string | null
   tieneLogin: boolean
   valorHora: number | null
+  pagoModo: PagoModo
+  pagoMonto: number | null
+  turnoHoras: number
   fechaAlta: string | null
   fechaBaja: string | null
   slots: Set<string>
@@ -56,11 +59,64 @@ const fmt = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFr
 function money(v: number) {
   return `Bs. ${fmt.format(v || 0)}`
 }
+function moneyShort(v: number) {
+  return `Bs ${Math.round(v || 0)}`
+}
 function fmtHora(hora: number) {
   return `${String(hora).padStart(2, '0')}:00`
 }
 
+function fechaLocalISO(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function parseFecha(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) {
+    return null
+  }
+  return new Date(year, month - 1, day)
+}
+
+function formatFecha(value: Date | null) {
+  return value ? fechaLocalISO(value) : ''
+}
+
+const PAGO_PREFS_KEY = 'nexa:nomina:pago'
+
+function readPagoPrefs(): Record<string, { modo: PagoModo; monto: number | null; turnoHoras: number }> {
+  if (!import.meta.client) {
+    return {}
+  }
+  try {
+    return JSON.parse(localStorage.getItem(PAGO_PREFS_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function writePagoPref(emp: Empleado) {
+  if (!import.meta.client) {
+    return
+  }
+  const prefs = readPagoPrefs()
+  prefs[emp.id] = {
+    modo: emp.pagoModo,
+    monto: emp.pagoMonto,
+    turnoHoras: emp.turnoHoras,
+  }
+  localStorage.setItem(PAGO_PREFS_KEY, JSON.stringify(prefs))
+}
+
 function aEmpleado(row: any): Empleado {
+  const rowValorHora = row.valorHora != null ? Number(row.valorHora) : null
+  const pagoPref = readPagoPrefs()[row.id]
   const slots = new Set<string>(
     Array.isArray(row.slots) ? row.slots.map((s: any) => slotKey(Number(s.dia), Number(s.hora))) : [],
   )
@@ -76,7 +132,10 @@ function aEmpleado(row: any): Empleado {
     rol: (row.rol as Rol) ?? null,
     ci: row.ci ?? null,
     tieneLogin: Boolean(row.tieneLogin),
-    valorHora: row.valorHora != null ? Number(row.valorHora) : null,
+    valorHora: rowValorHora,
+    pagoModo: pagoPref?.modo ?? (rowValorHora === 0 ? 'solo' : rowValorHora != null && rowValorHora > 0 ? 'hora' : 'mensual'),
+    pagoMonto: pagoPref?.monto ?? (rowValorHora != null && rowValorHora > 0 ? rowValorHora : null),
+    turnoHoras: pagoPref?.turnoHoras ?? 8,
     fechaAlta: row.fechaAlta ?? null,
     fechaBaja: row.fechaBaja ?? null,
     slots,
@@ -378,10 +437,6 @@ onMounted(async () => {
     }
     empleados.value = (data.empleados ?? []).map(aEmpleado)
 
-    // Demo: si la tienda aún no tiene personal, arranca con un trabajador base.
-    if (!empleados.value.length) {
-      await agregarEmpleado(false)
-    }
   } catch {
     // Sin datos: se queda con la config por defecto.
   } finally {
@@ -407,22 +462,54 @@ onBeforeUnmount(() => {
     clearTimeout(timer)
   }
   nombreTimers.clear()
-  if (configTimer) {
-    clearTimeout(configTimer)
-  }
 })
 
 // ---------- Cálculos derivados ----------
 const valorHoraActual = computed(() => valorHora(config))
 
-// Costo mensual estimado de un empleado (usa su valor por hora propio o el de la tienda).
+function horasMensualesEmp(emp: Empleado) {
+  return emp.slots.size * config.semanasPorMes
+}
+
+function valorHoraEmpleado(emp: Empleado) {
+  if (emp.pagoModo === 'solo') {
+    return 0
+  }
+  if (emp.pagoModo === 'mensual') {
+    const monto = emp.pagoMonto != null && emp.pagoMonto > 0 ? emp.pagoMonto : config.salarioMinimoMensual
+    return config.horasMensualesReferencia > 0 ? monto / config.horasMensualesReferencia : 0
+  }
+  if (emp.pagoModo === 'turno') {
+    const monto = emp.pagoMonto != null && emp.pagoMonto > 0 ? emp.pagoMonto : 0
+    return emp.turnoHoras > 0 ? monto / emp.turnoHoras : 0
+  }
+  if (emp.valorHora != null && emp.valorHora > 0) {
+    return emp.valorHora
+  }
+  return emp.pagoMonto != null && emp.pagoMonto > 0 ? emp.pagoMonto : valorHoraActual.value
+}
+
+function pagoResumen(emp: Empleado) {
+  if (emp.pagoModo === 'solo') {
+    return 'Solo horario'
+  }
+  if (emp.pagoModo === 'mensual') {
+    const monto = emp.pagoMonto != null && emp.pagoMonto > 0 ? emp.pagoMonto : config.salarioMinimoMensual
+    return `${moneyShort(monto)} al mes`
+  }
+  if (emp.pagoModo === 'turno') {
+    return `${moneyShort(emp.pagoMonto || 0)} por turno`
+  }
+  return `${moneyShort(valorHoraEmpleado(emp))} por hora`
+}
+
 function costoMensual(emp: Empleado) {
-  return calcularSueldo(emp.slots.size, config, emp.valorHora).sueldoMensual
+  return emp.pagoModo === 'solo' ? 0 : valorHoraEmpleado(emp) * horasMensualesEmp(emp)
 }
 
 const filas = computed(() =>
   empleados.value.map((emp) => {
-    const calc = calcularSueldo(emp.slots.size, config, emp.valorHora)
+    const calc = calcularSueldo(emp.slots.size, config, valorHoraEmpleado(emp))
     return {
       id: emp.id,
       etiqueta: `Empleado ${emp.numero}`,
@@ -430,14 +517,16 @@ const filas = computed(() =>
       color: emp.color,
       horasSemanales: calc.horasSemanales,
       horasMensuales: calc.horasMensuales,
-      valorHora: calc.valorHora,
-      valorHoraPropio: emp.valorHora != null,
-      sueldoMensual: calc.sueldoMensual,
+      valorHora: valorHoraEmpleado(emp),
+      valorHoraPropio: emp.pagoModo !== 'mensual' && emp.pagoModo !== 'solo',
+      pago: pagoResumen(emp),
+      sueldoMensual: costoMensual(emp),
     }
   }),
 )
 
 const totalSueldos = computed(() => filas.value.reduce((s, f) => s + f.sueldoMensual, 0))
+const totalHorasSemanales = computed(() => empleados.value.reduce((s, emp) => s + emp.slots.size, 0))
 
 // ---------- Persistencia ----------
 async function guardarHorario(emp: Empleado) {
@@ -446,6 +535,64 @@ async function guardarHorario(emp: Empleado) {
     return { dia, hora }
   })
   await $fetch(`/api/pos/nomina/empleados/${emp.id}/horario`, { method: 'PUT', body: { slots } }).catch(() => null)
+}
+
+async function guardarPago(emp: Empleado) {
+  emp.valorHora = valorHoraEmpleado(emp)
+  writePagoPref(emp)
+  await $fetch(`/api/pos/nomina/empleados/${emp.id}`, {
+    method: 'PUT',
+    body: { valorHora: emp.pagoModo === 'solo' ? 0 : emp.valorHora },
+  }).catch(() => null)
+}
+
+function setPagoModo(emp: Empleado, modo: PagoModo) {
+  const anterior = emp.pagoModo
+  emp.pagoModo = modo
+  if (modo === 'mensual' && (anterior !== modo || emp.pagoMonto == null || emp.pagoMonto <= 0)) {
+    emp.pagoMonto = config.salarioMinimoMensual
+  }
+  if (modo === 'turno' && (anterior !== modo || emp.pagoMonto == null || emp.pagoMonto <= 0)) {
+    emp.pagoMonto = 80
+    emp.turnoHoras = emp.turnoHoras || 8
+  }
+  if (modo === 'hora' && (anterior !== modo || emp.pagoMonto == null || emp.pagoMonto <= 0)) {
+    emp.pagoMonto = Math.round(valorHoraActual.value)
+    emp.valorHora = emp.pagoMonto
+  }
+  void guardarPago(emp)
+}
+
+function onPagoMonto(emp: Empleado) {
+  if (emp.pagoModo === 'hora') {
+    emp.valorHora = emp.pagoMonto
+  }
+  void guardarPago(emp)
+}
+
+function marcarRango(emp: Empleado, dias: number[], inicio: number, finExclusivo: number) {
+  dias.forEach((dia) => {
+    HORAS_DIA.forEach((hora) => {
+      const key = slotKey(dia, hora)
+      if (hora >= inicio && hora < finExclusivo) {
+        emp.slots.add(key)
+      }
+    })
+  })
+  repintar(emp)
+  void guardarHorario(emp)
+}
+
+function aplicarHorarioRapido(emp: Empleado, tipo: 'manana' | 'dia' | 'sabado') {
+  emp.slots.clear()
+  if (tipo === 'manana') {
+    marcarRango(emp, [1, 2, 3, 4, 5], 8, 12)
+  } else if (tipo === 'dia') {
+    marcarRango(emp, [1, 2, 3, 4, 5, 6], 8, 17)
+  } else {
+    marcarRango(emp, [6, 0], 8, 14)
+  }
+  flash('Horario aplicado')
 }
 
 const nombreTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -460,33 +607,55 @@ function onNombre(emp: Empleado) {
   }, 500))
 }
 
-let configTimer: ReturnType<typeof setTimeout> | undefined
-function onConfig() {
-  clearTimeout(configTimer)
-  configTimer = setTimeout(() => {
-    void $fetch('/api/pos/nomina/config', { method: 'PUT', body: { salarioMinimoMensual: config.salarioMinimoMensual } }).catch(() => null)
-  }, 500)
-}
-
-async function agregarEmpleado(notify = true) {
+async function crearEmpleadoDesdeDialog() {
   try {
-    const data = await $fetch<{ empleado: any }>('/api/pos/nomina/empleados', { method: 'POST', body: {} })
+    const { empleado: creado } = await $fetch<{ empleado: any }>('/api/pos/nomina/empleados', {
+      method: 'POST',
+      body: {
+        nombre: editForm.nombre.trim(),
+        puesto: editForm.puesto.trim(),
+        celular: editForm.celular.trim(),
+        fechaNacimiento: formatFecha(editForm.fechaNacimiento),
+        direccion: editForm.direccion.trim(),
+        fechaAlta: formatFecha(editForm.fechaAlta),
+      },
+    })
+    const data = { empleado: creado }
     const emp = aEmpleado(data.empleado)
     empleados.value.push(emp)
+    let accesoFallido = false
+
+    if (editForm.rol) {
+      try {
+        const acceso = await $fetch<{ rol: Rol | null; ci: string | null; tieneLogin: boolean }>(
+          `/api/pos/nomina/empleados/${emp.id}/acceso`,
+          {
+            method: 'PUT',
+            body: {
+              rol: editForm.rol,
+              ci: editForm.ci.trim(),
+              password: editForm.password.trim(),
+            },
+          },
+        )
+        emp.rol = acceso.rol
+        emp.ci = acceso.ci
+        emp.tieneLogin = acceso.tieneLogin
+      } catch {
+        accesoFallido = true
+      }
+    }
+
     if (jss) {
       await nextTick()
       construirGrid(emp)
     }
-    if (notify) {
-      flash('Empleado agregado')
-      // Lleva al usuario a la card recién creada (al final del grid).
-      await nextTick()
-      document.getElementById(`emp-card-${emp.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
+    editVisible.value = false
+    flash(accesoFallido ? 'Empleado agregado. Revisa el acceso luego.' : 'Empleado agregado')
+    await nextTick()
+    document.getElementById(`emp-card-${emp.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   } catch {
-    if (notify) {
-      flash('No se pudo agregar el empleado')
-    }
+    infoError.value = 'No se pudo agregar el empleado.'
   }
 }
 
@@ -503,14 +672,12 @@ async function eliminarEmpleado(emp: Empleado) {
   }
   destruirGrid(emp.id)
   await $fetch(`/api/pos/nomina/empleados/${emp.id}`, { method: 'DELETE' }).catch(() => null)
+  if (import.meta.client) {
+    const prefs = readPagoPrefs()
+    delete prefs[emp.id]
+    localStorage.setItem(PAGO_PREFS_KEY, JSON.stringify(prefs))
+  }
   empleados.value = empleados.value.filter(e => e.id !== emp.id)
-}
-
-async function limpiarEmpleado(emp: Empleado) {
-  emp.slots.clear()
-  repintar(emp)
-  await guardarHorario(emp)
-  flash('Horas limpiadas')
 }
 
 // ---------- Modal: editar info de contacto + acceso (rol) ----------
@@ -529,10 +696,9 @@ const editForm = reactive({
   nombre: '',
   puesto: '',
   celular: '',
-  fechaNacimiento: '',
+  fechaNacimiento: null as Date | null,
   direccion: '',
-  valorHora: null as number | null,
-  fechaAlta: '',
+  fechaAlta: parseFecha(fechaLocalISO()) as Date | null,
   rol: '' as '' | Rol,
   ci: '',
   password: '',
@@ -541,16 +707,34 @@ const editForm = reactive({
 // ¿El rol elegido necesita credenciales nuevas? (empleado sin login aún)
 const requiereCredenciales = computed(() => Boolean(editForm.rol) && !editEmp.value?.tieneLogin)
 
+function resetEditForm() {
+  infoError.value = ''
+  editForm.nombre = ''
+  editForm.puesto = ''
+  editForm.celular = ''
+  editForm.fechaNacimiento = null
+  editForm.direccion = ''
+  editForm.fechaAlta = parseFecha(fechaLocalISO())
+  editForm.rol = ''
+  editForm.ci = ''
+  editForm.password = ''
+}
+
+function abrirCrearEmpleado() {
+  editEmp.value = null
+  resetEditForm()
+  editVisible.value = true
+}
+
 function abrirEditar(emp: Empleado) {
   editEmp.value = emp
   infoError.value = ''
   editForm.nombre = emp.nombre
   editForm.puesto = emp.puesto ?? ''
   editForm.celular = emp.celular ?? ''
-  editForm.fechaNacimiento = emp.fechaNacimiento ?? ''
+  editForm.fechaNacimiento = parseFecha(emp.fechaNacimiento)
   editForm.direccion = emp.direccion ?? ''
-  editForm.valorHora = emp.valorHora
-  editForm.fechaAlta = emp.fechaAlta ?? ''
+  editForm.fechaAlta = parseFecha(emp.fechaAlta) ?? parseFecha(fechaLocalISO())
   editForm.rol = emp.rol ?? ''
   editForm.ci = emp.ci ?? ''
   editForm.password = ''
@@ -559,11 +743,13 @@ function abrirEditar(emp: Empleado) {
 
 async function guardarInfo() {
   const emp = editEmp.value
-  if (!emp) {
-    return
-  }
 
   infoError.value = ''
+
+  if (!editForm.nombre.trim()) {
+    infoError.value = 'Ingresa el nombre del empleado.'
+    return
+  }
 
   // Validación de credenciales cuando se asigna acceso por primera vez.
   if (requiereCredenciales.value) {
@@ -580,6 +766,11 @@ async function guardarInfo() {
   guardandoInfo.value = true
 
   try {
+    if (!emp) {
+      await crearEmpleadoDesdeDialog()
+      return
+    }
+
     // 1) Datos de contacto.
     const { empleado: actualizado } = await $fetch<{ empleado: any }>(`/api/pos/nomina/empleados/${emp.id}`, {
       method: 'PUT',
@@ -587,10 +778,9 @@ async function guardarInfo() {
         nombre: editForm.nombre.trim(),
         puesto: editForm.puesto.trim(),
         celular: editForm.celular.trim(),
-        fechaNacimiento: editForm.fechaNacimiento.trim(),
+        fechaNacimiento: formatFecha(editForm.fechaNacimiento),
         direccion: editForm.direccion.trim(),
-        valorHora: editForm.valorHora,
-        fechaAlta: editForm.fechaAlta.trim(),
+        fechaAlta: formatFecha(editForm.fechaAlta),
       },
     })
 
@@ -660,30 +850,10 @@ function flash(msg: string) {
         <nav class="su-crumbs" aria-label="Ruta de planilla">
           <NuxtLink to="/pos/inicio">Inicio</NuxtLink>
           <i class="pi pi-angle-right" aria-hidden="true" />
-          <strong>Planilla</strong>
+          <strong>Personal</strong>
         </nav>
-        <h1>Planilla de turnos y costo laboral</h1>
-        <p>Planifica horarios de trabajo y estima el costo mensual del personal para entender mejor la rentabilidad del negocio.</p>
-      </div>
-
-      <div class="su-min">
-        <div class="su-min__title">
-          <i class="pi pi-flag" />
-          <div>
-          <strong>Base salarial editable</strong>
-          <small>Referencia mensual para estimación</small>
-          </div>
-        </div>
-        <InputNumber
-          v-model="config.salarioMinimoMensual"
-          mode="currency"
-          currency="BOB"
-          locale="es-BO"
-          :min="0"
-          fluid
-          @update:model-value="onConfig"
-        />
-        <small class="su-min__hint">Este valor es configurable y se usa solo para estimaciones internas.</small>
+        <h1>Personal y turnos</h1>
+        <p>Define cómo le pagas a cada persona y marca cuándo trabaja. NEXA calcula horas, valor hora y costo mensual estimado.</p>
       </div>
     </header>
 
@@ -692,13 +862,28 @@ function flash(msg: string) {
     </div>
 
     <template v-else>
+      <section class="su-overview" aria-label="Resumen de personal">
+        <article>
+          <span>Personas</span>
+          <strong>{{ empleados.length }}</strong>
+        </article>
+        <article>
+          <span>Horas semanales</span>
+          <strong>{{ totalHorasSemanales }} h</strong>
+        </article>
+        <article>
+          <span>Costo mensual estimado</span>
+          <strong>{{ money(totalSueldos) }}</strong>
+        </article>
+      </section>
+
       <!-- 1. Hojas de cálculo por trabajador -->
       <section>
         <div class="su-section-head">
-        <h2>1. Define turnos semanales</h2>
-          <Button type="button" icon="pi pi-plus" label="Agregar empleado" @click="agregarEmpleado()" />
+        <h2>1. Empleados, pago y turnos</h2>
+          <Button type="button" icon="pi pi-plus" label="Agregar empleado" @click="abrirCrearEmpleado" />
         </div>
-        <p class="su-section-sub">Haz clic y arrastra sobre la hoja para marcar las horas planificadas de cada persona.</p>
+        <p class="su-section-sub">Primero elige cómo le pagas. Luego usa un horario rápido o pinta horas en la semana.</p>
 
         <div class="su-grid">
           <article
@@ -714,9 +899,6 @@ function flash(msg: string) {
               <button type="button" class="su-card__edit" title="Editar datos y acceso" @click="abrirEditar(emp)">
                 <i class="pi pi-user-edit" />
               </button>
-              <button type="button" class="su-card__clear" title="Limpiar horas" @click="limpiarEmpleado(emp)">
-                <i class="pi pi-eraser" />
-              </button>
               <button type="button" class="su-card__del" title="Eliminar" @click="eliminarEmpleado(emp)">
                 <i class="pi pi-trash" />
               </button>
@@ -731,6 +913,70 @@ function flash(msg: string) {
                 <i class="pi pi-phone" /> {{ emp.celular }}
               </span>
             </div>
+
+            <section class="su-pay">
+              <div class="su-pay__head">
+                <span>Cómo le pagas</span>
+                <strong>{{ pagoResumen(emp) }}</strong>
+              </div>
+              <div class="su-pay__modes" aria-label="Tipo de pago">
+                <button type="button" :class="{ 'is-active': emp.pagoModo === 'mensual' }" @click="setPagoModo(emp, 'mensual')">
+                  Mensual
+                </button>
+                <button type="button" :class="{ 'is-active': emp.pagoModo === 'turno' }" @click="setPagoModo(emp, 'turno')">
+                  Por turno
+                </button>
+                <button type="button" :class="{ 'is-active': emp.pagoModo === 'hora' }" @click="setPagoModo(emp, 'hora')">
+                  Por hora
+                </button>
+                <button type="button" :class="{ 'is-active': emp.pagoModo === 'solo' }" @click="setPagoModo(emp, 'solo')">
+                  Solo horario
+                </button>
+              </div>
+
+              <div v-if="emp.pagoModo !== 'solo'" class="su-pay__fields">
+                <label class="su-pay__field">
+                  <span>
+                    {{ emp.pagoModo === 'mensual' ? 'Sueldo mensual' : emp.pagoModo === 'turno' ? 'Pago por turno' : 'Pago por hora' }}
+                  </span>
+                  <InputNumber
+                    v-model="emp.pagoMonto"
+                    mode="decimal"
+                    :min="0"
+                    :max-fraction-digits="2"
+                    fluid
+                    @update:model-value="onPagoMonto(emp)"
+                  />
+                </label>
+                <label v-if="emp.pagoModo === 'turno'" class="su-pay__field">
+                  <span>Horas del turno</span>
+                  <InputNumber
+                    v-model="emp.turnoHoras"
+                    mode="decimal"
+                    :min="1"
+                    :max="16"
+                    :max-fraction-digits="1"
+                    fluid
+                    @update:model-value="onPagoMonto(emp)"
+                  />
+                </label>
+                <div class="su-pay__result">
+                  <span>Valor hora estimado</span>
+                  <strong>{{ money(valorHoraEmpleado(emp)) }}</strong>
+                </div>
+              </div>
+
+              <p v-else class="su-pay__note">Usa esta opción si solo quieres organizar turnos sin calcular sueldo.</p>
+            </section>
+
+            <section class="su-quick">
+              <span>Horarios rápidos</span>
+              <div>
+                <button type="button" @click="aplicarHorarioRapido(emp, 'manana')">Lun-Vie mañana</button>
+                <button type="button" @click="aplicarHorarioRapido(emp, 'dia')">Lun-Sáb día</button>
+                <button type="button" @click="aplicarHorarioRapido(emp, 'sabado')">Fin de semana</button>
+              </div>
+            </section>
 
             <div class="su-jss-wrap">
               <div :ref="el => setGridEl(emp.id, el)" class="su-jss" />
@@ -749,10 +995,10 @@ function flash(msg: string) {
           </article>
 
           <!-- Tarjeta para agregar un nuevo trabajador (estilo Google) -->
-          <button type="button" class="su-card su-card--add" @click="agregarEmpleado()">
+          <button type="button" class="su-card su-card--add" @click="abrirCrearEmpleado">
             <span class="su-card-add__icon"><i class="pi pi-plus" /></span>
             <strong>Agregar empleado</strong>
-            <small>Crea una nueva planilla de turnos</small>
+            <small>Completa sus datos antes de crear la planilla</small>
           </button>
         </div>
 
@@ -761,28 +1007,10 @@ function flash(msg: string) {
 
       <!-- 2. Resumen -->
       <section id="resumen" class="su-summary">
-        <h2>2. Cómo se estima el costo laboral</h2>
-        <p class="su-section-sub">El costo se calcula con las horas planificadas y la base salarial configurable.</p>
+        <h2>2. Pagos estimados</h2>
+        <p class="su-section-sub">El valor hora queda como cálculo interno para comparar personal y medir el costo real de cada turno.</p>
 
         <div class="su-summary__body">
-          <aside class="su-ref">
-            <strong>Datos de referencia</strong>
-            <div class="su-ref__row">
-              <span>Base mensual</span>
-              <b>{{ money(config.salarioMinimoMensual) }}</b>
-            </div>
-            <div class="su-ref__row">
-              <span>Horas mensuales de referencia</span>
-              <b>{{ config.horasMensualesReferencia }} h</b>
-            </div>
-            <small>({{ JORNADA_SEMANAL_LEGAL }} h/semana × {{ config.semanasPorMes }} semanas — jornada completa)</small>
-            <div class="su-ref__row su-ref__row--hl">
-              <span>Valor hora</span>
-              <b>{{ money(valorHoraActual) }}</b>
-            </div>
-            <small>({{ fmt.format(config.salarioMinimoMensual) }} ÷ {{ config.horasMensualesReferencia }})</small>
-          </aside>
-
           <div class="su-table-wrap">
             <table class="su-table">
               <thead>
@@ -790,7 +1018,8 @@ function flash(msg: string) {
                   <th>Empleado</th>
                   <th class="num">Total horas semanales</th>
                   <th class="num">Total horas mensuales<small>(aprox. {{ config.semanasPorMes }} semanas)</small></th>
-                  <th class="num">Valor hora</th>
+                  <th class="num">Pago configurado</th>
+                  <th class="num">Valor hora estimado</th>
                   <th class="num">Costo mensual estimado</th>
                 </tr>
               </thead>
@@ -802,6 +1031,7 @@ function flash(msg: string) {
                   </td>
                   <td class="num">{{ f.horasSemanales }} h</td>
                   <td class="num">{{ Math.round(f.horasMensuales) }} h</td>
+                  <td class="num">{{ f.pago }}</td>
                   <td class="num">
                     {{ money(f.valorHora) }}
                     <small v-if="f.valorHoraPropio" class="su-tag-propio">propio</small>
@@ -811,7 +1041,7 @@ function flash(msg: string) {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="4">Costo laboral mensual estimado</td>
+                  <td colspan="5">Costo laboral mensual estimado</td>
                   <td class="num strong total">{{ money(totalSueldos) }}</td>
                 </tr>
               </tfoot>
@@ -836,102 +1066,107 @@ function flash(msg: string) {
     <Dialog
       v-model:visible="editVisible"
       modal
-      :header="editEmp ? `Empleado ${editEmp.numero}` : 'Empleado'"
+      :header="editEmp ? `Empleado ${editEmp.numero}` : 'Agregar empleado'"
       class="su-dialog"
-      :style="{ width: '480px' }"
+      :style="{ width: '620px' }"
+      :breakpoints="{ '760px': '94vw', '420px': '98vw' }"
     >
       <div class="su-form">
-        <p class="su-form__section">Datos de contacto</p>
-
-        <div class="su-form__field">
-          <label>Nombre</label>
-          <InputText v-model="editForm.nombre" placeholder="Nombre completo" fluid />
-        </div>
-
-        <div class="su-form__row">
-          <div class="su-form__field">
-            <label>Celular</label>
-            <InputText v-model="editForm.celular" placeholder="Ej. 70012345" fluid />
+        <section class="su-form__block su-form__block--primary">
+          <div class="su-form__block-head">
+            <span>1</span>
+            <div>
+              <strong>Datos básicos</strong>
+              <small>Solo el nombre es obligatorio.</small>
+            </div>
           </div>
+
           <div class="su-form__field">
-            <label>Fecha de nacimiento</label>
-            <input v-model="editForm.fechaNacimiento" type="date" class="su-date">
+            <label>Nombre completo</label>
+            <InputText v-model="editForm.nombre" fluid autofocus />
           </div>
-        </div>
 
-        <div class="su-form__field">
-          <label>Dirección</label>
-          <InputText v-model="editForm.direccion" placeholder="Calle, zona, referencia" fluid />
-        </div>
-
-        <div class="su-form__field">
-          <label>Puesto</label>
-          <InputText v-model="editForm.puesto" placeholder="Ej. Atención y caja" fluid />
-        </div>
-
-        <p class="su-form__section">Pago y vínculo</p>
-        <p class="su-form__hint">
-          El costo se calcula con las horas planificadas. Si defines un
-          <strong>valor por hora</strong> propio, se usa ese; si lo dejas vacío, se aplica el de la tienda
-          (<strong>{{ money(valorHoraActual) }}</strong>).
-        </p>
-
-        <div class="su-form__row">
-          <div class="su-form__field">
-            <label>Valor por hora (Bs.)</label>
-            <InputNumber
-              v-model="editForm.valorHora"
-              mode="decimal"
-              :min="0"
-              :max-fraction-digits="2"
-              :placeholder="fmt.format(valorHoraActual)"
-              fluid
-            />
-          </div>
-          <div class="su-form__field">
-            <label>Fecha de ingreso</label>
-            <input v-model="editForm.fechaAlta" type="date" class="su-date">
-          </div>
-        </div>
-
-        <p class="su-form__section">Acceso al sistema</p>
-        <p class="su-form__hint">
-          Asigna un rol para que el empleado inicie sesión con su <strong>CI</strong> y una contraseña.
-          Un cajero solo accede a <strong>Caja</strong> y <strong>Ventas</strong>.
-        </p>
-
-        <div class="su-form__field">
-          <label>Rol</label>
-          <Select v-model="editForm.rol" :options="ROLES_OPCIONES" option-label="label" option-value="value" fluid />
-        </div>
-
-        <template v-if="editForm.rol">
           <div class="su-form__row">
             <div class="su-form__field">
-              <label>CI (carnet de identidad)</label>
-              <InputText v-model="editForm.ci" placeholder="Ej. 1234567" fluid />
+              <label>Puesto</label>
+              <InputText v-model="editForm.puesto" fluid />
             </div>
             <div class="su-form__field">
-              <label>{{ editEmp?.tieneLogin ? 'Nueva contraseña' : 'Contraseña' }}</label>
-              <InputText
-                v-model="editForm.password"
-                type="password"
-                :placeholder="editEmp?.tieneLogin ? 'Dejar vacío para no cambiar' : 'Mínimo 4 caracteres'"
-                fluid
-              />
+              <label>Fecha de ingreso</label>
+              <DatePicker v-model="editForm.fechaAlta" show-icon fluid />
             </div>
           </div>
-          <p v-if="editEmp?.tieneLogin" class="su-form__hint su-form__hint--ok">
-            <i class="pi pi-check-circle" /> Este empleado ya tiene acceso. Solo cambia lo necesario.
-          </p>
-        </template>
+        </section>
+
+        <section class="su-form__block">
+          <div class="su-form__block-head">
+            <span>2</span>
+            <div>
+              <strong>Contacto</strong>
+              <small>Opcional, útil para identificar al empleado.</small>
+            </div>
+          </div>
+
+          <div class="su-form__row">
+            <div class="su-form__field">
+              <label>Celular</label>
+              <SharedPhoneCountryInput
+                v-model="editForm.celular"
+                input-id="empleado-celular"
+                name="empleado-celular"
+                autocomplete="tel"
+              />
+            </div>
+            <div class="su-form__field">
+              <label>Fecha de nacimiento</label>
+              <DatePicker v-model="editForm.fechaNacimiento" show-icon fluid show-clear />
+            </div>
+          </div>
+
+          <div class="su-form__field">
+            <label>Dirección</label>
+            <InputText v-model="editForm.direccion" fluid />
+          </div>
+        </section>
+
+        <section class="su-form__block">
+          <div class="su-form__block-head">
+            <span>3</span>
+            <div>
+              <strong>Acceso al sistema</strong>
+              <small>Déjalo sin acceso si solo quieres registrar turnos.</small>
+            </div>
+          </div>
+
+          <div class="su-form__field">
+            <label>Rol</label>
+            <Select v-model="editForm.rol" :options="ROLES_OPCIONES" option-label="label" option-value="value" fluid />
+          </div>
+
+          <div v-if="editForm.rol" class="su-form__access">
+            <div class="su-form__row">
+              <div class="su-form__field">
+                <label>CI</label>
+                <InputText v-model="editForm.ci" fluid />
+              </div>
+              <div class="su-form__field">
+                <label>{{ editEmp?.tieneLogin ? 'Nueva contraseña' : 'Crear contraseña' }}</label>
+                <InputText v-model="editForm.password" type="password" fluid />
+              </div>
+            </div>
+            <p class="su-form__hint" :class="{ 'su-form__hint--ok': editEmp?.tieneLogin }">
+              <i :class="editEmp?.tieneLogin ? 'pi pi-check-circle' : 'pi pi-info-circle'" />
+              {{ editEmp?.tieneLogin ? 'Ya tiene acceso. La contraseña puede quedar vacía si no la cambiarás.' : 'La contraseña debe tener al menos 4 caracteres.' }}
+            </p>
+          </div>
+        </section>
 
         <p v-if="infoError" class="su-form__error"><i class="pi pi-exclamation-triangle" /> {{ infoError }}</p>
       </div>
 
       <template #footer>
         <Button type="button" label="Cancelar" outlined severity="secondary" @click="editVisible = false" />
-        <Button type="button" label="Guardar" :loading="guardandoInfo" @click="guardarInfo" />
+        <Button type="button" :label="editEmp ? 'Guardar' : 'Crear empleado'" :loading="guardandoInfo" @click="guardarInfo" />
       </template>
     </Dialog>
   </div>
@@ -948,10 +1183,7 @@ function flash(msg: string) {
 
 /* ---------- Encabezado ---------- */
 .su-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-  gap: 18px;
-  align-items: start;
+  display: block;
 }
 
 .su-crumbs {
@@ -999,37 +1231,31 @@ function flash(msg: string) {
   line-height: 1.5;
 }
 
-.su-min {
+.su-overview {
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.su-overview article {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
   border: 1px solid #e7eee8;
   border-radius: 14px;
-  background: #f7fbf6;
+  background: #ffffff;
 }
 
-.su-min__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.su-min__title i {
-  color: #0a6f1f;
-  font-size: 1.2rem;
-}
-
-.su-min__title strong {
-  display: block;
-  font-size: 0.86rem;
-  font-weight: 900;
-}
-
-.su-min__title small,
-.su-min__hint {
-  font-size: 0.72rem;
-  font-weight: 600;
+.su-overview span {
   color: #6b7a6f;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.su-overview strong {
+  color: #0d2b5e;
+  font-size: 1.18rem;
+  font-weight: 950;
 }
 
 /* ---------- Secciones ---------- */
@@ -1150,7 +1376,6 @@ function flash(msg: string) {
 }
 
 .su-card__del,
-.su-card__clear,
 .su-card__edit {
   display: grid;
   place-items: center;
@@ -1165,11 +1390,6 @@ function flash(msg: string) {
 .su-card__edit {
   background: #eef2fb;
   color: #2f5fd0;
-}
-
-.su-card__clear {
-  background: #eaf6e7;
-  color: #1c7a2c;
 }
 
 .su-card__del {
@@ -1215,19 +1435,187 @@ function flash(msg: string) {
   color: #5d6b61;
 }
 
+.su-pay {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eff4ef;
+  background: #fbfdfb;
+}
+
+.su-pay__head,
+.su-quick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.su-pay__head span,
+.su-quick > span {
+  color: #41617f;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.su-pay__head strong {
+  color: #102016;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.su-pay__modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.su-pay__modes button,
+.su-quick button {
+  min-height: 34px;
+  border: 1px solid #dfe8df;
+  border-radius: 8px;
+  background: #fff;
+  color: #41514a;
+  font-size: 0.72rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.su-pay__modes button.is-active {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 14%, #ffffff);
+  color: #102016;
+}
+
+.su-pay__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.65fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.su-pay__field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.su-pay__field span,
+.su-pay__result span {
+  color: #6b7a6f;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.su-pay__result {
+  display: grid;
+  gap: 4px;
+  min-width: 124px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #eef8ee;
+}
+
+.su-pay__result strong {
+  color: #0a6f1f;
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.su-pay__note {
+  margin: 0;
+  color: #6b7a6f;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.su-quick {
+  padding: 10px 14px;
+  border-bottom: 1px solid #eff4ef;
+}
+
+.su-quick div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.su-quick button {
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.su-quick button:hover {
+  border-color: #9bc99f;
+  background: #f1f8ef;
+}
+
+.su-quick button.is-danger {
+  color: #b91c1c;
+  border-color: #f4c7c7;
+}
+
 /* ---------- Formulario del modal ---------- */
 .su-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
-.su-form__section {
-  margin: 6px 0 0;
-  font-size: 0.78rem;
+.su-form__block {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e7eee8;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.su-form__block--primary {
+  border-color: #cfe8d1;
+  background: #f8fcf7;
+}
+
+.su-form__block-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.su-form__block-head > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: #eaf6e7;
+  color: #0a6f1f;
+  font-size: 0.74rem;
   font-weight: 900;
+}
+
+.su-form__block-head strong {
+  display: block;
   color: #0d2b5e;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.su-form__block-head small {
+  display: block;
+  margin-top: 1px;
+  color: #6b7a6f;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.su-form__access {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
 }
 
 .su-form__hint {
@@ -1248,7 +1636,7 @@ function flash(msg: string) {
 .su-form__row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .su-form__field {
@@ -1262,14 +1650,17 @@ function flash(msg: string) {
   color: #41617f;
 }
 
-.su-date {
-  width: 100%;
-  padding: 9px 11px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-family: inherit;
-  color: #102016;
+.su-dialog :deep(.p-dialog-content) {
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
+  padding-top: 0.4rem;
+}
+
+.su-dialog :deep(.p-dialog-footer) {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 0.7rem;
 }
 
 .su-form__error {
@@ -1288,6 +1679,27 @@ function flash(msg: string) {
 @media (max-width: 520px) {
   .su-form__row {
     grid-template-columns: 1fr;
+  }
+
+  .su-form__block {
+    padding: 10px;
+  }
+
+  .su-dialog :deep(.p-dialog-header) {
+    padding: 0.9rem 1rem 0.65rem;
+  }
+
+  .su-dialog :deep(.p-dialog-content) {
+    padding-inline: 0.75rem;
+  }
+
+  .su-dialog :deep(.p-dialog-footer) {
+    flex-direction: column-reverse;
+    padding-inline: 0.75rem;
+  }
+
+  .su-dialog :deep(.p-dialog-footer .p-button) {
+    width: 100%;
   }
 }
 
@@ -1469,52 +1881,7 @@ function flash(msg: string) {
 }
 
 .su-summary__body {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: 18px;
   margin-top: 14px;
-}
-
-.su-ref {
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  padding: 16px;
-  border-radius: 14px;
-  background: #f7fbf6;
-  border: 1px solid #e7eee8;
-}
-
-.su-ref > strong {
-  font-size: 0.86rem;
-  font-weight: 900;
-  margin-bottom: 4px;
-}
-
-.su-ref__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #4a5a4f;
-}
-
-.su-ref__row b {
-  font-weight: 900;
-  color: #102016;
-}
-
-.su-ref__row--hl b {
-  color: #0a6f1f;
-  font-size: 1rem;
-}
-
-.su-ref small {
-  font-size: 0.68rem;
-  color: #8a978d;
-  font-weight: 600;
 }
 
 .su-table-wrap {
@@ -1616,10 +1983,8 @@ function flash(msg: string) {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
-  /* La tarjeta de base salarial pasa a ancho completo, debajo del título. */
-  .su-header,
   .su-grid,
-  .su-summary__body {
+  .su-overview {
     grid-template-columns: 1fr;
   }
 }
@@ -1633,6 +1998,28 @@ function flash(msg: string) {
   .su-section-head {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .su-pay__head,
+  .su-quick {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .su-pay__modes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .su-pay__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .su-quick div {
+    justify-content: stretch;
+  }
+
+  .su-quick button {
+    flex: 1 1 45%;
   }
 }
 

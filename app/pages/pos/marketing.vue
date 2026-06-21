@@ -45,13 +45,41 @@ watch(post, (value) => {
 
 // --- Objetivo antes de generar ---
 type Modo = 'clientes' | 'sobrante' | 'combo' | 'producto'
-type Objetivo = { id: Modo; titulo: string; desc: string; icon: string }
+type Objetivo = { id: Modo; titulo: string; desc: string; img: string; tone: string; accion: string }
 
 const OBJETIVOS: Objetivo[] = [
-  { id: 'clientes', titulo: 'Atraer clientes', desc: 'Muestra un producto para que lleguen más compradores.', icon: 'fluent-emoji:people-hugging' },
-  { id: 'sobrante', titulo: 'Vender lo que me sobra', desc: 'Una oferta de lo que tienes de más en stock.', icon: 'fluent-emoji:package' },
-  { id: 'combo', titulo: 'Armar un combo', desc: 'Elige los productos y arma una promoción.', icon: 'fluent-emoji:shopping-bags' },
-  { id: 'producto', titulo: 'Promocionar un producto', desc: 'Tú eliges cuál quieres publicar.', icon: 'fluent-emoji:label' },
+  {
+    id: 'clientes',
+    titulo: 'Atraer clientes',
+    desc: 'Haru prepara una publicación para que más personas conozcan tu negocio.',
+    img: '/haru/marketing/atraer-clientes.jpg',
+    tone: 'green',
+    accion: 'Difundir',
+  },
+  {
+    id: 'sobrante',
+    titulo: 'Vender lo que me sobra',
+    desc: 'Convierte el stock acumulado en una oferta simple para vender hoy.',
+    img: '/haru/marketing/vender-sobrante.jpg',
+    tone: 'amber',
+    accion: 'Ofertar',
+  },
+  {
+    id: 'combo',
+    titulo: 'Armar un combo',
+    desc: 'Elige productos y Haru los presenta como una promoción atractiva.',
+    img: '/haru/marketing/armar-combo.jpg',
+    tone: 'blue',
+    accion: 'Combinar',
+  },
+  {
+    id: 'producto',
+    titulo: 'Ofrecer producto',
+    desc: 'Escoge un producto específico y Haru crea el texto para publicarlo.',
+    img: '/haru/marketing/ofrecer-producto.jpg',
+    tone: 'mint',
+    accion: 'Publicar',
+  },
 ]
 
 // Guía de video: estructura probada para reels/TikTok (gancho → muestra → convence → invita).
@@ -138,15 +166,15 @@ function cerrarSelector() {
 function crear() {
   const modo = modoActual.value
   if (!modo) {
-    flash('Elige qué quieres lograr.')
+    mostrarErrorHaru('Elige qué quieres lograr antes de pedirle ayuda a Haru.', 'Selecciona una de las tarjetas: atraer clientes, vender sobrante, armar combo u ofrecer producto.')
     return
   }
   if (modo === 'combo' && comboIds.value.length < 2) {
-    flash('Elige al menos 2 productos para el combo.')
+    mostrarErrorHaru('Haru necesita al menos 2 productos para armar un combo.', 'Elige productos activos de tu inventario para que el combo tenga sentido comercial.')
     return
   }
   if (modo === 'producto' && !productoElegido.value) {
-    flash('Elige un producto.')
+    mostrarErrorHaru('Elige el producto que quieres ofrecer.', 'Haru no puede crear una publicación sin saber qué producto real debe promocionar.')
     return
   }
   void generar(modo)
@@ -155,6 +183,20 @@ function crear() {
 const generando = ref(false)
 const flashMsg = ref('')
 let flashTimer: ReturnType<typeof setTimeout> | undefined
+let haruDialogTimer: ReturnType<typeof setTimeout> | undefined
+
+type HaruDialogState = 'loading' | 'success' | 'error'
+
+const haruDialogVisible = ref(false)
+const haruDialogState = ref<HaruDialogState>('loading')
+const haruDialogTitle = ref('')
+const haruDialogText = ref('')
+const haruDialogDetail = ref('')
+const haruDialogCanClose = computed(() => haruDialogState.value !== 'loading')
+const haruDialogShowInventory = computed(() => {
+  const text = `${haruDialogText.value} ${haruDialogDetail.value}`.toLowerCase()
+  return haruDialogState.value === 'error' && (text.includes('inventario') || text.includes('stock') || text.includes('producto'))
+})
 
 function flash(message: string) {
   flashMsg.value = message
@@ -170,7 +212,56 @@ onBeforeUnmount(() => {
   if (flashTimer) {
     clearTimeout(flashTimer)
   }
+  if (haruDialogTimer) {
+    clearTimeout(haruDialogTimer)
+  }
 })
+
+function abrirDialogHaru(modo: Modo) {
+  if (haruDialogTimer) {
+    clearTimeout(haruDialogTimer)
+  }
+
+  const objetivo = OBJETIVOS.find((obj) => obj.id === modo)?.titulo ?? 'tu publicación'
+  haruDialogState.value = 'loading'
+  haruDialogTitle.value = 'Haru está preparando tu publicación'
+  haruDialogText.value = `Estoy revisando los datos reales de ${objetivo.toLowerCase()}.`
+  haruDialogDetail.value = 'Primero verifico producto, precio, stock y categoría. Si falta algo importante, te aviso en vez de inventarlo.'
+  haruDialogVisible.value = true
+}
+
+function mostrarExitoHaru() {
+  haruDialogState.value = 'success'
+  haruDialogTitle.value = 'Publicación preparada'
+  haruDialogText.value = 'Haru encontró datos suficientes y armó una idea lista para revisar.'
+  haruDialogDetail.value = 'Puedes ajustar el texto antes de copiarlo o publicarlo.'
+  haruDialogTimer = setTimeout(() => {
+    haruDialogVisible.value = false
+  }, 900)
+}
+
+function mostrarErrorHaru(message: string, detail?: string) {
+  if (haruDialogTimer) {
+    clearTimeout(haruDialogTimer)
+  }
+  haruDialogState.value = 'error'
+  haruDialogTitle.value = 'Haru necesita más datos'
+  haruDialogText.value = message
+  haruDialogDetail.value = detail ?? 'Revisa tus productos activos, stock o selección actual y vuelve a intentarlo.'
+  haruDialogVisible.value = true
+}
+
+function cerrarDialogHaru() {
+  if (!haruDialogCanClose.value) {
+    return
+  }
+  haruDialogVisible.value = false
+}
+
+async function irAInventarioDesdeHaru() {
+  haruDialogVisible.value = false
+  await navigateTo('/pos/catalogo')
+}
 
 // Los hashtags ya viven dentro del textarea, así que el texto a copiar/publicar es tal cual.
 const textoParaCopiar = computed(() => textoEditable.value)
@@ -190,6 +281,7 @@ const whatsappUrl = computed(() => {
 
 // Red activa: define qué mockup de preview se muestra (y a dónde se publica).
 const redActivaId = ref<RedSocial['id']>('instagram')
+const socialPreviewPlaceholder = '/social-preview-placeholder.jpg'
 const redActiva = computed(() => REDES_SOCIALES.find((r) => r.id === redActivaId.value) ?? REDES_SOCIALES[0]!)
 
 // Texto sin hashtags para mostrar la cabecera del caption por separado cuando hace falta.
@@ -209,6 +301,7 @@ async function generar(modo: Modo) {
     return
   }
   generando.value = true
+  abrirDialogHaru(modo)
   try {
     const result = await $fetch<{ actual: MarketingPublicacion }>('/api/pos/marketing/generar', {
       method: 'POST',
@@ -225,10 +318,17 @@ async function generar(modo: Modo) {
       totalProductos: data.value?.totalProductos ?? 0,
     }
     cerrarSelector()
+    mostrarExitoHaru()
     flash('Publicación preparada')
   } catch (error: unknown) {
-    const message = (error as { data?: { statusMessage?: string } })?.data?.statusMessage
-    flash(message ?? 'No se pudo generar la publicación.')
+    const dataError = (error as { data?: { statusCode?: number; statusMessage?: string } })?.data
+    const message = dataError?.statusMessage ?? 'No se pudo generar la publicación.'
+    if (dataError?.statusCode === 400 || message.toLowerCase().includes('haru')) {
+      mostrarErrorHaru(message)
+    } else {
+      haruDialogVisible.value = false
+      flash(message)
+    }
   } finally {
     generando.value = false
   }
@@ -295,13 +395,24 @@ async function publicarEn(red: RedSocial) {
             :key="obj.id"
             type="button"
             class="obj"
-            :class="{ 'is-active': modoActual === obj.id }"
+            :class="[`is-${obj.tone}`, { 'is-active': modoActual === obj.id }]"
             :disabled="generando"
             @click="objetivoSel = obj"
           >
-            <span class="obj__icon"><Icon :name="obj.icon" aria-hidden="true" /></span>
-            <strong>{{ obj.titulo }}</strong>
-            <small>{{ obj.desc }}</small>
+            <span class="obj__art">
+              <img
+                :src="obj.img"
+                :alt="obj.titulo"
+                loading="lazy"
+                decoding="async"
+              >
+            </span>
+            <span class="obj__copy">
+              <span class="obj__action">{{ obj.accion }}</span>
+              <strong>{{ obj.titulo }}</strong>
+              <small>{{ obj.desc }}</small>
+            </span>
+            <i class="pi pi-check-circle obj__check" aria-hidden="true" />
           </button>
         </div>
 
@@ -417,7 +528,7 @@ async function publicarEn(red: RedSocial) {
               </header>
               <div class="pv__media pv__media--square">
                 <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                <div v-else class="pv__ph" />
+                <img v-else :src="socialPreviewPlaceholder" alt="Vista previa para redes sociales">
               </div>
               <div class="ig__acts">
                 <i class="pi pi-heart" aria-hidden="true" />
@@ -441,7 +552,7 @@ async function publicarEn(red: RedSocial) {
               <p class="fb__text">{{ textoVista }}</p>
               <div class="pv__media pv__media--wide">
                 <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                <div v-else class="pv__ph" />
+                <img v-else :src="socialPreviewPlaceholder" alt="Vista previa para Facebook">
               </div>
               <div class="fb__acts">
                 <span><i class="pi pi-thumbs-up" aria-hidden="true" />Me gusta</span>
@@ -475,7 +586,7 @@ async function publicarEn(red: RedSocial) {
               <div class="wa__bubble">
                 <div class="pv__media pv__media--square wa__media">
                   <img v-if="post.imagenUrl" :src="post.imagenUrl" :alt="post.productoNombre ?? ''">
-                  <div v-else class="pv__ph" />
+                  <img v-else :src="socialPreviewPlaceholder" alt="Vista previa para WhatsApp">
                 </div>
                 <p class="wa__text">{{ textoVista }}</p>
                 <span class="wa__time">{{ post.mejorHora || '11:30' }} <i class="pi pi-check" aria-hidden="true" /></span>
@@ -554,6 +665,45 @@ async function publicarEn(red: RedSocial) {
         </div>
       </div>
     </template>
+
+    <Dialog
+      v-model:visible="haruDialogVisible"
+      modal
+      :closable="haruDialogCanClose"
+      :close-on-escape="haruDialogCanClose"
+      :dismissable-mask="false"
+      class="haru-dialog"
+    >
+      <div class="haru-feedback" :class="`is-${haruDialogState}`">
+        <div class="haru-feedback__visual" aria-hidden="true">
+          <span v-if="haruDialogState === 'loading'" class="haru-spinner" />
+          <i v-else-if="haruDialogState === 'success'" class="pi pi-check-circle" />
+          <i v-else class="pi pi-exclamation-triangle" />
+        </div>
+
+        <div class="haru-feedback__copy">
+          <span class="haru-feedback__kicker">Haru Marketing</span>
+          <h2>{{ haruDialogTitle }}</h2>
+          <p>{{ haruDialogText }}</p>
+          <small>{{ haruDialogDetail }}</small>
+        </div>
+
+        <div v-if="haruDialogCanClose" class="haru-feedback__actions">
+          <button
+            v-if="haruDialogShowInventory"
+            type="button"
+            class="btn-primary"
+            @click="irAInventarioDesdeHaru"
+          >
+            <i class="pi pi-box" aria-hidden="true" />
+            Revisar inventario
+          </button>
+          <button type="button" class="btn-ghost" @click="cerrarDialogHaru">
+            Entendido
+          </button>
+        </div>
+      </div>
+    </Dialog>
 
     <!-- Aviso flotante de acciones -->
     <Transition name="flash">
@@ -656,6 +806,123 @@ async function publicarEn(red: RedSocial) {
 .btn-primary:disabled {
   opacity: 0.7;
   cursor: default;
+}
+
+:global(.haru-dialog.p-dialog) {
+  width: min(92vw, 430px);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+:global(.haru-dialog .p-dialog-header) {
+  display: none;
+}
+
+:global(.haru-dialog .p-dialog-content) {
+  padding: 0;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.haru-feedback {
+  display: grid;
+  justify-items: center;
+  gap: 15px;
+  padding: 28px 24px 24px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(14, 138, 40, 0.12), transparent 42%),
+    #fff;
+}
+
+.haru-feedback__visual {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  background: #edf8e9;
+  color: #0a6f1f;
+  font-size: 2.2rem;
+}
+
+.haru-feedback.is-error .haru-feedback__visual {
+  background: #fff3df;
+  color: #c46a12;
+}
+
+.haru-feedback.is-success .haru-feedback__visual {
+  background: #e8f8ee;
+  color: #0a8f3a;
+}
+
+.haru-spinner {
+  width: 38px;
+  height: 38px;
+  border: 4px solid rgba(10, 111, 31, 0.18);
+  border-top-color: #0a6f1f;
+  border-radius: 50%;
+  animation: haru-spin 0.8s linear infinite;
+}
+
+.haru-feedback__copy {
+  display: grid;
+  gap: 7px;
+}
+
+.haru-feedback__kicker {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1c7a2c;
+}
+
+.haru-feedback__copy h2 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.14rem;
+  font-weight: 900;
+  line-height: 1.18;
+  color: #071327;
+}
+
+.haru-feedback__copy p {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 750;
+  line-height: 1.45;
+  color: #233229;
+}
+
+.haru-feedback__copy small {
+  display: block;
+  max-width: 340px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #6b7a6f;
+}
+
+.haru-feedback__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding-top: 4px;
+  flex-wrap: wrap;
+}
+
+.haru-feedback__actions .btn-primary,
+.haru-feedback__actions .btn-ghost {
+  min-width: 146px;
+  justify-content: center;
+}
+
+@keyframes haru-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- Estado vacío --- */
@@ -761,23 +1028,51 @@ async function publicarEn(red: RedSocial) {
   margin-top: 2px;
 }
 
-/* Cuadritos de objetivo */
+/* Objetivos con Haru como señal visual principal */
 .obj-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .obj {
+  position: relative;
   display: grid;
-  gap: 3px;
-  padding: 14px;
+  grid-template-rows: 150px 1fr;
+  gap: 10px;
+  min-height: 284px;
+  padding: 12px;
   border: 1.5px solid #e7eee8;
-  border-radius: 14px;
-  background: #fff;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.obj::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  opacity: 0.76;
+}
+
+.obj.is-green::before {
+  background: linear-gradient(90deg, #0a6f1f, #14a634);
+}
+
+.obj.is-amber::before {
+  background: linear-gradient(90deg, #d98b1e, #f2c200);
+}
+
+.obj.is-blue::before {
+  background: linear-gradient(90deg, #0b5f9e, #24a8db);
+}
+
+.obj.is-mint::before {
+  background: linear-gradient(90deg, #0b6f38, #2ec4b6);
 }
 
 .obj:hover:not(:disabled) {
@@ -788,7 +1083,7 @@ async function publicarEn(red: RedSocial) {
 
 .obj.is-active {
   border-color: #0b6f38;
-  background: var(--brand-soft);
+  background: #f1f8ed;
   box-shadow: 0 10px 22px rgba(14, 111, 32, 0.14);
 }
 
@@ -797,26 +1092,80 @@ async function publicarEn(red: RedSocial) {
   cursor: default;
 }
 
-.obj__icon {
+.obj__art {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  margin-bottom: 3px;
-  border-radius: 12px;
-  background: var(--brand-soft-tint);
-  color: #1c7a2c;
-  font-size: 2.1rem;
+  width: 100%;
+  height: 150px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, #eef8eb 0%, #f8fbf7 70%);
+  transition: transform 0.2s ease;
 }
 
-.obj.is-active .obj__icon {
-  background: #0b6f38;
-  color: #fff;
+.obj.is-amber .obj__art {
+  background: radial-gradient(circle at 50% 42%, #fff3d6 0%, #fbf7ee 70%);
+}
+
+.obj.is-blue .obj__art {
+  background: radial-gradient(circle at 50% 42%, #e5f6ff 0%, #f4fbff 70%);
+}
+
+.obj.is-mint .obj__art {
+  background: radial-gradient(circle at 50% 42%, #dff8f3 0%, #f4fbf8 70%);
+}
+
+.obj:hover:not(:disabled) .obj__art {
+  transform: scale(1.03);
+}
+
+.obj__art img {
+  width: min(100%, 150px);
+  height: 150px;
+  object-fit: contain;
+  object-position: center;
+  mix-blend-mode: multiply;
+}
+
+.obj__copy {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+}
+
+.obj__action {
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #edf6e9;
+  color: #0b6f38;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.obj.is-amber .obj__action {
+  background: #fff2cd;
+  color: #9b6714;
+}
+
+.obj.is-blue .obj__action {
+  background: #e7f5ff;
+  color: #0b5f9e;
+}
+
+.obj.is-mint .obj__action {
+  background: #def8f1;
+  color: #0b6f55;
 }
 
 .obj strong {
-  font-size: 0.92rem;
+  font-size: 0.94rem;
   font-weight: 900;
+  color: #102016;
+  line-height: 1.18;
 }
 
 .obj small {
@@ -824,6 +1173,28 @@ async function publicarEn(red: RedSocial) {
   font-weight: 600;
   color: #6b7a6f;
   line-height: 1.4;
+}
+
+.obj__check {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  color: #b8c4ba;
+  font-size: 1rem;
+  opacity: 0;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.obj.is-active .obj__check {
+  color: #0b6f38;
+  opacity: 1;
 }
 
 /* --- Datos rápidos --- */
@@ -1649,6 +2020,24 @@ async function publicarEn(red: RedSocial) {
   .layout {
     grid-template-columns: 1fr;
   }
+
+  .obj-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .obj {
+    grid-template-rows: 168px 1fr;
+    min-height: 286px;
+  }
+
+  .obj__art {
+    height: 168px;
+  }
+
+  .obj__art img {
+    width: min(100%, 168px);
+    height: 168px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1662,6 +2051,23 @@ async function publicarEn(red: RedSocial) {
 
   .obj-grid {
     grid-template-columns: 1fr;
+  }
+
+  .obj {
+    grid-template-columns: 104px 1fr;
+    grid-template-rows: auto;
+    align-items: center;
+    min-height: 132px;
+  }
+
+  .obj__art {
+    height: 104px;
+    border-radius: 14px;
+  }
+
+  .obj__art img {
+    width: 104px;
+    height: 104px;
   }
 
   .tab {
