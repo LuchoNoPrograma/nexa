@@ -51,7 +51,8 @@ async function onSubmit() {
       localStorage.setItem(REMEMBER_KEY, '0')
     }
 
-    void navigateTo('/pos/inicio')
+    await sessionStore.load({ force: true })
+    await navigateTo('/pos/inicio')
   } catch {
     authError.value = 'Credenciales inválidas. Verifica tu correo, CI o celular y contraseña.'
   } finally {

@@ -1133,7 +1133,7 @@ async function openStockHistory(product: CatalogProduct | null) {
                 :maxFractionDigits="2"
                 class="cost-row__amount"
               />
-              <Button type="button" icon="pi pi-times" text rounded severity="secondary" aria-label="Quitar" @click="removeCostComponent(index)" />
+              <Button type="button" class="cost-row__remove" icon="pi pi-times" text rounded severity="secondary" aria-label="Quitar" @click="removeCostComponent(index)" />
             </div>
 
             <Button
@@ -2329,6 +2329,33 @@ async function openStockHistory(product: CatalogProduct | null) {
   font-size: 0.95rem;
 }
 
+.step-heading__opt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Bloque "Costo por partes": simple, siempre visible */
+.cost-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.cost-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
 /* Panel "Calcular costo por partes": bloque contenido y prominente */
 .cost-panel {
   margin: 4px 0;
@@ -2471,11 +2498,34 @@ async function openStockHistory(product: CatalogProduct | null) {
   color: #15803d;
 }
 
+/* Fila de costo: layout que SIEMPRE cabe, sin importar el ancho del modal.
+   Nombre arriba a todo el ancho; abajo tipo · monto · quitar. */
 .cost-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.9fr) minmax(180px, 1.4fr) minmax(120px, 0.9fr) auto;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name name name"
+    "type amount remove";
   gap: 8px;
   align-items: center;
+  padding: 10px;
+  border: 1px solid #e8edf3;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.cost-row__name { grid-area: name; }
+.cost-row__type { grid-area: type; }
+.cost-row__amount { grid-area: amount; }
+.cost-row__remove { grid-area: remove; justify-self: end; }
+
+/* Los inputs deben poder encogerse dentro de su celda (sin desbordar). */
+.cost-row :deep(.p-inputtext),
+.cost-row :deep(.p-inputnumber),
+.cost-row :deep(.p-select),
+.cost-row :deep(.p-inputnumber-input) {
+  width: 100%;
+  min-width: 0;
 }
 
 .cost-breakdown__total {
@@ -2492,20 +2542,6 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .cost-breakdown__total strong {
   font-size: 1.1rem;
-}
-
-@media (max-width: 520px) {
-  .cost-row {
-    grid-template-columns: 1fr;
-  }
-
-  .cost-row__name {
-    order: -1;
-  }
-
-  .cost-row :deep(.p-button) {
-    justify-self: end;
-  }
 }
 
 /* Imagen */

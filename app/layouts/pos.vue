@@ -221,6 +221,14 @@ for (const item of sidebarItems) {
 }
 
 function rutaPermitida(path: string) {
+  if (
+    path === '/pos/diagnostico'
+    && session.value?.storeId
+    && session.value.onboardingDiagnostico !== 'completado'
+  ) {
+    return true
+  }
+
   const acceso = accesoPorRuta.get(path)
   return acceso ? puede(acceso) : true
 }

@@ -59,7 +59,8 @@ async function onSubmit() {
       },
     })
 
-    void navigateTo('/pos/inicio')
+    await useSessionStore().load({ force: true })
+    await navigateTo('/pos/inicio')
   } catch (error: any) {
     errorMessage.value = error?.statusMessage || 'No se pudo crear la tienda. Revisa los datos e intenta de nuevo.'
   } finally {

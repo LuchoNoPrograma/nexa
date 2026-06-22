@@ -20,6 +20,7 @@ export const useSessionStore = defineStore('session', () => {
   const loading = ref(false)
   const loadedAt = ref(0)
   let pendingRequest: Promise<PosSession | null> | null = null
+  let version = 0
 
   const isAuthenticated = computed(() => Boolean(session.value))
   const storeId = computed(() => session.value?.storeId ?? null)
@@ -29,32 +30,44 @@ export const useSessionStore = defineStore('session', () => {
       return session.value
     }
 
-    if (pendingRequest) {
+    if (!options.force && pendingRequest) {
       return pendingRequest
     }
 
     loading.value = true
+    const requestVersion = options.force ? ++version : version
     pendingRequest = $fetch<{ user: PosSession }>('/api/auth/session')
       .then((response) => {
+        if (requestVersion !== version) {
+          return session.value
+        }
+
         session.value = response.user
         loadedAt.value = Date.now()
         return response.user
       })
       .catch((error) => {
-        session.value = null
+        if (requestVersion === version) {
+          session.value = null
+        }
         throw error
       })
       .finally(() => {
-        loading.value = false
-        pendingRequest = null
+        if (requestVersion === version) {
+          loading.value = false
+          pendingRequest = null
+        }
       })
 
     return pendingRequest
   }
 
   function setSession(value: PosSession | null) {
+    version += 1
     session.value = value
     loadedAt.value = value ? Date.now() : 0
+    pendingRequest = null
+    loading.value = false
   }
 
   function clear() {
