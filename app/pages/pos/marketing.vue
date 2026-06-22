@@ -20,11 +20,31 @@ type MarketingResponse = {
   actual: MarketingPublicacion | null
   publicadas: number
   totalProductos: number
+  marketingConfig: MarketingConfig
+}
+
+type MarketingConfig = {
+  contacto: string | null
+  ubicacion: string | null
+  ciudad: string
+  departamento: string
+  confirmado: boolean
 }
 
 // Carga inicial: solo lee lo guardado, NO llama a la IA.
-const { data } = await useFetch<MarketingResponse>('/api/pos/marketing', {
-  default: () => ({ actual: null, publicadas: 0, totalProductos: 0 }),
+const { data, refresh } = await useFetch<MarketingResponse>('/api/pos/marketing', {
+  default: () => ({
+    actual: null,
+    publicadas: 0,
+    totalProductos: 0,
+    marketingConfig: {
+      contacto: null,
+      ubicacion: null,
+      ciudad: 'Cobija',
+      departamento: 'Pando',
+      confirmado: false,
+    },
+  }),
 })
 
 const post = computed(() => data.value?.actual ?? null)
@@ -115,6 +135,72 @@ const productos = ref<ProductoOpcion[]>([])
 const cargandoProductos = ref(false)
 const productoElegido = ref<string>('')
 const comboIds = ref<string[]>([])
+const configDialogVisible = ref(false)
+const guardandoConfig = ref(false)
+const configError = ref('')
+const configForm = reactive({
+  contacto: '',
+  ubicacion: '',
+})
+
+const marketingConfig = computed(() => data.value?.marketingConfig ?? {
+  contacto: null,
+  ubicacion: null,
+  ciudad: 'Cobija',
+  departamento: 'Pando',
+  confirmado: false,
+})
+
+const necesitaConfigMarketing = computed(() => {
+  const config = marketingConfig.value
+  return !config.confirmado || !config.contacto?.trim() || !config.ubicacion?.trim()
+})
+
+function syncConfigForm() {
+  const config = marketingConfig.value
+  configForm.contacto = config.contacto ?? ''
+  configForm.ubicacion = config.ubicacion ?? ''
+}
+
+watch(marketingConfig, () => {
+  if (!configDialogVisible.value) {
+    syncConfigForm()
+  }
+}, { immediate: true })
+
+onMounted(() => {
+  if (necesitaConfigMarketing.value) {
+    configDialogVisible.value = true
+  }
+})
+
+function pedirConfigMarketing() {
+  syncConfigForm()
+  configError.value = ''
+  configDialogVisible.value = true
+}
+
+async function guardarConfigMarketing() {
+  configError.value = ''
+  guardandoConfig.value = true
+  try {
+    await $fetch('/api/pos/marketing/config', {
+      method: 'PUT',
+      body: {
+        contacto: configForm.contacto,
+        ubicacion: configForm.ubicacion,
+      },
+    })
+    await refresh()
+    configDialogVisible.value = false
+    flash('Datos públicos guardados')
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    configError.value = dataError?.statusMessage ?? 'No se pudo guardar la configuración.'
+  } finally {
+    guardandoConfig.value = false
+  }
+}
 
 async function cargarProductos() {
   if (productos.value.length || cargandoProductos.value) {
@@ -164,6 +250,10 @@ function cerrarSelector() {
 }
 
 function crear() {
+  if (necesitaConfigMarketing.value) {
+    pedirConfigMarketing()
+    return
+  }
   const modo = modoActual.value
   if (!modo) {
     mostrarErrorHaru('Elige qué quieres lograr antes de pedirle ayuda a Haru.', 'Selecciona una de las tarjetas: atraer clientes, vender sobrante, armar combo u ofrecer producto.')
@@ -286,6 +376,104 @@ const redActiva = computed(() => REDES_SOCIALES.find((r) => r.id === redActivaId
 
 // Texto sin hashtags para mostrar la cabecera del caption por separado cuando hace falta.
 const textoVista = computed(() => textoEditable.value.trim())
+const chatGptUrl = 'https://chatgpt.com/'
+
+function chatGptPromptUrl(prompt: string) {
+  const url = new URL(chatGptUrl)
+  url.searchParams.set('q', prompt)
+  return url.toString()
+}
+
+function formatoImagen(red: RedSocial['id']) {
+  const formatos: Record<RedSocial['id'], string> = {
+    instagram: 'cuadrado 1:1, 1080 x 1080 px',
+    facebook: 'horizontal 16:9, 1200 x 675 px',
+    whatsapp: 'cuadrado 1:1, 1080 x 1080 px',
+    tiktok: 'vertical 9:16, 1080 x 1920 px',
+  }
+  return formatos[red]
+}
+
+function detectarEnfoqueImagen(postActual: MarketingPublicacion) {
+  const texto = `${postActual.titulo} ${postActual.texto} ${postActual.objetivo ?? ''}`.toLowerCase()
+  if (texto.includes('combo')) {
+    return {
+      tipo: 'combo',
+      titulo: 'Combo',
+      instruccion: 'Presenta los productos juntos como un pack promocional ordenado, con un bloque visual de oferta y sensación de ahorro. Debe sentirse como una compra conveniente, no como un collage lleno.',
+    }
+  }
+  if (texto.includes('oferta') || texto.includes('sobr') || texto.includes('stock') || texto.includes('aprovecha')) {
+    return {
+      tipo: 'oferta',
+      titulo: 'Oferta',
+      instruccion: 'Construye una pieza de oferta con precio o beneficio bien destacado, sensación de oportunidad y compra inmediata, sin inventar porcentajes de descuento ni urgencia falsa.',
+    }
+  }
+  return {
+    tipo: 'producto',
+    titulo: 'Producto destacado',
+    instruccion: 'Construye una pieza de producto destacado con apariencia de anuncio comercial, no solo una foto del producto.',
+  }
+}
+
+function precioDesdeTexto(texto: string) {
+  const match = texto.match(/\bBs\.?\s*\d+(?:[.,]\d{1,2})?/i)
+  return match?.[0]?.replace(/\s+/g, ' ') ?? ''
+}
+
+const promptImagenChatGpt = computed(() => {
+  if (!post.value) {
+    return ''
+  }
+
+  const enfoque = detectarEnfoqueImagen(post.value)
+  const formato = formatoImagen(redActivaId.value)
+  const producto = post.value.productoNombre || post.value.titulo || 'mi producto'
+  const caption = textoEditable.value.trim() || post.value.texto
+  const precio = precioDesdeTexto(caption)
+  const textoImagen = precio ? `${producto} · ${precio}` : producto
+  const audiencia = post.value.audiencia || 'clientes locales'
+  const objetivo = post.value.objetivo || enfoque.titulo.toLowerCase()
+  const config = marketingConfig.value
+  const contacto = config.contacto?.trim()
+  const ubicacion = config.ubicacion?.trim()
+  const ciudad = config.ciudad || 'Cobija'
+  const departamento = config.departamento || 'Pando'
+
+  return [
+    'Genera una imagen publicitaria para redes sociales.',
+    '',
+    `Formato: ${formato}, listo para ${redActiva.value.nombre}.`,
+    `Marca/nombre visible: ${storeName.value}.`,
+    `Ubicación visible: ${ubicacion ? `${ubicacion}, ${ciudad}, ${departamento}, Bolivia` : `${ciudad}, ${departamento}, Bolivia`}.`,
+    contacto ? `Contacto visible: ${contacto}.` : 'No muestres contacto si no aparece claramente en estas instrucciones.',
+    `Producto/promoción: ${producto}.`,
+    precio ? `Precio visible permitido: ${precio}.` : 'No muestres precio si no aparece claramente en estas instrucciones.',
+    `Enfoque: ${enfoque.titulo}. ${enfoque.instruccion}`,
+    `Audiencia: ${audiencia}. Objetivo: ${objetivo}.`,
+    '',
+    'Dirección de arte:',
+    '- Debe parecer una publicidad terminada para Instagram, no una foto simple ni una plantilla vacía.',
+    '- Composición tipo anuncio: producto grande como héroe, titular corto, precio o dato clave en una etiqueta visual y llamado visual a comprar.',
+    '- Usa jerarquía clara: producto primero, precio/dato segundo, marca local de forma discreta.',
+    '- Integra el nombre de la marca como parte del diseño, por ejemplo en un cartel pequeño, cintillo superior o sello limpio.',
+    '- Integra contacto y ubicación en una franja inferior o cartel secundario, legible pero sin competir con el producto.',
+    '- Fondo publicitario limpio relacionado con el rubro del producto, con formas suaves, superficie cuidada, luces comerciales y detalles mínimos del contexto.',
+    '- Si el rubro es abarrotes/hogar, usa una ambientación de compra familiar limpia: colores frescos, sensación de hogar y consumo diario, sin mostrar una tienda como fondo.',
+    '- Colores vivos pero controlados, buen contraste, iluminación profesional, sombras naturales, acabado moderno y confiable.',
+    '- Deja aire alrededor del producto y evita llenar la imagen con demasiados elementos, stickers o textos.',
+    '- Que el producto se vea real y comprable; evita deformaciones, empaques imposibles, texto ilegible o aspecto de imagen IA descuidada.',
+    '',
+    'Texto dentro de la imagen:',
+    `- Usa solo texto corto y legible: "${textoImagen}".`,
+    '- Puedes separar el texto en 2 niveles: nombre del producto y precio/dato clave.',
+    '- No copies el caption completo.',
+    '- No inventes otras marcas, logos, descuentos, porcentajes, direcciones, delivery, horarios ni datos nuevos.',
+    '',
+    'Genera la imagen directamente con estos datos.',
+  ].join('\n')
+})
 
 async function copiar(texto: string, mensaje: string) {
   try {
@@ -294,6 +482,21 @@ async function copiar(texto: string, mensaje: string) {
   } catch {
     flash('No se pudo copiar, intenta de nuevo.')
   }
+}
+
+async function abrirChatGptImagen() {
+  if (necesitaConfigMarketing.value) {
+    pedirConfigMarketing()
+    return
+  }
+  const prompt = promptImagenChatGpt.value
+  if (!prompt) {
+    flash('Primero crea una publicación con Haru.')
+    return
+  }
+
+  window.open(chatGptPromptUrl(prompt), '_blank', 'noopener')
+  await copiar(prompt, 'Prompt copiado. Si ChatGPT no lo carga solo, pégalo ahí.')
 }
 
 async function generar(modo: Modo) {
@@ -359,10 +562,16 @@ async function publicarEn(red: RedSocial) {
         <h1>Marketing</h1>
         <p>Lista para copiar y compartir. Solo revisa, ajusta si quieres y publica.</p>
       </div>
-      <button v-if="post && !mostrarSelector" type="button" class="btn-ghost" @click="abrirSelector">
-        <i class="pi pi-refresh" aria-hidden="true" />
-        Otra idea
-      </button>
+      <div class="mkt-head__actions">
+        <button type="button" class="btn-ghost" @click="pedirConfigMarketing">
+          <i class="pi pi-map-marker" aria-hidden="true" />
+          Datos públicos
+        </button>
+        <button v-if="post && !mostrarSelector" type="button" class="btn-ghost" @click="abrirSelector">
+          <i class="pi pi-refresh" aria-hidden="true" />
+          Otra idea
+        </button>
+      </div>
     </header>
 
     <!-- Estado vacío: sin productos -->
@@ -597,9 +806,14 @@ async function publicarEn(red: RedSocial) {
           <div class="field">
             <span class="field__label">Texto y hashtags <small>(puedes cambiarlo)</small></span>
             <textarea v-model="textoEditable" rows="6" maxlength="500" class="field__input" />
-            <button type="button" class="tool tool--inline" @click="copiar(textoParaCopiar, 'Texto copiado 👍')">
-              <i class="pi pi-copy" aria-hidden="true" />Copiar texto
-            </button>
+            <div class="tool-row">
+              <button type="button" class="tool tool--inline" @click="copiar(textoParaCopiar, 'Texto copiado 👍')">
+                <i class="pi pi-copy" aria-hidden="true" />Copiar texto
+              </button>
+              <button type="button" class="tool tool--inline tool--chatgpt" @click="abrirChatGptImagen">
+                <i class="pi pi-image" aria-hidden="true" />Imagen con ChatGPT
+              </button>
+            </div>
           </div>
 
           <button type="button" class="btn-primary publish-btn" :style="{ '--red': redActiva.color }" @click="publicarEn(redActiva)">
@@ -662,6 +876,18 @@ async function publicarEn(red: RedSocial) {
               </a>
             </div>
           </section>
+
+          <section class="image-ai">
+            <span class="image-ai__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
+            <div>
+              <strong>¿Necesitas imagen para esta publicación?</strong>
+              <p>Haru arma el prompt con tu producto y abre ChatGPT. Solo pega el texto copiado y adjunta una foto si quieres más precisión.</p>
+              <button type="button" class="image-ai__btn" @click="abrirChatGptImagen">
+                <i class="pi pi-external-link" aria-hidden="true" />
+                Abrir ChatGPT
+              </button>
+            </div>
+          </section>
         </div>
       </div>
     </template>
@@ -705,6 +931,67 @@ async function publicarEn(red: RedSocial) {
       </div>
     </Dialog>
 
+    <Dialog
+      v-model:visible="configDialogVisible"
+      modal
+      :closable="!guardandoConfig && !necesitaConfigMarketing"
+      :close-on-escape="!guardandoConfig && !necesitaConfigMarketing"
+      :dismissable-mask="false"
+      class="marketing-config-dialog"
+    >
+      <form class="marketing-config" @submit.prevent="guardarConfigMarketing">
+        <span class="marketing-config__icon"><i class="pi pi-megaphone" aria-hidden="true" /></span>
+        <div class="marketing-config__copy">
+          <span class="marketing-config__kicker">Datos para publicidad</span>
+          <h2>Confirma el contacto del negocio</h2>
+          <p>Usaremos estos datos en las imágenes y textos de marketing. Deben ser públicos del negocio, no necesariamente tus datos personales.</p>
+        </div>
+
+        <label class="marketing-config__field">
+          <span>Contacto comercial</span>
+          <InputText
+            v-model="configForm.contacto"
+            fluid
+            maxlength="60"
+            placeholder="Ej: WhatsApp 71117696"
+            :disabled="guardandoConfig"
+          />
+        </label>
+
+        <label class="marketing-config__field">
+          <span>Ubicación pública</span>
+          <InputText
+            v-model="configForm.ubicacion"
+            fluid
+            maxlength="160"
+            placeholder="Ej: Av. Principal, zona Central"
+            :disabled="guardandoConfig"
+          />
+        </label>
+
+        <p v-if="configError" class="marketing-config__error" role="alert">
+          <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+          {{ configError }}
+        </p>
+
+        <div class="marketing-config__actions">
+          <button
+            v-if="!necesitaConfigMarketing"
+            type="button"
+            class="btn-ghost"
+            :disabled="guardandoConfig"
+            @click="configDialogVisible = false"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" :disabled="guardandoConfig">
+            <i :class="guardandoConfig ? 'pi pi-spin pi-spinner' : 'pi pi-check'" aria-hidden="true" />
+            {{ guardandoConfig ? 'Guardando…' : 'Guardar datos' }}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+
     <!-- Aviso flotante de acciones -->
     <Transition name="flash">
       <div v-if="flashMsg" class="flash" role="status">{{ flashMsg }}</div>
@@ -727,6 +1014,13 @@ async function publicarEn(red: RedSocial) {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mkt-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -923,6 +1217,101 @@ async function publicarEn(red: RedSocial) {
   to {
     transform: rotate(360deg);
   }
+}
+
+:global(.marketing-config-dialog.p-dialog) {
+  width: min(92vw, 470px);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+:global(.marketing-config-dialog .p-dialog-header) {
+  display: none;
+}
+
+:global(.marketing-config-dialog .p-dialog-content) {
+  padding: 0;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.marketing-config {
+  display: grid;
+  gap: 16px;
+  padding: 26px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(242, 194, 0, 0.16), transparent 40%),
+    #fff;
+}
+
+.marketing-config__icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: #fff8d7;
+  color: #9c7100;
+  font-size: 1.7rem;
+}
+
+.marketing-config__copy {
+  display: grid;
+  gap: 7px;
+}
+
+.marketing-config__kicker {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9c7100;
+}
+
+.marketing-config h2 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.16rem;
+  font-weight: 900;
+  line-height: 1.18;
+  color: #071327;
+}
+
+.marketing-config p {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.45;
+  color: #52615a;
+}
+
+.marketing-config__field {
+  display: grid;
+  gap: 7px;
+}
+
+.marketing-config__field span {
+  font-size: 0.82rem;
+  font-weight: 850;
+  color: #26372c;
+}
+
+.marketing-config__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff1f1;
+  color: #ad1f2b;
+}
+
+.marketing-config__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 2px;
 }
 
 /* --- Estado vacío --- */
@@ -1891,6 +2280,12 @@ async function publicarEn(red: RedSocial) {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
 .tool--inline {
   width: auto;
   justify-self: start;
@@ -1898,9 +2293,19 @@ async function publicarEn(red: RedSocial) {
   font-size: 0.84rem;
 }
 
+.tool--chatgpt {
+  background: #f3f7ff;
+  color: #1554b8;
+}
+
 .tool:hover {
   background: var(--brand-soft-tint);
   color: #1c7a2c;
+}
+
+.tool--chatgpt:hover {
+  background: #e8f1ff;
+  color: #0f4293;
 }
 
 /* --- Aviso flotante --- */
@@ -2013,6 +2418,65 @@ async function publicarEn(red: RedSocial) {
 .contacto__btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 14px 26px rgba(0, 0, 0, 0.18);
+}
+
+.image-ai {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 13px;
+  padding: 18px;
+  border: 1px solid #d7e5ff;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.16), transparent 40%),
+    linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+  color: #0d2548;
+}
+
+.image-ai__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #fff;
+  color: #1554b8;
+  box-shadow: 0 12px 24px rgba(21, 84, 184, 0.14);
+}
+
+.image-ai strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.image-ai p {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.45;
+  color: #41617f;
+}
+
+.image-ai__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 13px;
+  border: 0;
+  border-radius: 11px;
+  background: #1554b8;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.image-ai__btn:hover {
+  transform: translateY(-1px);
+  background: #0f4293;
 }
 
 /* --- Responsivo --- */

@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const session = await requireStoreSession(event)
   await ensureDatabase()
 
-  const [actualResult, publicadasResult, productosResult] = await Promise.all([
+  const [actualResult, publicadasResult, productosResult, configResult] = await Promise.all([
     pool.query<MarketingPublicacion>(
       `
         select
@@ -51,11 +51,38 @@ export default defineEventHandler(async (event) => {
       `,
       [session.storeId],
     ),
+    pool.query<{
+      contacto: string | null
+      ubicacion: string | null
+      ciudad: string
+      departamento: string
+      confirmado: boolean
+    }>(
+      `
+        select
+          telefono_whatsapp as contacto,
+          direccion_publica as ubicacion,
+          ciudad,
+          departamento,
+          marketing_contacto_confirmado as confirmado
+        from tienda
+        where id = $1
+        limit 1
+      `,
+      [session.storeId],
+    ),
   ])
 
   return {
     actual: actualResult.rows[0] ?? null,
     publicadas: publicadasResult.rows[0]?.total ?? 0,
     totalProductos: productosResult.rows[0]?.total ?? 0,
+    marketingConfig: configResult.rows[0] ?? {
+      contacto: null,
+      ubicacion: null,
+      ciudad: 'Cobija',
+      departamento: 'Pando',
+      confirmado: false,
+    },
   }
 })

@@ -23,6 +23,8 @@ mano salvo que sean utilitarios documentados abajo.
 
 - `001_initial.sql`: base consolidada del MVP.
 - `002_catalog_templates.sql`: plantillas de catalogo por rubro.
+- `003_finanzas_costeo.sql`: tipo de negocio y desglose opcional de costos.
+- `004_marketing_contacto_publico.sql`: contacto y ubicacion publica para marketing.
 Regla durante el MVP inicial: como la base se puede reiniciar, `001_initial.sql`
 puede mantenerse consolidada y limpia. Cuando haya datos reales que conservar,
 las nuevas columnas/tablas deben ir en migraciones nuevas.
