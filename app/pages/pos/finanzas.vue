@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { ResultadoFinanzas } from '~~/shared/utils/finanzas'
+
 definePageMeta({
   layout: 'pos',
   posTitle: 'Finanzas',
@@ -14,76 +16,6 @@ const session = usePosSession()
 const storeName = computed(() => session.value?.store?.trim() || 'tu negocio')
 
 type Category = { label: string, amount: number, color: string }
-type TrendPoint = { label: string, amount: number }
-type Period = {
-  label: string
-  short: string
-  income: number
-  balance: number
-  expenses: Category[]
-  incomeSources: Category[]
-  incomeTrend: TrendPoint[]
-}
-
-// Datos demo coherentes: cada periodo cuadra (ingresos - gastos = ganancia).
-const finances: Record<'este' | 'pasado', Period> = {
-  este: {
-    label: 'este mes',
-    short: 'Este mes',
-    income: 48750,
-    balance: 62340,
-    expenses: [
-      { label: 'Compras de productos', amount: 8300, color: '#0b6f38' },
-      { label: 'Sueldos', amount: 5640, color: '#22c55e' },
-      { label: 'Luz, agua e internet', amount: 4500, color: '#3b82f6' },
-      { label: 'Transporte', amount: 2450, color: '#f59e0b' },
-      { label: 'Publicidad', amount: 2140, color: '#8b5cf6' },
-      { label: 'Otros gastos', amount: 830, color: '#94a3b8' },
-    ],
-    // De dónde entró el dinero (suma = income).
-    incomeSources: [
-      { label: 'Ventas en el local', amount: 31000, color: '#0b6f38' },
-      { label: 'Delivery', amount: 12750, color: '#22c55e' },
-      { label: 'Pedidos especiales', amount: 5000, color: '#3b82f6' },
-    ],
-    // Ingresos de los últimos 6 meses (el último es este mes).
-    incomeTrend: [
-      { label: 'Ene', amount: 38000 },
-      { label: 'Feb', amount: 41000 },
-      { label: 'Mar', amount: 39500 },
-      { label: 'Abr', amount: 44000 },
-      { label: 'May', amount: 41200 },
-      { label: 'Jun', amount: 48750 },
-    ],
-  },
-  pasado: {
-    label: 'el mes pasado',
-    short: 'Mes pasado',
-    income: 41200,
-    balance: 56350,
-    expenses: [
-      { label: 'Compras de productos', amount: 7600, color: '#0b6f38' },
-      { label: 'Sueldos', amount: 5200, color: '#22c55e' },
-      { label: 'Luz, agua e internet', amount: 4300, color: '#3b82f6' },
-      { label: 'Transporte', amount: 2200, color: '#f59e0b' },
-      { label: 'Publicidad', amount: 1900, color: '#8b5cf6' },
-      { label: 'Otros gastos', amount: 1100, color: '#94a3b8' },
-    ],
-    incomeSources: [
-      { label: 'Ventas en el local', amount: 27000, color: '#0b6f38' },
-      { label: 'Delivery', amount: 10200, color: '#22c55e' },
-      { label: 'Pedidos especiales', amount: 4000, color: '#3b82f6' },
-    ],
-    incomeTrend: [
-      { label: 'Dic', amount: 35000 },
-      { label: 'Ene', amount: 37000 },
-      { label: 'Feb', amount: 36500 },
-      { label: 'Mar', amount: 40000 },
-      { label: 'Abr', amount: 38800 },
-      { label: 'May', amount: 41200 },
-    ],
-  },
-}
 
 const period = ref<'este' | 'pasado'>('este')
 const periodOptions = [
@@ -91,56 +23,15 @@ const periodOptions = [
   { value: 'pasado' as const, label: 'Mes pasado' },
 ]
 
-const current = computed(() => finances[period.value])
-const periodLabel = computed(() => current.value.label)
-
-function expensesOf(p: Period) {
-  return p.expenses.reduce((sum, cat) => sum + cat.amount, 0)
-}
-function profitOf(p: Period) {
-  return p.income - expensesOf(p)
-}
-
-const income = computed(() => current.value.income)
-const expensesTotal = computed(() => expensesOf(current.value))
-const profit = computed(() => profitOf(current.value))
-const isProfit = computed(() => profit.value >= 0)
-const balance = computed(() => current.value.balance)
-
-// Comparación amable contra el mes anterior (solo cuando estamos viendo "este mes").
-const profitDelta = computed(() => period.value === 'este' ? profit.value - profitOf(finances.pasado) : null)
-
-// Categorías con porcentaje calculado para que la tortita siempre cuadre.
-const expenseCategories = computed(() => {
-  const total = expensesTotal.value || 1
-  return current.value.expenses.map(cat => ({
-    ...cat,
-    percent: Math.round((cat.amount / total) * 100),
-  }))
-})
-
-// Tortita (dona) de gastos: gradiente cónico generado desde los montos reales.
-const donutGradient = computed(() => buildDonut(current.value.expenses, expensesTotal.value))
-
-// --- Ingresos: de dónde entra el dinero + cómo viene cambiando ---
-const incomeSources = computed(() => {
-  const total = income.value || 1
-  return current.value.incomeSources.map(src => ({
-    ...src,
-    percent: Math.round((src.amount / total) * 100),
-  }))
-})
-
-const incomeDonut = computed(() => buildDonut(current.value.incomeSources, income.value))
-
-const incomeTrend = computed(() => current.value.incomeTrend)
-const maxTrend = computed(() => Math.max(...incomeTrend.value.map(p => p.amount), 1))
-function trendHeight(point: TrendPoint) {
-  return `${Math.max((point.amount / maxTrend.value) * 100, 8)}%`
-}
+const periodLabel = computed(() => period.value === 'pasado' ? 'el mes pasado' : 'este mes')
+const previousPeriodLabel = computed(() => period.value === 'este' ? 'mes pasado' : 'periodo anterior')
 
 // Construye un gradiente cónico (dona) a partir de una lista de montos.
 function buildDonut(items: Category[], total: number) {
+  if (total <= 0) {
+    return 'conic-gradient(#e5e7eb 0% 100%)'
+  }
+
   const safeTotal = total || 1
   let acc = 0
   const stops = items.map((item) => {
@@ -151,14 +42,124 @@ function buildDonut(items: Category[], total: number) {
   return `conic-gradient(${stops.join(', ')})`
 }
 
-const haruTip = computed(() => isProfit.value
-  ? 'Revisa tus gastos cada semana. Los gastos chiquitos, juntos, se comen tu ganancia sin que te des cuenta.'
-  : 'Este mes gastaste más de lo que vendiste. Mira en qué se fue tu plata y recorta el gasto más grande primero.')
-
 const nf = new Intl.NumberFormat('es-BO')
 function bs(value: number) {
   return nf.format(Math.round(value))
 }
+
+// --- Resultado real del periodo (datos REALES vía API) ---
+const { data: cascada } = await useFetch<ResultadoFinanzas & { periodo: string }>(
+  '/api/pos/finanzas/cascada',
+  {
+    query: computed(() => ({ periodo: period.value })),
+    watch: [period],
+    default: () => null,
+  },
+)
+
+const netaIsProfit = computed(() => (cascada.value?.utilidadNeta ?? 0) >= 0)
+const income = computed(() => {
+  const c = cascada.value
+  return (c?.ventasPeriodo ?? 0) + (c?.otrosIngresos ?? 0)
+})
+const expensesTotal = computed(() => {
+  const c = cascada.value
+  return (c?.costoVentas ?? 0) + (c?.gastosOperativos ?? 0) + (c?.gastosFinancieros ?? 0)
+})
+const profit = computed(() => cascada.value?.utilidadNeta ?? 0)
+const isProfit = computed(() => profit.value >= 0)
+
+const previousProfit = ref<number | null>(null)
+watch(
+  period,
+  async (value) => {
+    if (value !== 'este') {
+      previousProfit.value = null
+      return
+    }
+
+    const data = await $fetch<ResultadoFinanzas & { periodo: string }>('/api/pos/finanzas/cascada', {
+      query: { periodo: 'pasado' },
+    }).catch(() => null)
+    previousProfit.value = data?.utilidadNeta ?? null
+  },
+  { immediate: true },
+)
+
+const profitDelta = computed(() => previousProfit.value === null ? null : profit.value - previousProfit.value)
+
+// "¿A dónde va tu dinero?": de cada venta, cuánto se fue en costo, cuánto en
+// gastos y cuánto quedó como ganancia. Es la lectura simple que reemplaza la
+// cascada contable de 7 pasos: 3 pedazos que siempre suman el 100%.
+const resumen = computed(() => {
+  const c = cascada.value
+  if (!c) return null
+
+  const costo = Math.max(0, c.costoVentas)
+  // Gastos netos del periodo (operativos + financieros − otros ingresos).
+  const gastos = Math.max(0, c.gastosOperativos + c.gastosFinancieros - c.otrosIngresos)
+  const ganancia = c.utilidadNeta
+  // Base para los anchos: siempre suman 100% aunque haya pérdida.
+  const base = costo + gastos + Math.max(0, ganancia) || 1
+
+  return {
+    ventas: c.ventasPeriodo,
+    costo,
+    gastos,
+    ganancia,
+    margenNeto: c.margenNeto,
+    partes: [
+      { clave: 'costo', label: 'Costo de productos', monto: costo, color: '#f59e0b', width: (costo / base) * 100, hint: 'Lo que te costó lo que vendiste' },
+      { clave: 'gastos', label: 'Gastos del negocio', monto: gastos, color: '#ef4444', width: (gastos / base) * 100, hint: 'Sueldos, alquiler, luz, transporte…' },
+      { clave: 'ganancia', label: 'Tu ganancia', monto: Math.max(0, ganancia), color: '#0b6f38', width: (Math.max(0, ganancia) / base) * 100, hint: 'Lo que te quedó limpio' },
+    ],
+  }
+})
+
+const incomeSources = computed(() => {
+  const c = cascada.value
+  const sources = [
+    { label: 'Ventas del periodo', amount: c?.ventasPeriodo ?? 0, color: '#0b6f38' },
+    { label: 'Otros ingresos', amount: c?.otrosIngresos ?? 0, color: '#3b82f6' },
+  ].filter((item) => item.amount > 0)
+
+  const total = income.value || 1
+  return (sources.length ? sources : [{ label: 'Sin ingresos registrados', amount: 0, color: '#94a3b8' }]).map(src => ({
+    ...src,
+    percent: Math.round((src.amount / total) * 100),
+  }))
+})
+
+const incomeDonut = computed(() => buildDonut(incomeSources.value, income.value))
+
+const expenseCategories = computed(() => {
+  const c = cascada.value
+  const categories = [
+    { label: 'Costo de productos vendidos', amount: c?.costoVentas ?? 0, color: '#f59e0b' },
+    { label: 'Gastos operativos', amount: c?.gastosOperativos ?? 0, color: '#ef4444' },
+    { label: 'Gastos financieros', amount: c?.gastosFinancieros ?? 0, color: '#8b5cf6' },
+  ].filter((item) => item.amount > 0)
+
+  const total = expensesTotal.value || 1
+  return (categories.length ? categories : [{ label: 'Sin gastos registrados', amount: 0, color: '#94a3b8' }]).map(cat => ({
+    ...cat,
+    percent: Math.round((cat.amount / total) * 100),
+  }))
+})
+
+const donutGradient = computed(() => buildDonut(expenseCategories.value, expensesTotal.value))
+
+const haruTip = computed(() => isProfit.value
+  ? 'Tu resumen cruza ventas, costo de productos y gastos. Si quieres mejorar la ganancia, empieza por revisar el gasto más grande o los productos con menor margen.'
+  : 'Este periodo estás perdiendo dinero. Revisa primero costos de productos, luego gastos operativos y después ajusta precios donde el margen por unidad sea bajo.')
+
+// Frase amable que explica el margen neto (ROS) sin jerga.
+const rosTexto = computed(() => {
+  const m = cascada.value?.margenNeto
+  if (m === null || m === undefined) return 'Aún no registras ventas en este periodo.'
+  if (m >= 0) return `De cada Bs 100 que vendes, te quedan Bs ${m.toFixed(2)} de ganancia.`
+  return `De cada Bs 100 que vendes, pierdes Bs ${Math.abs(m).toFixed(2)}.`
+})
 </script>
 
 <template>
@@ -190,7 +191,7 @@ function bs(value: number) {
         <strong><em>Bs</em>{{ bs(Math.abs(profit)) }}</strong>
         <p v-if="profitDelta !== null && profitDelta !== 0" class="fin-hero__delta">
           <i :class="profitDelta > 0 ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" aria-hidden="true" />
-          Bs {{ bs(Math.abs(profitDelta)) }} {{ profitDelta > 0 ? 'más' : 'menos' }} que el mes pasado
+          Bs {{ bs(Math.abs(profitDelta)) }} {{ profitDelta > 0 ? 'más' : 'menos' }} que el {{ previousPeriodLabel }}
         </p>
         <p v-else class="fin-hero__delta is-muted">Resumen de {{ periodLabel }}</p>
       </div>
@@ -211,12 +212,46 @@ function bs(value: number) {
           </span>
         </article>
       </div>
+    </section>
 
-      <footer class="fin-hero__balance">
-        <i class="pi pi-wallet" aria-hidden="true" />
-        <span>Tienes disponible en caja y banco</span>
-        <strong>Bs {{ bs(balance) }}</strong>
-      </footer>
+    <!-- GANANCIA REAL: lectura simple — a dónde va cada boliviano que vendes -->
+    <section v-if="resumen" class="profit" :class="{ 'is-loss': !netaIsProfit }" aria-label="Tu ganancia del periodo">
+      <div class="profit__top">
+        <div class="profit__headline">
+          <small>{{ netaIsProfit ? `Tu ganancia ${periodLabel}` : `Tu pérdida ${periodLabel}` }}</small>
+          <strong><em>Bs</em> {{ bs(Math.abs(resumen.ganancia)) }}</strong>
+          <span class="profit__ros"><i class="pi pi-sparkles" aria-hidden="true" /> {{ rosTexto }}</span>
+        </div>
+      </div>
+
+      <!-- Barra: a dónde va tu dinero (siempre suma 100%) -->
+      <div class="profit__where">
+        <span class="profit__where-title">¿A dónde va tu dinero?</span>
+        <div class="moneybar" role="img" aria-label="Reparto de tus ventas">
+          <span
+            v-for="parte in resumen.partes"
+            :key="parte.clave"
+            class="moneybar__seg"
+            :style="{ width: `${parte.width}%`, background: parte.color }"
+            :title="`${parte.label}: Bs ${bs(parte.monto)}`"
+          />
+        </div>
+        <ul class="profit__legend">
+          <li v-for="parte in resumen.partes" :key="parte.clave">
+            <span class="profit__dot" :style="{ background: parte.color }" />
+            <span class="profit__leg-label">
+              {{ parte.label }}
+              <small>{{ parte.hint }}</small>
+            </span>
+            <strong class="profit__leg-amount">Bs {{ bs(parte.monto) }}</strong>
+          </li>
+        </ul>
+      </div>
+
+      <p class="profit__note">
+        <i class="pi pi-shield" aria-hidden="true" />
+        Calculado con tus ventas y gastos reales del periodo. No incluye impuestos.
+      </p>
     </section>
 
     <!-- Dos tarjetas grandes: de dónde entra el dinero / en qué se va -->
@@ -230,22 +265,6 @@ function bs(value: number) {
           </div>
           <NuxtLink to="/pos/ingresos" class="fin-link">Ver ingresos <i class="pi pi-arrow-right" aria-hidden="true" /></NuxtLink>
         </header>
-
-        <!-- Gráfica de barras: cómo vienen cambiando los ingresos -->
-        <div class="trend" role="img" aria-label="Ingresos de los últimos meses">
-          <div class="trend__bars">
-            <div
-              v-for="(point, index) in incomeTrend"
-              :key="point.label"
-              class="trend__col"
-              :class="{ 'is-last': index === incomeTrend.length - 1 }"
-            >
-              <span class="trend__val">Bs {{ bs(point.amount) }}</span>
-              <span class="trend__bar" :style="{ height: trendHeight(point) }" />
-              <small class="trend__label">{{ point.label }}</small>
-            </div>
-          </div>
-        </div>
 
         <!-- Desglose: por dónde llegó cada boliviano -->
         <div class="spend">
@@ -488,24 +507,6 @@ function bs(value: number) {
   font-weight: 900;
 }
 
-.fin-hero__balance {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.22);
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.fin-hero__balance strong {
-  margin-left: auto;
-  font-size: 0.96rem;
-  font-weight: 900;
-  color: #fff;
-}
-
 /* --- Tarjetas blancas --- */
 .fin-card {
   padding: 18px;
@@ -636,73 +637,6 @@ function bs(value: number) {
   text-align: right;
 }
 
-/* --- Gráfica de ingresos (barras por mes) --- */
-.trend {
-  margin-bottom: 18px;
-  padding: 14px 4px 0;
-  border-bottom: 1px solid #eef3ef;
-}
-
-.trend__bars {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  align-items: end;
-  gap: 10px;
-  height: 132px;
-}
-
-.trend__col {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  align-items: end;
-  justify-items: center;
-  gap: 6px;
-  height: 100%;
-}
-
-.trend__val {
-  font-size: 0.6rem;
-  font-weight: 800;
-  color: #8a958c;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  white-space: nowrap;
-}
-
-.trend__col.is-last .trend__val,
-.trend__col:hover .trend__val {
-  opacity: 1;
-  color: #1c7a2c;
-}
-
-.trend__bar {
-  width: 100%;
-  max-width: 34px;
-  align-self: end;
-  border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(180deg, #bfe6c4, #8fd49a);
-  transition: filter 0.15s ease;
-}
-
-.trend__col.is-last .trend__bar {
-  background: linear-gradient(180deg, #0b6f38, #0a6f1f);
-}
-
-.trend__col:hover .trend__bar {
-  filter: brightness(0.96);
-}
-
-.trend__label {
-  font-size: 0.68rem;
-  font-weight: 800;
-  color: #6b7a6f;
-}
-
-.trend__col.is-last .trend__label {
-  color: #1c7a2c;
-}
-
 /* --- Consejo de Haru --- */
 .haru-tip {
   position: relative;
@@ -784,15 +718,6 @@ function bs(value: number) {
     width: 100%;
   }
 
-  .trend__bars {
-    height: 116px;
-    gap: 6px;
-  }
-
-  .trend__val {
-    display: none;
-  }
-
   .haru-tip {
     min-height: 134px;
     padding: 18px 124px 18px 18px;
@@ -807,6 +732,148 @@ function bs(value: number) {
 @media (max-width: 380px) {
   .fin-hero__split {
     grid-template-columns: 1fr;
+  }
+}
+
+/* --- Ganancia real: lectura simple "a dónde va tu dinero" --- */
+.profit {
+  background: #fff;
+  border: 1px solid #e3ece5;
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(11, 31, 58, 0.05);
+  display: grid;
+  gap: 20px;
+}
+
+.profit__headline {
+  display: grid;
+  gap: 4px;
+}
+
+.profit__headline small {
+  color: #5c6b60;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.profit__headline strong {
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 2.6rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #0b6f38;
+  line-height: 1;
+}
+
+.profit.is-loss .profit__headline strong {
+  color: #b3261e;
+}
+
+.profit__headline strong em {
+  font-style: normal;
+  font-size: 1.2rem;
+  font-weight: 800;
+  opacity: 0.7;
+  margin-right: 6px;
+}
+
+.profit__ros {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  background: #eafaf0;
+  color: #06351c;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 7px 12px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.profit.is-loss .profit__ros {
+  background: #fdeaea;
+  color: #8f1d17;
+}
+
+.profit__where-title {
+  display: block;
+  font-weight: 800;
+  color: #102016;
+  margin-bottom: 10px;
+}
+
+/* Barra de reparto: segmentos que siempre suman 100% */
+.moneybar {
+  display: flex;
+  height: 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #eef3ef;
+}
+
+.moneybar__seg {
+  height: 100%;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+
+.profit__legend {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.profit__legend li {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.profit__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.profit__leg-label {
+  display: grid;
+  gap: 1px;
+  font-weight: 800;
+  color: #102016;
+  min-width: 0;
+}
+
+.profit__leg-label small {
+  font-weight: 600;
+  color: #6b7a70;
+  font-size: 0.78rem;
+}
+
+.profit__leg-amount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #102016;
+  white-space: nowrap;
+}
+
+.profit__note {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7a70;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .profit__headline strong {
+    font-size: 2.1rem;
   }
 }
 </style>

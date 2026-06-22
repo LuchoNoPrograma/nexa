@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tailwindcss-primeui";
+@import "primeflex/primeflex.css";
 
 @theme {
   --color-primary-50: #ecfdf0;

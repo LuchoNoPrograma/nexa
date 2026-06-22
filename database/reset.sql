@@ -30,6 +30,7 @@ drop table if exists
   turno_laboral,
   nomina_config,
   empleado,
+  producto_costo_componente,
   calculo_precio,
   precio_historial,
   inventario_movimiento,

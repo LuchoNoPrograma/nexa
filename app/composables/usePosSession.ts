@@ -1,17 +1,8 @@
-export type PosSession = {
-  id: string
-  email: string
-  name: string
-  role: string
-  store: string
-  storeId: string | null
-  defaultMargin: number | null
-  onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
-  roles: string[]
-  permisos: string[]
-}
+import { storeToRefs } from 'pinia'
+import { useSessionStore } from '~/stores/session'
+
+export type { PosSession } from '~/stores/session'
 
 export function usePosSession() {
-  return useState<PosSession | null>('nexa-pos-session', () => null)
+  return storeToRefs(useSessionStore()).session
 }
-

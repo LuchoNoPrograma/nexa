@@ -6,6 +6,7 @@ import {
   preguntasPendientes,
   type DiagnosticoRespuestas,
 } from '~~/shared/utils/diagnostico'
+import { tipoNegocioDesdeRubro } from '~~/shared/utils/finanzas'
 
 type DiagnosticoBody = {
   respuestas?: DiagnosticoRespuestas
@@ -76,9 +77,16 @@ export default defineEventHandler(async (event) => {
       ],
     )
 
+    // El tipo de negocio global se infiere del rubro (q1) y pre-llena el costeo de
+    // productos nuevos. Solo se setea si no estaba definido (no pisa overrides).
+    const tipoNegocio = tipoNegocioDesdeRubro(resultado.rubro)
     await client.query(
-      `update tienda set onboarding_diagnostico = 'completado', updated_at = now() where id = $1`,
-      [session.storeId],
+      `update tienda
+         set onboarding_diagnostico = 'completado',
+             tipo_negocio = coalesce(tipo_negocio, $2),
+             updated_at = now()
+       where id = $1`,
+      [session.storeId, tipoNegocio],
     )
 
     await client.query('commit')

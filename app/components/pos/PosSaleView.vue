@@ -1,15 +1,6 @@
 <script setup lang="ts">
-import { usePosOfflineProducts } from '~/composables/pos/offline/usePosOfflineProducts'
 import { usePosOfflineSales } from '~/composables/pos/offline/usePosOfflineSales'
-
-type Product = {
-  id: string
-  name: string
-  category: string
-  price: number
-  stock: number
-  kind: 'producto' | 'servicio' | 'combo'
-}
+import type { PosSaleProduct as Product } from '~/stores/catalog'
 
 type CartLine = Product & {
   quantity: number
@@ -45,8 +36,13 @@ type SaleReceipt = {
 
 const session = usePosSession()
 const cashRegister = usePosCashRegister()
-const offlineProducts = usePosOfflineProducts()
 const offlineSales = usePosOfflineSales()
+const catalogStore = useCatalogStore()
+const {
+  saleProducts: products,
+  saleProductsLoading: productsLoading,
+  offlineNotice,
+} = storeToRefs(catalogStore)
 const search = ref('')
 const discount = ref(0)
 const catalogView = ref<'grid' | 'table'>('grid')
@@ -74,11 +70,8 @@ const manualDiscountMode = ref<DiscountMode>('amount')
 const manualDiscountValue = ref<number | null>(null)
 const appliedDiscountLabel = ref('')
 const lastReceipt = ref<SaleReceipt | null>(null)
-const products = ref<Product[]>([])
-const productsLoading = ref(true)
 const cart = ref<CartLine[]>([])
 const saleSaveError = ref('')
-const offlineNotice = ref('')
 const pendingSales = ref(0)
 const syncingSales = ref(false)
 const recentAddedProductId = ref('')
@@ -419,8 +412,8 @@ async function confirmCharge() {
         ...receipt,
         number: saleResult.saleNumber ?? receipt.number,
       }
-      applyLocalStock(receipt.items)
-      void saveProductsLocally().catch(() => null)
+      catalogStore.applyLocalStock(receipt.items)
+      void catalogStore.saveSaleProductsLocally().catch(() => null)
       void refreshPendingSales()
     } catch {
       const storeId = session.value?.storeId
@@ -450,8 +443,8 @@ async function confirmCharge() {
         return
       }
 
-      applyLocalStock(receipt.items)
-      void saveProductsLocally().catch(() => null)
+      catalogStore.applyLocalStock(receipt.items)
+      void catalogStore.saveSaleProductsLocally().catch(() => null)
       await refreshPendingSales()
       offlineNotice.value = 'Venta guardada localmente. Se sincronizará cuando vuelva internet.'
     }
@@ -786,47 +779,12 @@ function money(value: number) {
 }
 
 async function loadProducts() {
-  productsLoading.value = true
-  offlineNotice.value = ''
-
-  try {
-    const response = await $fetch<{ products: Product[] }>('/api/pos/products')
-    products.value = response.products
-    void saveProductsLocally().catch(() => null)
-  }
-  catch {
-    const storeId = session.value?.storeId
-    const localProducts = storeId ? await offlineProducts.list(storeId).catch(() => []) : []
-    products.value = localProducts
-    offlineNotice.value = localProducts.length
-      ? 'Catálogo cargado desde este dispositivo. Los cambios se actualizarán al volver internet.'
-      : 'No se pudo cargar el catálogo. Abre el POS con internet al menos una vez para vender offline.'
-  }
-  finally {
-    productsLoading.value = false
-  }
-}
-
-async function saveProductsLocally() {
-  const storeId = session.value?.storeId
-  if (!storeId) {
+  if (catalogStore.hasSaleProducts) {
+    catalogStore.refreshSaleProductsInBackground()
     return
   }
 
-  await offlineProducts.save(storeId, products.value)
-}
-
-function applyLocalStock(items: CartLine[]) {
-  for (const item of items) {
-    if (item.kind === 'servicio') {
-      continue
-    }
-
-    const product = products.value.find((current) => current.id === item.id)
-    if (product) {
-      product.stock = Math.max(product.stock - item.quantity, 0)
-    }
-  }
+  await catalogStore.loadSaleProducts().catch(() => null)
 }
 
 async function refreshPendingSales() {

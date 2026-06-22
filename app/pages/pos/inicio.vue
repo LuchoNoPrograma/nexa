@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PosCashMovement } from '~/composables/usePosCashRegister'
+import type { PosCashMovement } from '~/stores/cash'
 
 definePageMeta({
   layout: 'pos',

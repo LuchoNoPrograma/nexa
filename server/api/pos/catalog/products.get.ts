@@ -28,9 +28,23 @@ export default defineEventHandler(async (event) => {
         p.icono as icon,
         p.visible_pos as "visiblePos",
         p.updated_at as "updatedAt",
-        coalesce(v.variants, '[]'::json) as variants
+        coalesce(v.variants, '[]'::json) as variants,
+        coalesce(cc.components, '[]'::json) as "costComponents"
       from producto p
       left join categoria c on c.id = p.categoria_id and c.tienda_id = p.tienda_id
+      left join lateral (
+        select json_agg(
+          json_build_object(
+            'id', pcc.id,
+            'tipo', pcc.tipo,
+            'nombre', pcc.nombre,
+            'monto', pcc.monto::float
+          )
+          order by pcc.orden asc
+        ) as components
+        from producto_costo_componente pcc
+        where pcc.producto_id = p.id
+      ) cc on true
       left join lateral (
         select json_agg(
           json_build_object(

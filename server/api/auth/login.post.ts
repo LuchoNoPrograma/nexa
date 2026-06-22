@@ -3,6 +3,11 @@ import { ensureDatabase, pool } from '../../utils/db'
 import { assertLoginAllowed, clearLoginFailures, getLoginRateLimitKey, recordLoginFailure } from '../../utils/loginRateLimit'
 import { createSessionToken, hashSessionToken, verifyPassword } from '../../utils/password'
 
+const SESSION_DAYS = {
+  normal: 7,
+  remembered: 90,
+} as const
+
 type LoginBody = {
   identificador?: string
   email?: string
@@ -67,7 +72,8 @@ export default defineEventHandler(async (event) => {
   clearLoginFailures(rateLimitKey)
 
   const token = createSessionToken()
-  const expiresAt = new Date(Date.now() + (body.remember ? 30 : 1) * 24 * 60 * 60 * 1000)
+  const maxAge = (body.remember ? SESSION_DAYS.remembered : SESSION_DAYS.normal) * 24 * 60 * 60
+  const expiresAt = new Date(Date.now() + maxAge * 1000)
 
   await pool.query(
     `
@@ -91,6 +97,7 @@ export default defineEventHandler(async (event) => {
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     expires: expiresAt,
+    maxAge,
   })
 
   return {

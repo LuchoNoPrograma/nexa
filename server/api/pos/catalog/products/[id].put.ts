@@ -9,9 +9,11 @@ import {
   nullableNumber,
   nullableText,
   numberOrZero,
+  parseCostComponents,
   parseVariants,
   productCostingType,
   productKind,
+  replaceProductCostComponents,
   replaceProductVariants,
   requireStoreAccess,
 } from '../../../../utils/posCatalog'
@@ -34,6 +36,7 @@ type ProductBody = {
   icon?: string | null
   visiblePos?: boolean
   variants?: unknown
+  costComponents?: unknown
 }
 
 export default defineEventHandler(async (event) => {
@@ -47,6 +50,10 @@ export default defineEventHandler(async (event) => {
   const kind = productKind(body.kind)
   const costingType = productCostingType(body.costingType, kind)
   const variants = parseVariants(body.variants)
+  const costComponents = parseCostComponents(body.costComponents)
+  const effectiveCost = costComponents.length
+    ? costComponents.reduce((sum, c) => sum + c.monto, 0)
+    : numberOrZero(body.cost)
 
   const client = await pool.connect()
 
@@ -89,7 +96,7 @@ export default defineEventHandler(async (event) => {
         kind,
         costingType,
         cleanText(body.unit, 'unidad') || 'unidad',
-        numberOrZero(body.cost),
+        effectiveCost,
         numberOrZero(body.price),
         numberOrZero(body.minStock),
         nullableNumber(body.maxStock),
@@ -105,6 +112,7 @@ export default defineEventHandler(async (event) => {
     }
 
     await replaceProductVariants(client, productId as string, variants)
+    await replaceProductCostComponents(client, productId as string, costComponents)
     await client.query('commit')
 
     return { id: result.rows[0].id }

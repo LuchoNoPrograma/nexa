@@ -1,45 +1,6 @@
 <script setup lang="ts">
-type CatalogCategory = {
-  id: string
-  name: string
-  description: string | null
-  icon: string | null
-  active: boolean
-  productCount: number
-}
-
-type ProductVariant = {
-  id?: string
-  name: string
-  sku: string | null
-  barcode: string | null
-  cost: number | null
-  price: number | null
-  stock: number
-}
-
-type CatalogProduct = {
-  id: string
-  categoryId: string | null
-  categoryName: string | null
-  sku: string | null
-  barcode: string | null
-  name: string
-  description: string | null
-  kind: 'producto' | 'servicio' | 'combo'
-  costingType: 'reventa' | 'produccion' | 'servicio'
-  unit: string
-  cost: number
-  price: number
-  stock: number
-  minStock: number
-  maxStock: number | null
-  minMargin: number | null
-  imageUrl: string | null
-  icon: string | null
-  visiblePos: boolean
-  variants: ProductVariant[]
-}
+import { costingTypePorDefecto } from '~~/shared/utils/finanzas'
+import type { CatalogCategory, CatalogProduct, CostComponent } from '~/stores/catalog'
 
 type VariantForm = {
   name: string
@@ -70,6 +31,7 @@ type ProductForm = {
   icon: string
   visiblePos: boolean
   variants: VariantForm[]
+  costComponents: CostComponent[]
 }
 
 type ChipKey = 'todos' | 'productos' | 'servicios' | 'stockBajo' | 'combos'
@@ -88,9 +50,13 @@ type StockMovement = {
   userName: string | null
 }
 
-const products = ref<CatalogProduct[]>([])
-const categories = ref<CatalogCategory[]>([])
-const loading = ref(true)
+const catalogStore = useCatalogStore()
+const {
+  catalogProducts: products,
+  categories,
+  catalogLoading: loading,
+  catalogError: storeCatalogError,
+} = storeToRefs(catalogStore)
 const saving = ref(false)
 const productDialogOpen = ref(false)
 const categoryDialogOpen = ref(false)
@@ -130,7 +96,7 @@ const kindOptions = [
 // y "combo" el tipo de costeo es automático, por eso no se muestra el selector.
 const costingTypeOptions = [
   {
-    label: 'Reventa',
+    label: 'Comercial',
     value: 'reventa',
     icon: '🛒',
     description: 'Lo compras hecho y lo revendes con ganancia.',
@@ -143,7 +109,7 @@ const costingTypeOptions = [
   },
 ]
 
-// Margen de ganancia sugerido según el tipo (el dueño igual puede cambiarlo).
+// Margen por unidad sugerido según el tipo (el dueño igual puede cambiarlo).
 const defaultMarginByCostingType: Record<CatalogProduct['costingType'], number> = {
   reventa: 25,
   produccion: 30,
@@ -218,6 +184,7 @@ const sections = reactive({
   codes: false,
   advanced: false,
   variants: false,
+  cost: true,
 })
 
 function toggleSection(key: keyof typeof sections) {
@@ -392,6 +359,7 @@ function emptyProductForm(): ProductForm {
     icon: '',
     visiblePos: true,
     variants: [],
+    costComponents: [],
   }
 }
 
@@ -399,6 +367,9 @@ function resetSections() {
   sections.codes = false
   sections.advanced = false
   sections.variants = false
+  // El desglose de costo arranca abierto: es parte central de fijar el precio,
+  // no un extra escondido. Si se deja cerrado se ve como una línea y "desaparece".
+  sections.cost = true
 }
 
 function resetForm() {
@@ -409,6 +380,9 @@ function resetForm() {
 
 function openCreateProduct() {
   resetForm()
+  // Pre-llena el tipo de costeo desde el tipo de negocio global de la tienda
+  // (definido en el diagnóstico). El dueño puede cambiarlo por producto.
+  form.costingType = costingTypePorDefecto(session.value?.tipoNegocio ?? null)
   productDialogOpen.value = true
 }
 
@@ -418,8 +392,37 @@ const liveProfit = computed(() => {
   return { profit, margin }
 })
 
+// --- Desglose de costo (opcional): materia prima, mano de obra, insumos, otros ---
+const costComponentTypes: { value: CostComponent['tipo'], label: string, icon: string }[] = [
+  { value: 'materia_prima', label: 'Materia prima', icon: '🧺' },
+  { value: 'mano_obra', label: 'Mano de obra', icon: '⏱️' },
+  { value: 'insumo', label: 'Insumos', icon: '🧴' },
+  { value: 'otro', label: 'Otros', icon: '➕' },
+]
+
+const costComponentsTotal = computed(() =>
+  form.costComponents.reduce((sum, component) => sum + (Number(component.monto) || 0), 0),
+)
+// Cuando hay desglose, su suma manda sobre el campo Costo (y lo bloquea).
+const usesCostBreakdown = computed(() => form.costComponents.length > 0)
+
+watch([costComponentsTotal, usesCostBreakdown], ([total, uses]) => {
+  if (uses) {
+    form.cost = total
+  }
+})
+
+function addCostComponent(tipo: CostComponent['tipo'] = 'materia_prima') {
+  form.costComponents.push({ tipo, nombre: '', monto: 0 })
+  sections.cost = true
+}
+
+function removeCostComponent(index: number) {
+  form.costComponents.splice(index, 1)
+}
+
 const costingTypeLabels: Record<CatalogProduct['costingType'], string> = {
-  reventa: 'reventa',
+  reventa: 'comercial',
   produccion: 'producción',
   servicio: 'servicio',
 }
@@ -572,9 +575,15 @@ function openEditProduct(product: CatalogProduct | null) {
       price: variant.price,
       stock: variant.stock,
     })),
+    costComponents: (product.costComponents ?? []).map((component) => ({
+      tipo: component.tipo,
+      nombre: component.nombre,
+      monto: component.monto,
+    })),
   })
   resetSections()
   sections.variants = form.variants.length > 0
+  sections.cost = form.costComponents.length > 0
   catalogError.value = ''
   productDialogOpen.value = true
 }
@@ -661,22 +670,23 @@ function formatDate(value: string) {
 }
 
 async function loadCatalog() {
-  loading.value = true
   catalogError.value = ''
 
-  try {
-    const [productResponse, categoryResponse] = await Promise.all([
-      $fetch<{ products: CatalogProduct[] }>('/api/pos/catalog/products'),
-      $fetch<{ categories: CatalogCategory[] }>('/api/pos/catalog/categories'),
-    ])
-
-    products.value = productResponse.products
-    categories.value = categoryResponse.categories
-  } catch {
-    catalogError.value = 'No se pudo cargar el catálogo de la tienda.'
-  } finally {
-    loading.value = false
+  if (catalogStore.hasCatalog) {
+    catalogStore.refreshCatalogInBackground()
+    return
   }
+
+  await catalogStore.loadCatalog().catch(() => {
+    catalogError.value = storeCatalogError.value || 'No se pudo cargar el catálogo de la tienda.'
+  })
+}
+
+async function refreshCatalog() {
+  catalogError.value = ''
+  await catalogStore.loadCatalog({ force: true }).catch(() => {
+    catalogError.value = storeCatalogError.value || 'No se pudo cargar el catálogo de la tienda.'
+  })
 }
 
 async function saveProduct() {
@@ -717,6 +727,13 @@ async function saveProduct() {
         price: variant.price,
         stock: variant.stock,
       })),
+    costComponents: form.costComponents
+      .filter((component) => component.nombre.trim())
+      .map((component) => ({
+        tipo: component.tipo,
+        nombre: component.nombre,
+        monto: component.monto,
+      })),
   }
 
   try {
@@ -733,7 +750,8 @@ async function saveProduct() {
     }
 
     productDialogOpen.value = false
-    await loadCatalog()
+    catalogStore.invalidateCatalog()
+    await catalogStore.loadCatalog({ force: true })
   } catch (error) {
     catalogError.value = error instanceof Error ? error.message : 'No se pudo guardar el producto.'
   } finally {
@@ -776,7 +794,8 @@ async function saveCategory() {
 
     categoryDialogOpen.value = false
     categoryDialogFromProduct.value = false
-    await loadCatalog()
+    catalogStore.invalidateCatalog()
+    await catalogStore.loadCatalog({ force: true })
   } catch {
     catalogError.value = 'No se pudo guardar la categoría.'
   } finally {
@@ -816,7 +835,8 @@ async function saveStockAdjustment() {
     })
 
     stockDialogOpen.value = false
-    await loadCatalog()
+    catalogStore.invalidateCatalog()
+    await catalogStore.loadCatalog({ force: true })
   } catch (error) {
     catalogError.value = error instanceof Error ? error.message : 'No se pudo ajustar el stock.'
   } finally {
@@ -852,10 +872,11 @@ async function openStockHistory(product: CatalogProduct | null) {
       <div class="catalog-heading">
         <span class="catalog-eyebrow">{{ session?.store }}</span>
         <h2>Inventario</h2>
+        <p>Productos, servicios, precios, costos por unidad y stock.</p>
       </div>
 
       <div class="catalog-primary-actions">
-        <Button type="button" text size="small" icon="pi pi-refresh" label="Actualizar" :loading="loading" @click="loadCatalog" />
+        <Button type="button" text size="small" icon="pi pi-refresh" label="Actualizar" :loading="loading" @click="refreshCatalog" />
         <Button type="button" icon="pi pi-plus" label="Nuevo producto" class="new-product-button" @click="openCreateProduct" />
       </div>
     </header>
@@ -1039,79 +1060,126 @@ async function openStockHistory(product: CatalogProduct | null) {
       modal
       :header="form.id ? 'Editar producto' : 'Crear producto'"
       class="product-dialog"
-      :style="{ width: 'min(620px, calc(100vw - 32px))' }"
+      :style="{ width: 'min(860px, calc(100vw - 24px))' }"
     >
       <form class="pform" @submit.prevent="saveProduct">
         <div class="pform-body">
-          <!-- Tipo -->
-          <div class="pfield">
-            <label>¿Qué vas a registrar?</label>
-            <div class="kind-toggle" role="radiogroup" aria-label="Tipo de registro">
-              <button
-                v-for="option in kindOptions"
-                :key="option.value"
-                type="button"
-                role="radio"
-                class="kind-toggle__btn"
-                :class="{ 'is-active': form.kind === option.value }"
-                :aria-checked="form.kind === option.value"
-                @click="form.kind = option.value as ProductForm['kind']"
-              >
-                <span class="kind-toggle__check" aria-hidden="true">
-                  <i class="pi pi-check" />
-                </span>
-                <span class="kind-toggle__icon">{{ option.icon }}</span>
-                <span class="kind-toggle__copy">
-                  <strong>{{ option.label }}</strong>
-                  <small>{{ option.hint }}</small>
-                </span>
-              </button>
-            </div>
-          </div>
-
           <!-- Nombre -->
           <div class="pfield">
             <label for="product-name">Nombre <span class="req">*</span></label>
             <InputText id="product-name" v-model="form.name" autocomplete="off" placeholder="Ej. Coca Cola, Leche Pil, Pan..." />
           </div>
 
-          <!-- Categoría -->
-          <div class="pfield">
-            <label for="product-category">Categoría / Rubro</label>
-            <div class="category-picker">
-              <Select id="product-category" v-model="form.categoryId" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
-              <Button
-                type="button"
-                icon="pi pi-plus"
-                label="Nueva"
-                outlined
-                @click="openCreateCategory(true)"
+          <div class="grid formgrid product-main-grid">
+            <div class="pfield col-12 md:col-4">
+              <label for="product-kind">Tipo</label>
+              <Select
+                id="product-kind"
+                v-model="form.kind"
+                :options="kindOptions"
+                optionLabel="label"
+                optionValue="value"
+                fluid
               />
             </div>
-          </div>
 
-          <div v-if="form.kind === 'producto'" class="pfield">
-            <label>¿Cómo lo obtienes?</label>
-            <div class="costing-toggle">
-              <button
-                v-for="option in costingTypeOptions"
-                :key="option.value"
-                type="button"
-                class="costing-toggle__btn"
-                :class="{ 'is-active': form.costingType === option.value }"
-                @click="form.costingType = option.value as ProductForm['costingType']"
-              >
-                <span class="costing-toggle__icon">{{ option.icon }}</span>
-                <strong>{{ option.label }}</strong>
-                <span>{{ option.description }}</span>
-              </button>
+            <div class="pfield col-12 md:col-8">
+              <label for="product-category">Categoría / Rubro</label>
+              <div class="category-picker">
+                <Select id="product-category" v-model="form.categoryId" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
+                <Button
+                  type="button"
+                  icon="pi pi-plus"
+                  label="Nueva"
+                  outlined
+                  @click="openCreateCategory(true)"
+                />
+              </div>
             </div>
           </div>
 
-          <!-- Costo / Margen de ganancia -->
+          <!-- Desglose de costo (opcional): de qué se compone el costo unitario -->
+          <div v-if="form.kind !== 'combo'" class="cost-panel" :class="{ 'is-open': sections.cost }">
+            <button type="button" class="cost-panel__head" @click="toggleSection('cost')">
+              <span class="cost-panel__title">
+                <span class="cost-panel__badge"><i class="pi pi-calculator" aria-hidden="true" /></span>
+                <span>
+                  Calcular costo por partes
+                  <small>Opcional · materia prima, mano de obra, insumos…</small>
+                </span>
+              </span>
+              <i class="pi pi-chevron-down cost-panel__chevron" aria-hidden="true" />
+            </button>
+
+            <div v-show="sections.cost" class="cost-panel__body">
+              <div v-if="form.kind === 'producto'" class="pfield">
+                <label for="product-costing-type">Tipo de costo</label>
+                <Select
+                  id="product-costing-type"
+                  v-model="form.costingType"
+                  :options="costingTypeOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  fluid
+                />
+              </div>
+
+              <!-- Estado vacío: invita a empezar con ejemplos en vez de un botón solitario -->
+              <div v-if="!form.costComponents.length" class="cost-empty">
+                <span class="cost-empty__icon">🧮</span>
+                <p class="cost-empty__title">¿De qué se compone el costo de <strong>1 {{ form.unit || 'unidad' }}</strong>?</p>
+                <p class="cost-empty__hint">Agrega cada parte y NEXA la suma por ti. Por ejemplo:</p>
+                <div class="cost-empty__chips">
+                  <button
+                    v-for="type in costComponentTypes"
+                    :key="type.value"
+                    type="button"
+                    class="cost-chip"
+                    @click="addCostComponent(type.value)"
+                  >
+                    <span aria-hidden="true">{{ type.icon }}</span> {{ type.label }}
+                  </button>
+                </div>
+              </div>
+
+              <template v-else>
+                <p class="cost-breakdown__intro">De qué se compone el costo de <strong>1 {{ form.unit || 'unidad' }}</strong>. NEXA los suma por ti.</p>
+
+                <div v-for="(component, index) in form.costComponents" :key="index" class="cost-row">
+                  <Select
+                    v-model="component.tipo"
+                    :options="costComponentTypes"
+                    optionLabel="label"
+                    optionValue="value"
+                    class="cost-row__type"
+                  />
+                  <InputText v-model="component.nombre" placeholder="Ej. Harina, queso…" class="cost-row__name" />
+                  <InputNumber
+                    v-model="component.monto"
+                    prefix="Bs "
+                    :min="0"
+                    :minFractionDigits="2"
+                    :maxFractionDigits="2"
+                    class="cost-row__amount"
+                  />
+                  <Button type="button" icon="pi pi-times" text rounded severity="secondary" aria-label="Quitar" @click="removeCostComponent(index)" />
+                </div>
+
+                <Button type="button" size="small" icon="pi pi-plus" label="Agregar otro costo" outlined @click="addCostComponent()" />
+
+                <div class="cost-breakdown__total">
+                  <span>Costo unitario (suma)</span>
+                  <strong>Bs {{ money(costComponentsTotal) }}</strong>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Costo / margen por unidad -->
+          <p class="step-heading"><i class="pi pi-tag" aria-hidden="true" /> Costo y precio de venta</p>
           <div class="pgrid">
             <div class="pfield">
-              <label for="product-cost">Costo</label>
+              <label for="product-cost">Costo por unidad</label>
               <InputNumber
                 id="product-cost"
                 v-model="form.cost"
@@ -1119,11 +1187,13 @@ async function openStockHistory(product: CatalogProduct | null) {
                 :min="0"
                 :minFractionDigits="2"
                 :maxFractionDigits="2"
+                :disabled="usesCostBreakdown"
                 fluid
               />
+              <small v-if="usesCostBreakdown" class="field-help">Se calcula del desglose de arriba.</small>
             </div>
             <div class="pfield">
-              <label for="product-margin">Margen de ganancia</label>
+              <label for="product-margin">Margen deseado por unidad</label>
               <InputNumber
                 id="product-margin"
                 v-model="form.minMargin"
@@ -1133,34 +1203,36 @@ async function openStockHistory(product: CatalogProduct | null) {
                 :placeholder="`Sugerido: ${typeDefaultMargin}%`"
                 fluid
               />
-              <small class="field-help">Sugerido para {{ costingTypeLabel }}: {{ typeDefaultMargin }}%. NEXA calcula el precio desde aquí.</small>
+              <small class="field-help">Cuánto quieres ganar sobre el costo. El resultado del mes lo ves en Finanzas.</small>
             </div>
           </div>
 
           <div class="price-helper">
             <div class="price-helper__main">
-              <span class="price-helper__icon"><i class="pi pi-percentage" aria-hidden="true" /></span>
-              <div>
-                <small>Precio recomendado con margen de ganancia</small>
+              <span class="price-helper__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
+              <div class="price-helper__text">
+                <small>Te sugerimos vender a</small>
                 <strong>Bs {{ money(suggestedPrice) }}</strong>
-                <em>Margen {{ targetMargin.toFixed(1) }}% · Ganancia Bs {{ money(suggestedProfit) }}</em>
+                <em>Para ganar Bs {{ money(suggestedProfit) }} en cada venta</em>
               </div>
             </div>
             <Button
               type="button"
               size="small"
               icon="pi pi-check"
-              label="Aplicar"
-              outlined
+              label="Usar este precio"
               :disabled="form.cost <= 0 || suggestedPrice <= 0"
               @click="applySuggestedPrice"
             />
           </div>
 
           <!-- Ganancia en vivo -->
-          <div class="profit-box" :class="{ 'is-negative': liveProfit.profit < 0 }">
-            <span>Ganancia / margen real</span>
-            <strong>Bs {{ money(liveProfit.profit) }} · {{ liveProfit.margin.toFixed(1) }}%</strong>
+          <div class="profit-box" :class="{ 'is-negative': liveProfit.profit < 0, 'is-positive': liveProfit.profit > 0 }">
+            <span class="profit-box__label">
+              <i :class="liveProfit.profit < 0 ? 'pi pi-exclamation-triangle' : 'pi pi-wallet'" aria-hidden="true" />
+              {{ liveProfit.profit < 0 ? 'Estás perdiendo en cada venta' : 'Ganas con este precio' }}
+            </span>
+            <strong>Bs {{ money(liveProfit.profit) }} <span class="profit-box__margin">({{ liveProfit.margin.toFixed(0) }}%)</span></strong>
           </div>
 
           <div class="pgrid">
@@ -1991,6 +2063,10 @@ async function openStockHistory(product: CatalogProduct | null) {
   padding: 0;
 }
 
+.product-dialog :deep(.p-dialog-header) {
+  padding: 18px 22px;
+}
+
 .pform {
   display: flex;
   flex-direction: column;
@@ -1999,143 +2075,18 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .pform-body {
   display: grid;
-  gap: 14px;
-  max-height: min(66vh, 560px);
+  gap: 16px;
+  max-height: min(72vh, 660px);
   overflow-y: auto;
-  padding: 18px 20px;
+  padding: 18px 22px;
 }
 
 .pform-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 14px 20px;
+  padding: 14px 22px;
   border-top: 1px solid #eef2f6;
-}
-
-/* Toggle de tipo (tarjetas con icono) */
-.kind-toggle {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.kind-toggle__btn {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 82px;
-  padding: 13px 14px 12px;
-  border: 1.5px solid #dce5df;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdfb 100%);
-  color: #0f172a;
-  cursor: pointer;
-  text-align: left;
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
-  transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    transform 0.16s ease;
-}
-
-.kind-toggle__btn:hover {
-  border-color: #a7d7b5;
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
-  transform: translateY(-1px);
-}
-
-.kind-toggle__btn:focus-visible,
-.costing-toggle__btn:focus-visible {
-  outline: none;
-  border-color: var(--catalog-accent);
-  box-shadow: 0 0 0 4px rgba(11, 152, 47, 0.12);
-}
-
-.kind-toggle__btn.is-active {
-  border-color: var(--catalog-accent);
-  background:
-    linear-gradient(180deg, rgba(234, 246, 231, 0.95), rgba(255, 255, 255, 0.98)),
-    #ffffff;
-  box-shadow:
-    inset 0 0 0 1px var(--catalog-accent),
-    0 10px 24px rgba(11, 152, 47, 0.14);
-}
-
-.kind-toggle__check {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  border: 1px solid #dce5df;
-  border-radius: 999px;
-  background: #ffffff;
-  color: transparent;
-  font-size: 0.66rem;
-  transform: scale(0.86);
-  transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease,
-    transform 0.16s ease;
-}
-
-.kind-toggle__btn.is-active .kind-toggle__check {
-  border-color: var(--catalog-accent);
-  background: var(--catalog-accent);
-  color: #ffffff;
-  transform: scale(1);
-}
-
-.kind-toggle__icon {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 11px;
-  background: #f3f7f4;
-  font-size: 1.28rem;
-  line-height: 1;
-}
-
-.kind-toggle__btn.is-active .kind-toggle__icon {
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px #cfe8d1;
-}
-
-.kind-toggle__copy {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.kind-toggle__btn strong {
-  color: #0f172a;
-  font-size: 0.84rem;
-  font-weight: 900;
-  line-height: 1.05;
-}
-
-.kind-toggle__btn small {
-  color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.kind-toggle__btn.is-active strong {
-  color: #075f25;
-}
-
-.kind-toggle__btn.is-active small {
-  color: #2c6b3d;
 }
 
 /* Campos */
@@ -2146,8 +2097,8 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .pgrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 14px;
 }
 
 .pfield label {
@@ -2174,9 +2125,19 @@ async function openStockHistory(product: CatalogProduct | null) {
   width: 100%;
 }
 
+/* Campo de costo calculado automáticamente: se ve "tranquilo", no roto. */
+.pfield :deep(.p-inputnumber-input:disabled),
+.pfield :deep(.p-inputtext:disabled) {
+  background: #f8fafc;
+  border-style: dashed;
+  color: #475569;
+  opacity: 1;
+  -webkit-text-fill-color: #475569;
+}
+
 .category-picker {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   gap: 8px;
   align-items: center;
 }
@@ -2197,88 +2158,45 @@ async function openStockHistory(product: CatalogProduct | null) {
   white-space: nowrap;
 }
 
-.costing-toggle {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.costing-toggle__btn {
-  display: grid;
-  gap: 4px;
-  min-height: 82px;
-  padding: 11px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #ffffff;
-  color: #0f172a;
-  cursor: pointer;
-  text-align: left;
-}
-
-.costing-toggle__icon {
-  font-size: 1.3rem;
-  line-height: 1;
-}
-
-.costing-toggle__btn:hover {
-  border-color: #86efac;
-  background: #f8fafc;
-}
-
-.costing-toggle__btn.is-active {
-  border-color: var(--catalog-accent);
-  background: var(--catalog-accent-soft);
-  box-shadow: inset 0 0 0 1px var(--catalog-accent);
-}
-
-.costing-toggle__btn strong {
-  color: #0f172a;
-  font-size: 0.78rem;
-  font-weight: 900;
-}
-
-.costing-toggle__btn span {
-  color: #64748b;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
 .price-helper {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid #bbf7d0;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #d4ede0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f3fbf6 0%, #ffffff 70%);
 }
 
 .price-helper__main {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 10px;
+  gap: 12px;
 }
 
-/* El botón no debe encogerse ni truncarse ("Aplica" en vez de "Aplicar"). */
+.price-helper__text {
+  min-width: 0;
+}
+
+/* El botón no debe encogerse ni truncarse. */
 .price-helper :deep(.p-button) {
   flex: 0 0 auto;
   white-space: nowrap;
+  border-radius: 10px;
 }
 
 .price-helper__icon {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #dcfce7;
-  color: #15803d;
-  font-size: 1rem;
+  color: #16a34a;
+  font-size: 1.1rem;
 }
 
 .price-helper small,
@@ -2288,47 +2206,82 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .price-helper small {
-  color: #166534;
-  font-size: 0.72rem;
-  font-weight: 800;
+  color: #15803d;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .price-helper strong {
-  margin-top: 2px;
+  margin-top: 1px;
   color: #0f172a;
-  font-size: 1.18rem;
-  font-weight: 900;
-  line-height: 1;
+  font-size: 1.32rem;
+  font-weight: 800;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .price-helper em {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #64748b;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Ganancia en vivo */
 .profit-box {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 11px 14px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #f1f5f9;
   font-size: 0.82rem;
 }
 
-.profit-box span {
+.profit-box.is-positive {
+  background: #f0fdf4;
+}
+
+.profit-box.is-negative {
+  background: #fef2f2;
+}
+
+.profit-box__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: #64748b;
+  font-weight: 600;
+}
+
+.profit-box__label i {
+  font-size: 0.85rem;
+}
+
+.profit-box.is-positive .profit-box__label {
+  color: #15803d;
+}
+
+.profit-box.is-negative .profit-box__label {
+  color: #dc2626;
 }
 
 .profit-box strong {
   color: #0f172a;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.profit-box__margin {
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.profit-box.is-positive strong {
+  color: #15803d;
 }
 
 .profit-box.is-negative strong {
@@ -2383,6 +2336,201 @@ async function openStockHistory(product: CatalogProduct | null) {
   display: grid;
   gap: 12px;
   padding: 2px 2px 8px;
+}
+
+/* Encabezado de paso dentro del formulario */
+.step-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 -4px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.step-heading i {
+  color: #16a34a;
+  font-size: 0.95rem;
+}
+
+/* Panel "Calcular costo por partes": bloque contenido y prominente */
+.cost-panel {
+  margin: 4px 0;
+  border: 1px solid #d7e3ee;
+  border-radius: 16px;
+  background: #f8fafc;
+  overflow: hidden;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.cost-panel.is-open {
+  border-color: #bbf7d0;
+  background: #ffffff;
+  box-shadow: 0 6px 20px -12px rgba(22, 163, 74, 0.45);
+}
+
+.cost-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cost-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #0f172a;
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.cost-panel__title small {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.cost-panel__badge {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 1.05rem;
+}
+
+.cost-panel__chevron {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  transition: transform 0.18s ease;
+}
+
+.cost-panel.is-open .cost-panel__chevron {
+  transform: rotate(180deg);
+}
+
+.cost-panel__body {
+  display: grid;
+  gap: 14px;
+  padding: 2px 18px 18px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Desglose de costo */
+.cost-breakdown__intro {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #5c6b60;
+}
+
+/* Estado vacío del desglose: guía amable en vez de un botón solitario */
+.cost-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #fafbfc;
+  text-align: center;
+}
+
+.cost-empty__icon {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.cost-empty__title {
+  margin: 2px 0 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cost-empty__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.cost-empty__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.cost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.cost-chip:hover {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.cost-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.9fr) minmax(180px, 1.4fr) minmax(120px, 0.9fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.cost-breakdown__total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f1f8f3;
+  border: 1px dashed #bfe0cb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  color: #06351c;
+}
+
+.cost-breakdown__total strong {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 520px) {
+  .cost-row {
+    grid-template-columns: 1fr;
+  }
+
+  .cost-row__name {
+    order: -1;
+  }
+
+  .cost-row :deep(.p-button) {
+    justify-self: end;
+  }
 }
 
 /* Imagen */
@@ -2679,10 +2827,6 @@ async function openStockHistory(product: CatalogProduct | null) {
     grid-template-columns: 1fr;
   }
 
-  .costing-toggle {
-    grid-template-columns: 1fr;
-  }
-
   .variant-row {
     grid-template-columns: 1fr;
   }
@@ -2711,6 +2855,19 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 @media (max-width: 720px) {
+  .product-dialog :deep(.p-dialog-header) {
+    padding: 16px;
+  }
+
+  .pform-body {
+    max-height: min(74vh, 620px);
+    padding: 14px 16px 16px;
+  }
+
+  .pform-footer {
+    padding: 12px 16px;
+  }
+
   .catalog-header {
     grid-template-columns: 1fr;
     align-items: start;
@@ -2801,6 +2958,16 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 @media (max-width: 480px) {
+  .pform-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .pform-footer :deep(.p-button) {
+    width: 100%;
+    justify-content: center;
+  }
+
   .row-actions :deep(.p-button-label) {
     display: none;
   }

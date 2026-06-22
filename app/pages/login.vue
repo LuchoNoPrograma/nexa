@@ -18,6 +18,18 @@ const form = reactive({
 const showPassword = ref(false)
 const loading = ref(false)
 const authError = ref('')
+const REMEMBER_KEY = 'nexa-login-remember'
+const sessionStore = useSessionStore()
+
+onMounted(async () => {
+  const savedRemember = localStorage.getItem(REMEMBER_KEY)
+  form.remember = savedRemember === '1'
+  localStorage.removeItem('nexa-login-identificador')
+
+  if (await sessionStore.load().catch(() => null)) {
+    void navigateTo('/pos/inicio')
+  }
+})
 
 async function onSubmit() {
   authError.value = ''
@@ -32,6 +44,12 @@ async function onSubmit() {
         remember: form.remember,
       },
     })
+
+    if (form.remember) {
+      localStorage.setItem(REMEMBER_KEY, '1')
+    } else {
+      localStorage.setItem(REMEMBER_KEY, '0')
+    }
 
     void navigateTo('/pos/inicio')
   } catch {
@@ -134,7 +152,7 @@ async function onSubmit() {
           <div class="login-form__row">
             <label class="login-check">
               <input v-model="form.remember" type="checkbox" name="remember">
-              <span>Recordarme</span>
+              <span>Mantener sesión en este dispositivo</span>
             </label>
             <a href="#recuperar">¿Olvidaste tu contraseña?</a>
           </div>

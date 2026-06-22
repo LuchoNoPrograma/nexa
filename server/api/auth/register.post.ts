@@ -21,6 +21,7 @@ function normalizePhone(value: string) {
 }
 
 const allowedDialCodes = new Set(['591', '51', '55'])
+const REGISTER_SESSION_DAYS = 90
 
 function toSlug(value: string) {
   return value
@@ -101,7 +102,8 @@ export default defineEventHandler(async (event) => {
   const slug = await uniqueStoreSlug(businessName)
   const token = createSessionToken()
   const tokenHash = hashSessionToken(token)
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const maxAge = REGISTER_SESSION_DAYS * 24 * 60 * 60
+  const expiresAt = new Date(Date.now() + maxAge * 1000)
   const client = await pool.connect()
 
   try {
@@ -198,6 +200,7 @@ export default defineEventHandler(async (event) => {
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       expires: expiresAt,
+      maxAge,
     })
 
     return {

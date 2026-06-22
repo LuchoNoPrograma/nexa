@@ -9,9 +9,11 @@ import {
   nullableNumber,
   nullableText,
   numberOrZero,
+  parseCostComponents,
   parseVariants,
   productCostingType,
   productKind,
+  replaceProductCostComponents,
   replaceProductVariants,
   requireStoreAccess,
 } from '../../../utils/posCatalog'
@@ -35,6 +37,7 @@ type ProductBody = {
   icon?: string | null
   visiblePos?: boolean
   variants?: unknown
+  costComponents?: unknown
 }
 
 export default defineEventHandler(async (event) => {
@@ -48,6 +51,11 @@ export default defineEventHandler(async (event) => {
   const costingType = productCostingType(body.costingType, kind)
   const initialStock = kind === 'servicio' ? 0 : numberOrZero(body.stock)
   const variants = parseVariants(body.variants)
+  const costComponents = parseCostComponents(body.costComponents)
+  // Si hay desglose, la suma de componentes manda sobre el costo escrito a mano.
+  const effectiveCost = costComponents.length
+    ? costComponents.reduce((sum, c) => sum + c.monto, 0)
+    : numberOrZero(body.cost)
 
   const client = await pool.connect()
 
@@ -90,7 +98,7 @@ export default defineEventHandler(async (event) => {
         kind,
         costingType,
         cleanText(body.unit, 'unidad') || 'unidad',
-        numberOrZero(body.cost),
+        effectiveCost,
         numberOrZero(body.price),
         initialStock,
         numberOrZero(body.minStock),
@@ -104,6 +112,7 @@ export default defineEventHandler(async (event) => {
 
     const productId = result.rows[0].id as string
     await replaceProductVariants(client, productId, variants)
+    await replaceProductCostComponents(client, productId, costComponents)
 
     if (initialStock > 0) {
       const adjustmentResult = await client.query<{ id: string }>(
@@ -142,7 +151,7 @@ export default defineEventHandler(async (event) => {
           )
           values ($1, $2, $3, $4, 'entrada', 'manual', $5, 0, $5, $6, 'Stock inicial del producto')
         `,
-        [session.storeId, productId, session.id, adjustmentResult.rows[0].id, initialStock, numberOrZero(body.cost)],
+        [session.storeId, productId, session.id, adjustmentResult.rows[0].id, initialStock, effectiveCost],
       )
     }
 

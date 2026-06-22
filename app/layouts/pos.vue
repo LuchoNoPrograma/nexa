@@ -4,6 +4,7 @@ import type { MenuItem } from 'primevue/menuitem'
 const route = useRoute()
 const router = useRouter()
 const session = usePosSession()
+const sessionStore = useSessionStore()
 const { puede } = useAcceso()
 const { open: openHaru } = useHaruChat()
 const isReady = ref(false)
@@ -152,7 +153,7 @@ const sidebarItems: SidebarItem[] = [
     icon: 'pi pi-chart-pie',
     acceso: 'REPORTE',
     children: [
-      { label: 'Resumen', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
+      { label: 'Resumen financiero', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
       { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE' },
       { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE' },
     ],
@@ -313,14 +314,13 @@ onMounted(async () => {
   }
 
   try {
-    const response = await $fetch<{ user: PosSession }>('/api/auth/session')
-    session.value = response.user
+    const user = await sessionStore.load()
 
     // Onboarding obligatorio: hasta que el diagnóstico esté "completado",
     // mandamos al diagnóstico y la app permanece bloqueada (ver beforeEach).
     if (
-      response.user.storeId
-      && response.user.onboardingDiagnostico !== 'completado'
+      user?.storeId
+      && user.onboardingDiagnostico !== 'completado'
       && route.path !== '/pos/diagnostico'
     ) {
       await navigateTo('/pos/diagnostico')
@@ -344,7 +344,9 @@ onBeforeUnmount(() => {
 
 async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' }).catch(() => null)
-  session.value = null
+  useCatalogStore().clear()
+  useCashStore().clear()
+  sessionStore.clear()
   void navigateTo('/login')
 }
 

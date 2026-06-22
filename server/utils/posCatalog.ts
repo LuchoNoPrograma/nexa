@@ -112,6 +112,60 @@ export async function replaceProductVariants(client: PoolClient, productId: stri
   }
 }
 
+const costComponentTypes = ['materia_prima', 'mano_obra', 'insumo', 'otro'] as const
+
+export type CostComponentInput = {
+  tipo: typeof costComponentTypes[number]
+  nombre: string
+  monto: number
+}
+
+// Desglose opcional del costo directo del producto. Tolerante: ignora renglones
+// sin nombre. Si la lista llega vacía, el producto guarda su costo como un solo
+// número (sin componentes).
+export function parseCostComponents(value: unknown): CostComponentInput[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const components: CostComponentInput[] = []
+
+  for (const raw of value) {
+    if (typeof raw !== 'object' || !raw) {
+      continue
+    }
+
+    const entry = raw as Record<string, unknown>
+    const nombre = cleanText(entry.nombre ?? entry.name)
+
+    if (!nombre) {
+      continue
+    }
+
+    const tipo = costComponentTypes.includes(entry.tipo as typeof costComponentTypes[number])
+      ? (entry.tipo as typeof costComponentTypes[number])
+      : 'otro'
+
+    components.push({ tipo, nombre, monto: numberOrZero(entry.monto) })
+  }
+
+  return components
+}
+
+export async function replaceProductCostComponents(client: PoolClient, productId: string, components: CostComponentInput[]) {
+  await client.query('delete from producto_costo_componente where producto_id = $1', [productId])
+
+  for (const [index, component] of components.entries()) {
+    await client.query(
+      `
+        insert into producto_costo_componente (producto_id, tipo, nombre, monto, orden)
+        values ($1, $2, $3, $4, $5)
+      `,
+      [productId, component.tipo, component.nombre, component.monto, index],
+    )
+  }
+}
+
 export function booleanOrDefault(value: unknown, fallback: boolean) {
   return typeof value === 'boolean' ? value : fallback
 }

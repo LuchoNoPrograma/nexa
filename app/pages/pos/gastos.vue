@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { CATEGORIAS_EGRESO } from '~~/shared/utils/finanzas'
+
 definePageMeta({
   layout: 'pos',
   posTitle: 'Gastos',
@@ -40,50 +42,34 @@ const periodOptions = [
   { label: 'Mes', value: 'month' },
 ]
 
-// Colores por categoría operativa (mismos que en Finanzas para que cuadre la lectura).
-const categoryColors: Record<string, string> = {
-  'Sueldos': '#22c55e',
-  'Luz, agua e internet': '#3b82f6',
-  'Transporte': '#f59e0b',
-  'Publicidad': '#8b5cf6',
-  'Insumos': '#06b6d4',
-  'Alquiler': '#ec4899',
-  'Otros gastos': '#94a3b8',
+// Color por valor de categoría (taxonomía contable compartida con Finanzas).
+const categoryColorByValue: Record<string, string> = {
+  sueldos: '#22c55e',
+  alquiler: '#ec4899',
+  servicios_basicos: '#3b82f6',
+  transporte: '#f59e0b',
+  publicidad: '#8b5cf6',
+  mantenimiento: '#14b8a6',
+  otros_gastos: '#94a3b8',
+  compra_inventario: '#06b6d4',
+  gasto_financiero: '#ef4444',
 }
 
-// Datos demo. Cada periodo separa compras de inventario (suben stock) de gastos
-// operativos (dinero consumido). El total del mes cuadra con Finanzas: 8.300 + 15.560.
-const seedExpenses: Record<PeriodKey, ExpenseRow[]> = {
-  today: [
-    { date: '09:20', concept: 'Fruta y açaí', category: 'Compras de inventario', kind: 'Inventario', method: 'Efectivo', amount: 420, supplier: 'Frutería del Valle' },
-    { date: '16:30', concept: 'Impulso de publicación', category: 'Publicidad', kind: 'Operativo', method: 'QR', amount: 90 },
-    { date: '11:05', concept: 'Taxi para recoger insumos', category: 'Transporte', kind: 'Operativo', method: 'Efectivo', amount: 60 },
-  ],
-  week: [
-    { date: 'Vie', concept: 'Fruta y açaí', category: 'Compras de inventario', kind: 'Inventario', method: 'Transferencia', amount: 820, supplier: 'Frutería del Valle' },
-    { date: 'Mié', concept: 'Vasos y servilletas', category: 'Compras de inventario', kind: 'Inventario', method: 'QR', amount: 240, supplier: 'Insumos Express' },
-    { date: 'Jue', concept: 'Reparto a domicilio', category: 'Transporte', kind: 'Operativo', method: 'Efectivo', amount: 320 },
-    { date: 'Mar', concept: 'Publicidad en redes', category: 'Publicidad', kind: 'Operativo', method: 'QR', amount: 480 },
-    { date: 'Lun', concept: 'Recarga de gas', category: 'Luz, agua e internet', kind: 'Operativo', method: 'Efectivo', amount: 180 },
-  ],
-  month: [
-    { date: '12 Jun', concept: 'Fruta y açaí', category: 'Compras de inventario', kind: 'Inventario', method: 'Transferencia', amount: 3200, supplier: 'Frutería del Valle' },
-    { date: '09 Jun', concept: 'Leche y yogurt', category: 'Compras de inventario', kind: 'Inventario', method: 'Efectivo', amount: 1450, supplier: 'Distribuidora Láctea' },
-    { date: '06 Jun', concept: 'Vasos, cucharas y servilletas', category: 'Compras de inventario', kind: 'Inventario', method: 'QR', amount: 980, supplier: 'Insumos Express' },
-    { date: '03 Jun', concept: 'Granos de café', category: 'Compras de inventario', kind: 'Inventario', method: 'Transferencia', amount: 1670, supplier: 'Café Andino' },
-    { date: '02 Jun', concept: 'Toppings y siropes', category: 'Compras de inventario', kind: 'Inventario', method: 'Efectivo', amount: 1000, supplier: 'Toppings & Co' },
-    { date: '05 Jun', concept: 'Sueldos del personal', category: 'Sueldos', kind: 'Operativo', method: 'Transferencia', amount: 5640 },
-    { date: '08 Jun', concept: 'Luz, agua e internet', category: 'Luz, agua e internet', kind: 'Operativo', method: 'Transferencia', amount: 4500 },
-    { date: '10 Jun', concept: 'Transporte y reparto', category: 'Transporte', kind: 'Operativo', method: 'Efectivo', amount: 2450 },
-    { date: '07 Jun', concept: 'Publicidad en redes', category: 'Publicidad', kind: 'Operativo', method: 'QR', amount: 2140 },
-    { date: '11 Jun', concept: 'Otros gastos varios', category: 'Otros gastos', kind: 'Operativo', method: 'Efectivo', amount: 830 },
-  ],
-}
-
-// Copia editable: registrar un gasto lo agrega aquí (demo en memoria, sin backend).
-const expensesByPeriod = reactive<Record<PeriodKey, ExpenseRow[]>>(
-  JSON.parse(JSON.stringify(seedExpenses)),
+// Color por etiqueta amigable (lo usa el desglose operativo de abajo, que agrupa
+// por la etiqueta visible de cada gasto).
+const categoryColors: Record<string, string> = Object.fromEntries(
+  CATEGORIAS_EGRESO.map((c) => [c.label, categoryColorByValue[c.value] ?? '#94a3b8']),
 )
+
+// Convierte el valor crudo de la categoría (BD) en etiqueta + tipo + color.
+function categoryMeta(value: string) {
+  const found = CATEGORIAS_EGRESO.find((c) => c.value === value)
+  return {
+    label: found?.label ?? 'Otros gastos',
+    kind: (found?.grupo === 'inventario' ? 'Inventario' : 'Operativo') as ExpenseKind,
+    color: categoryColorByValue[value] ?? '#94a3b8',
+  }
+}
 
 const periodCopy: Record<PeriodKey, { subtitle: string, advice: string[] }> = {
   today: {
@@ -116,7 +102,42 @@ const registerDialogVisible = ref(false)
 const exportDialogVisible = ref(false)
 
 const currentCopy = computed(() => periodCopy[activePeriod.value])
-const rows = computed(() => expensesByPeriod[activePeriod.value])
+
+// --- Gastos reales del periodo (API) ---
+type ApiGasto = { id: string, fecha: string, categoria: string, concepto: string, metodo: string, monto: number }
+
+const { data: gastosData, refresh: refreshGastos } = await useFetch<{ gastos: ApiGasto[] }>('/api/pos/gastos', {
+  query: computed(() => ({ periodo: activePeriod.value })),
+  watch: [activePeriod],
+  default: () => ({ gastos: [] }),
+})
+
+const methodFromApi: Record<string, Method> = {
+  efectivo: 'Efectivo',
+  qr: 'QR',
+  transferencia: 'Transferencia',
+  tarjeta: 'Transferencia',
+  otro: 'Efectivo',
+}
+
+function formatExpenseDate(iso: string) {
+  const d = new Date(iso)
+  if (activePeriod.value === 'today') return d.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
+  if (activePeriod.value === 'week') return d.toLocaleDateString('es-BO', { weekday: 'short' })
+  return d.toLocaleDateString('es-BO', { day: '2-digit', month: 'short' })
+}
+
+const rows = computed<ExpenseRow[]>(() => (gastosData.value?.gastos ?? []).map((g) => {
+  const meta = categoryMeta(g.categoria)
+  return {
+    date: formatExpenseDate(g.fecha),
+    concept: g.concepto,
+    category: meta.label,
+    kind: meta.kind,
+    method: methodFromApi[g.metodo] ?? 'Efectivo',
+    amount: g.monto,
+  }
+}))
 
 const total = computed(() => rows.value.reduce((sum, row) => sum + row.amount, 0))
 const inventoryTotal = computed(() => rows.value.filter(r => r.kind === 'Inventario').reduce((sum, r) => sum + r.amount, 0))
@@ -178,61 +199,68 @@ const visibleRows = computed(() => {
   })
 })
 
-// --- Registrar gasto (demo en memoria) ---
-const categoryOptions = ['Sueldos', 'Luz, agua e internet', 'Transporte', 'Publicidad', 'Insumos', 'Alquiler', 'Otros gastos']
+// --- Registrar gasto (persiste en BD) ---
+// Categorías operativas/financieras (la de inventario se elige con el tipo de gasto).
+const categoryOptions = CATEGORIAS_EGRESO
+  .filter((c) => c.grupo !== 'inventario')
+  .map((c) => ({ label: c.label, value: c.value }))
 const methodOptions: Method[] = ['Efectivo', 'QR', 'Transferencia']
 
 const registerForm = reactive({
   kind: 'Operativo' as ExpenseKind,
   concept: '',
-  category: 'Sueldos',
+  category: 'alquiler',
   supplier: '',
   method: 'Efectivo' as Method,
   amount: 0,
 })
+const savingExpense = ref(false)
+const registerError = ref('')
 
 const canSaveExpense = computed(() => registerForm.concept.trim().length > 0 && Number(registerForm.amount || 0) > 0)
 
 function openRegisterDialog() {
   registerForm.kind = 'Operativo'
   registerForm.concept = ''
-  registerForm.category = 'Sueldos'
+  registerForm.category = 'alquiler'
   registerForm.supplier = ''
   registerForm.method = 'Efectivo'
   registerForm.amount = 0
+  registerError.value = ''
   registerDialogVisible.value = true
 }
 
-function todayLabel() {
-  if (activePeriod.value === 'today') {
-    return new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  if (activePeriod.value === 'week') {
-    return new Date().toLocaleDateString('es-BO', { weekday: 'short' })
-  }
-
-  return new Date().toLocaleDateString('es-BO', { day: '2-digit', month: 'short' })
-}
-
-function saveExpense() {
-  if (!canSaveExpense.value) {
+async function saveExpense() {
+  if (!canSaveExpense.value || savingExpense.value) {
     return
   }
 
   const isInventory = registerForm.kind === 'Inventario'
+  const categoria = isInventory ? 'compra_inventario' : registerForm.category
+  const supplier = registerForm.supplier.trim()
 
-  expensesByPeriod[activePeriod.value].unshift({
-    date: todayLabel(),
-    concept: registerForm.concept.trim(),
-    category: isInventory ? 'Compras de inventario' : registerForm.category,
-    kind: registerForm.kind,
-    method: registerForm.method,
-    amount: Number(registerForm.amount || 0),
-    supplier: isInventory ? (registerForm.supplier.trim() || 'Proveedor') : undefined,
-  })
+  savingExpense.value = true
+  registerError.value = ''
 
-  registerDialogVisible.value = false
+  try {
+    await $fetch('/api/pos/gastos', {
+      method: 'POST',
+      body: {
+        categoria,
+        concepto: registerForm.concept.trim(),
+        monto: Number(registerForm.amount || 0),
+        metodo: registerForm.method.toLowerCase(),
+        notas: isInventory && supplier ? `Proveedor: ${supplier}` : null,
+      },
+    })
+
+    registerDialogVisible.value = false
+    await refreshGastos()
+  } catch (error) {
+    registerError.value = error instanceof Error ? error.message : 'No se pudo guardar el gasto.'
+  } finally {
+    savingExpense.value = false
+  }
 }
 
 function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
@@ -418,7 +446,7 @@ function methodIcon(method: Method) {
       <img src="/haru.png" alt="" aria-hidden="true">
     </section>
 
-    <!-- Diálogo: registrar gasto (demo, no persiste en BD) -->
+    <!-- Diálogo: registrar gasto (persiste en BD vía /api/pos/gastos) -->
     <Dialog v-model:visible="registerDialogVisible" modal header="Registrar gasto" class="expense-dialog">
       <form class="dialog-form" @submit.prevent="saveExpense">
         <label class="field full">
@@ -436,7 +464,7 @@ function methodIcon(method: Method) {
         </label>
         <label v-else class="field">
           <span>Categoría</span>
-          <Select v-model="registerForm.category" :options="categoryOptions" fluid />
+          <Select v-model="registerForm.category" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
         </label>
 
         <label class="field">
@@ -454,9 +482,11 @@ function methodIcon(method: Method) {
           <InputNumber v-model="registerForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
         </label>
 
+        <Message v-if="registerError" severity="error" size="small" class="full">{{ registerError }}</Message>
+
         <footer class="full">
           <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
-          <Button type="submit" label="Guardar gasto" icon="pi pi-check" :disabled="!canSaveExpense" />
+          <Button type="submit" label="Guardar gasto" icon="pi pi-check" :loading="savingExpense" :disabled="!canSaveExpense || savingExpense" />
         </footer>
       </form>
     </Dialog>

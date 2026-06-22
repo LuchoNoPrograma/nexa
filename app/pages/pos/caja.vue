@@ -3,7 +3,7 @@ import type {
   PosCashMovement as CashMovement,
   PosCashMovementType as MovementType,
   PosCashPaymentMethod as PaymentMethod,
-} from '~/composables/usePosCashRegister'
+} from '~/stores/cash'
 
 definePageMeta({
   layout: 'pos',

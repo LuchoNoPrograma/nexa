@@ -438,6 +438,7 @@ const NexaPrimeLocale = {
 export default defineNuxtConfig({
   modules: [
     '@nuxt/icon',
+    '@pinia/nuxt',
     '@primevue/nuxt-module',
   ],
   icon: {
