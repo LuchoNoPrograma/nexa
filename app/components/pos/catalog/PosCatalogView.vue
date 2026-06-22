@@ -1098,80 +1098,55 @@ async function openStockHistory(product: CatalogProduct | null) {
             </div>
           </div>
 
-          <!-- Desglose de costo (opcional): de qué se compone el costo unitario -->
-          <div v-if="form.kind !== 'combo'" class="cost-panel" :class="{ 'is-open': sections.cost }">
-            <button type="button" class="cost-panel__head" @click="toggleSection('cost')">
-              <span class="cost-panel__title">
-                <span class="cost-panel__badge"><i class="pi pi-calculator" aria-hidden="true" /></span>
-                <span>
-                  Calcular costo por partes
-                  <small>Opcional · materia prima, mano de obra, insumos…</small>
-                </span>
-              </span>
-              <i class="pi pi-chevron-down cost-panel__chevron" aria-hidden="true" />
-            </button>
+          <!-- Costo por partes (opcional): siempre visible, sin plegar -->
+          <div v-if="form.kind !== 'combo'" class="cost-section">
+            <p class="step-heading"><i class="pi pi-calculator" aria-hidden="true" /> Costo por partes <span class="step-heading__opt">opcional</span></p>
 
-            <div v-show="sections.cost" class="cost-panel__body">
-              <div v-if="form.kind === 'producto'" class="pfield">
-                <label for="product-costing-type">Tipo de costo</label>
-                <Select
-                  id="product-costing-type"
-                  v-model="form.costingType"
-                  :options="costingTypeOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  fluid
-                />
-              </div>
+            <div v-if="form.kind === 'producto'" class="pfield">
+              <label for="product-costing-type">Tipo de costo</label>
+              <Select
+                id="product-costing-type"
+                v-model="form.costingType"
+                :options="costingTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                fluid
+              />
+            </div>
 
-              <!-- Estado vacío: invita a empezar con ejemplos en vez de un botón solitario -->
-              <div v-if="!form.costComponents.length" class="cost-empty">
-                <span class="cost-empty__icon">🧮</span>
-                <p class="cost-empty__title">¿De qué se compone el costo de <strong>1 {{ form.unit || 'unidad' }}</strong>?</p>
-                <p class="cost-empty__hint">Agrega cada parte y NEXA la suma por ti. Por ejemplo:</p>
-                <div class="cost-empty__chips">
-                  <button
-                    v-for="type in costComponentTypes"
-                    :key="type.value"
-                    type="button"
-                    class="cost-chip"
-                    @click="addCostComponent(type.value)"
-                  >
-                    <span aria-hidden="true">{{ type.icon }}</span> {{ type.label }}
-                  </button>
-                </div>
-              </div>
+            <p class="cost-hint">Anota cuánto te cuesta cada parte de <strong>1 {{ form.unit || 'unidad' }}</strong> y NEXA lo suma.</p>
 
-              <template v-else>
-                <p class="cost-breakdown__intro">De qué se compone el costo de <strong>1 {{ form.unit || 'unidad' }}</strong>. NEXA los suma por ti.</p>
+            <div v-for="(component, index) in form.costComponents" :key="index" class="cost-row">
+              <Select
+                v-model="component.tipo"
+                :options="costComponentTypes"
+                optionLabel="label"
+                optionValue="value"
+                class="cost-row__type"
+              />
+              <InputText v-model="component.nombre" placeholder="Ej. Harina, queso…" class="cost-row__name" />
+              <InputNumber
+                v-model="component.monto"
+                prefix="Bs "
+                :min="0"
+                :minFractionDigits="2"
+                :maxFractionDigits="2"
+                class="cost-row__amount"
+              />
+              <Button type="button" icon="pi pi-times" text rounded severity="secondary" aria-label="Quitar" @click="removeCostComponent(index)" />
+            </div>
 
-                <div v-for="(component, index) in form.costComponents" :key="index" class="cost-row">
-                  <Select
-                    v-model="component.tipo"
-                    :options="costComponentTypes"
-                    optionLabel="label"
-                    optionValue="value"
-                    class="cost-row__type"
-                  />
-                  <InputText v-model="component.nombre" placeholder="Ej. Harina, queso…" class="cost-row__name" />
-                  <InputNumber
-                    v-model="component.monto"
-                    prefix="Bs "
-                    :min="0"
-                    :minFractionDigits="2"
-                    :maxFractionDigits="2"
-                    class="cost-row__amount"
-                  />
-                  <Button type="button" icon="pi pi-times" text rounded severity="secondary" aria-label="Quitar" @click="removeCostComponent(index)" />
-                </div>
+            <Button
+              type="button"
+              icon="pi pi-plus"
+              :label="form.costComponents.length ? 'Agregar otro costo' : 'Agregar un costo'"
+              outlined
+              @click="addCostComponent()"
+            />
 
-                <Button type="button" size="small" icon="pi pi-plus" label="Agregar otro costo" outlined @click="addCostComponent()" />
-
-                <div class="cost-breakdown__total">
-                  <span>Costo unitario (suma)</span>
-                  <strong>Bs {{ money(costComponentsTotal) }}</strong>
-                </div>
-              </template>
+            <div v-if="form.costComponents.length" class="cost-breakdown__total">
+              <span>Costo total por unidad</span>
+              <strong>Bs {{ money(costComponentsTotal) }}</strong>
             </div>
           </div>
 
