@@ -35,14 +35,27 @@ interface TrendRow {
   label: string
   range: string
   sales: number
-  target?: number
   transactions: number
 }
 
 interface MonthComparisonRow {
   label: string
   sales: number
-  target: number
+}
+
+// Respuesta real de /api/pos/ingresos (datos del negocio, sin metas inventadas).
+type IngresosResponse = {
+  ventas: SaleRow[]
+  semana: TrendRow[]
+  semanas: TrendRow[]
+  meses: MonthComparisonRow[]
+  topProducto: { name: string, qty: number } | null
+  resumenHoy: { total: number, ventas: number }
+  comparativas: {
+    hoyVsAyer: number | null
+    semanaVsAnterior: number | null
+    mesVsAnterior: number | null
+  }
 }
 
 const periodOptions = [
@@ -55,137 +68,24 @@ const activePeriod = ref<PeriodKey>('today')
 const searchTerm = ref('')
 const exportDialogVisible = ref(false)
 
-const todaySales: SaleRow[] = [
-  { time: '09:15', product: 'Cono Soft', category: 'Helados', qty: 3, unitPrice: 7, total: 21, method: 'Efectivo' },
-  { time: '10:30', product: 'Bowl Açaí', category: 'Bebidas', qty: 2, unitPrice: 35, total: 70, method: 'QR' },
-  { time: '11:20', product: 'Batido Açaí', category: 'Bebidas', qty: 1, unitPrice: 16, total: 16, method: 'Efectivo' },
-  { time: '12:10', product: 'Cono Soft', category: 'Helados', qty: 2, unitPrice: 7, total: 14, method: 'Efectivo' },
-  { time: '13:45', product: 'Café Frío', category: 'Bebidas', qty: 1, unitPrice: 12, total: 12, method: 'QR' },
-  { time: '15:30', product: 'Bowl Açaí', category: 'Bebidas', qty: 2, unitPrice: 35, total: 70, method: 'Efectivo' },
-  { time: '16:15', product: 'Cono Soft', category: 'Helados', qty: 4, unitPrice: 7, total: 28, method: 'Efectivo' },
-  { time: '17:20', product: 'Batido Açaí', category: 'Bebidas', qty: 1, unitPrice: 16, total: 16, method: 'QR' },
-]
-
-const weekRows: TrendRow[] = [
-  { label: 'Lunes', range: '20 Mayo', sales: 310, target: 340, transactions: 9 },
-  { label: 'Martes', range: '21 Mayo', sales: 420, target: 340, transactions: 12 },
-  { label: 'Miércoles', range: '22 Mayo', sales: 360, target: 340, transactions: 11 },
-  { label: 'Jueves', range: '23 Mayo', sales: 510, target: 340, transactions: 15 },
-  { label: 'Viernes', range: '24 Mayo', sales: 620, target: 340, transactions: 18 },
-  { label: 'Sábado', range: '25 Mayo', sales: 180, target: 340, transactions: 6 },
-  { label: 'Domingo', range: '26 Mayo', sales: 50, target: 340, transactions: 2 },
-]
-
-const monthRows: TrendRow[] = [
-  { label: 'Semana 1', range: '1 - 7 Mayo', sales: 1850, target: 2200, transactions: 55 },
-  { label: 'Semana 2', range: '8 - 14 Mayo', sales: 2120, target: 2200, transactions: 63 },
-  { label: 'Semana 3', range: '15 - 21 Mayo', sales: 1980, target: 2200, transactions: 59 },
-  { label: 'Semana 4', range: '22 - 31 Mayo', sales: 2450, target: 2200, transactions: 73 },
-]
-
-const monthlyComparisonRows: MonthComparisonRow[] = [
-  { label: 'Ene', sales: 6200, target: 8000 },
-  { label: 'Feb', sales: 7100, target: 8000 },
-  { label: 'Mar', sales: 6900, target: 8000 },
-  { label: 'Abr', sales: 7190, target: 8000 },
-  { label: 'Mayo', sales: 8400, target: 8000 },
-]
-
-const periodCopy = {
-  today: {
-    title: 'Ingresos',
-    subtitle: 'Ventas realizadas hoy · Martes, 20 de mayo de 2026',
-    panelTitle: 'Ventas realizadas hoy',
-    advice: [
-      'Mantén visible el Bowl Açaí en mostrador y en historias: hoy está empujando la venta.',
-      'Entre 15:00 y 17:00 hay mejor respuesta. Programa una oferta corta para ese bloque.',
-    ],
-  },
-  week: {
-    title: 'Ingresos',
-    subtitle: 'Semana actual · 20 al 26 de mayo de 2026',
-    panelTitle: 'Ingresos por día',
-    advice: [
-      'Viernes concentra el mejor resultado. Refuerza stock y personal antes de esa franja.',
-      'Sábado y domingo bajan fuerte. Prueba un combo pequeño por WhatsApp antes del mediodía.',
-    ],
-  },
-  month: {
-    title: 'Ingresos',
-    subtitle: 'Mes actual · Mayo 2026',
-    panelTitle: 'Ingresos por semana',
-    advice: [
-      'La Semana 4 superó la meta. Repite la misma oferta o canal que funcionó esa semana.',
-      'Revisa ingresos cada semana, no solo al cierre del mes: así corriges antes de perder ritmo.',
-    ],
-  },
-} satisfies Record<PeriodKey, {
-  title: string
-  subtitle: string
-  panelTitle: string
-  advice: string[]
-}>
-
-const currentCopy = computed(() => periodCopy[activePeriod.value])
-const trendRows = computed(() => activePeriod.value === 'month' ? monthRows : weekRows)
-const maxTrendValue = computed(() => Math.max(...trendRows.value.map((row) => row.sales), 1))
-const trendTotal = computed(() => trendRows.value.reduce((sum, row) => sum + row.sales, 0))
-const trendTransactions = computed(() => trendRows.value.reduce((sum, row) => sum + row.transactions, 0))
-const bestTrendRow = computed(() => trendRows.value.reduce((best, row) => row.sales > best.sales ? row : best, trendRows.value[0]))
-const bestMonthRow = computed(() => monthlyComparisonRows.reduce((best, row) => row.sales > best.sales ? row : best, monthlyComparisonRows[0]))
-const maxMonthlyComparisonValue = computed(() => Math.max(...monthlyComparisonRows.map((row) => row.sales), 1))
-const currentMonthComparison = computed(() => monthlyComparisonRows[monthlyComparisonRows.length - 1])
-const previousMonthComparison = computed(() => monthlyComparisonRows[monthlyComparisonRows.length - 2])
-const currentMonthVariation = computed(() => {
-  const previous = previousMonthComparison.value?.sales || 0
-
-  if (previous === 0) {
-    return 0
-  }
-
-  return ((currentMonthComparison.value.sales - previous) / previous) * 100
-})
-const todayTotal = computed(() => todaySales.reduce((sum, row) => sum + row.total, 0))
-const todayTransactions = computed(() => todaySales.reduce((sum, row) => sum + row.qty, 0))
-
-const metrics = computed<MetricCard[]>(() => {
-  if (activePeriod.value === 'today') {
-    return [
-      { label: 'Total vendido', value: money(todayTotal.value), meta: '+14.6% vs. ayer', icon: 'fluent-emoji:money-bag', tone: 'green' },
-      { label: 'Número de ventas', value: String(todayTransactions.value), meta: '3 más que ayer', icon: 'fluent-emoji:receipt', tone: 'blue' },
-      { label: 'Producto más vendido', value: 'Bowl Açaí', meta: '4 unidades vendidas', icon: 'fluent-emoji:star', tone: 'orange' },
-    ]
-  }
-
-  if (activePeriod.value === 'week') {
-    return [
-      { label: 'Total semanal', value: money(trendTotal.value), meta: '+8.2% vs. semana anterior', icon: 'fluent-emoji:money-bag', tone: 'green' },
-      { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Promedio diario: 10', icon: 'fluent-emoji:receipt', tone: 'blue' },
-      { label: 'Mejor día', value: bestTrendRow.value.label, meta: money(bestTrendRow.value.sales), icon: 'fluent-emoji:spiral-calendar', tone: 'orange' },
-    ]
-  }
-
-  return [
-    { label: 'Total mensual', value: money(trendTotal.value), meta: '+16.8% vs. mes anterior', icon: 'fluent-emoji:money-bag', tone: 'green' },
-    { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'fluent-emoji:receipt', tone: 'blue' },
-    { label: 'Mejor mes reciente', value: bestMonthRow.value.label, meta: money(bestMonthRow.value.sales), icon: 'fluent-emoji:trophy', tone: 'orange' },
-  ]
+// Datos REALES del negocio. Una sola lectura: el usuario alterna Hoy/Semana/Mes
+// sin volver a pedir al servidor (todo viene en la misma respuesta).
+const { data, refresh } = await useFetch<IngresosResponse>('/api/pos/ingresos', {
+  default: () => ({
+    ventas: [],
+    semana: [],
+    semanas: [],
+    meses: [],
+    topProducto: null,
+    resumenHoy: { total: 0, ventas: 0 },
+    comparativas: { hoyVsAyer: null, semanaVsAnterior: null, mesVsAnterior: null },
+  }),
 })
 
-const visibleSales = computed(() => {
-  const term = searchTerm.value.trim().toLowerCase()
-
-  if (!term) {
-    return todaySales
-  }
-
-  return todaySales.filter((row) => [
-    row.time,
-    row.product,
-    row.category,
-    row.method,
-  ].some((value) => value.toLowerCase().includes(term)))
-})
+const todaySales = computed<SaleRow[]>(() => data.value?.ventas ?? [])
+const weekRows = computed<TrendRow[]>(() => data.value?.semana ?? [])
+const monthRows = computed<TrendRow[]>(() => data.value?.semanas ?? [])
+const monthlyComparisonRows = computed<MonthComparisonRow[]>(() => data.value?.meses ?? [])
 
 function money(value: number) {
   return `Bs. ${new Intl.NumberFormat('es-BO', {
@@ -194,15 +94,191 @@ function money(value: number) {
   }).format(value || 0)}`
 }
 
-function targetPercent(row: TrendRow) {
-  return Math.round((row.sales / Math.max(row.target || row.sales, 1)) * 100)
+// Texto de variación honesto: "+X% vs. ayer" o aviso cuando no hay base previa.
+function variacionTexto(pct: number | null, sufijo: string) {
+  if (pct === null) {
+    return `Sin ${sufijo} para comparar`
+  }
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs. ${sufijo}`
 }
+
+// Fechas reales para el subtítulo (no fijas).
+const hoyTexto = computed(() => new Intl.DateTimeFormat('es-BO', {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+}).format(new Date()))
+const mesTexto = computed(() => {
+  const t = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric' }).format(new Date())
+  return t.charAt(0).toUpperCase() + t.slice(1)
+})
+
+const currentCopy = computed(() => {
+  if (activePeriod.value === 'today') {
+    return { title: 'Ingresos', subtitle: `Ventas realizadas hoy · ${hoyTexto.value}`, panelTitle: 'Ventas realizadas hoy' }
+  }
+  if (activePeriod.value === 'week') {
+    return { title: 'Ingresos', subtitle: 'Semana actual', panelTitle: 'Ingresos por día' }
+  }
+  return { title: 'Ingresos', subtitle: `Mes actual · ${mesTexto.value}`, panelTitle: 'Ingresos por semana' }
+})
+
+const trendRows = computed(() => activePeriod.value === 'month' ? monthRows.value : weekRows.value)
+const maxTrendValue = computed(() => Math.max(...trendRows.value.map((row) => row.sales), 1))
+const trendTotal = computed(() => trendRows.value.reduce((sum, row) => sum + row.sales, 0))
+const trendTransactions = computed(() => trendRows.value.reduce((sum, row) => sum + row.transactions, 0))
+const bestTrendRow = computed(() => trendRows.value.reduce(
+  (best, row) => row.sales > best.sales ? row : best,
+  trendRows.value[0] ?? { label: '—', range: '', sales: 0, transactions: 0 },
+))
+const bestMonthRow = computed(() => monthlyComparisonRows.value.reduce(
+  (best, row) => row.sales > best.sales ? row : best,
+  monthlyComparisonRows.value[0] ?? { label: '—', sales: 0 },
+))
+const maxMonthlyComparisonValue = computed(() => Math.max(...monthlyComparisonRows.value.map((row) => row.sales), 1))
+const currentMonthComparison = computed(() => monthlyComparisonRows.value.at(-1) ?? { label: '—', sales: 0 })
+const previousMonthComparison = computed(() => monthlyComparisonRows.value.at(-2) ?? { label: '—', sales: 0 })
+const currentMonthVariation = computed(() => data.value?.comparativas.mesVsAnterior ?? null)
+const todayTotal = computed(() => data.value?.resumenHoy.total ?? 0)
+
+const metrics = computed<MetricCard[]>(() => {
+  const comp = data.value?.comparativas
+  if (activePeriod.value === 'today') {
+    const top = data.value?.topProducto
+    return [
+      { label: 'Total vendido', value: money(todayTotal.value), meta: variacionTexto(comp?.hoyVsAyer ?? null, 'ayer'), icon: 'fluent-emoji:money-bag', tone: 'green' },
+      { label: 'Número de ventas', value: String(data.value?.resumenHoy.ventas ?? 0), meta: 'Ventas registradas hoy', icon: 'fluent-emoji:receipt', tone: 'blue' },
+      { label: 'Producto más vendido', value: top?.name ?? 'Sin ventas', meta: top ? `${top.qty} unidades vendidas` : 'Aún no hay ventas hoy', icon: 'fluent-emoji:star', tone: 'orange' },
+    ]
+  }
+
+  if (activePeriod.value === 'week') {
+    return [
+      { label: 'Total semanal', value: money(trendTotal.value), meta: variacionTexto(comp?.semanaVsAnterior ?? null, 'semana anterior'), icon: 'fluent-emoji:money-bag', tone: 'green' },
+      { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Esta semana', icon: 'fluent-emoji:receipt', tone: 'blue' },
+      { label: 'Mejor día', value: bestTrendRow.value.label, meta: money(bestTrendRow.value.sales), icon: 'fluent-emoji:spiral-calendar', tone: 'orange' },
+    ]
+  }
+
+  return [
+    { label: 'Total mensual', value: money(trendTotal.value), meta: variacionTexto(comp?.mesVsAnterior ?? null, 'mes anterior'), icon: 'fluent-emoji:money-bag', tone: 'green' },
+    { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'fluent-emoji:receipt', tone: 'blue' },
+    { label: 'Mejor mes reciente', value: bestMonthRow.value.label, meta: money(bestMonthRow.value.sales), icon: 'fluent-emoji:trophy', tone: 'orange' },
+  ]
+})
+
+// Consejos derivados de los datos reales del periodo (no texto inventado).
+const advice = computed<string[]>(() => {
+  if (activePeriod.value === 'today') {
+    const top = data.value?.topProducto
+    if (!todaySales.value.length) {
+      return ['Aún no registras ventas hoy. Comparte una promoción por WhatsApp para arrancar.']
+    }
+    return [
+      top ? `Hoy "${top.name}" es lo que más se vende. Tenlo a la vista y ofrécelo primero.` : 'Mantén a la vista tus productos más pedidos para vender más rápido.',
+      'Revisa tus ventas durante el día, no solo al cierre: así reaccionas a tiempo.',
+    ]
+  }
+  if (activePeriod.value === 'week') {
+    if (!trendTotal.value) {
+      return ['Esta semana aún no hay ventas registradas.']
+    }
+    return [`Tu mejor día de la semana es ${bestTrendRow.value.label}. Refuerza stock y atención antes de esa franja.`]
+  }
+  if (!trendTotal.value) {
+    return ['Este mes aún no hay ventas registradas.']
+  }
+  return [`Tu mejor semana del mes es "${bestTrendRow.value.label}". Repite lo que funcionó ahí.`]
+})
+
+const visibleSales = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase()
+
+  if (!term) {
+    return todaySales.value
+  }
+
+  return todaySales.value.filter((row) => [
+    row.time,
+    row.product,
+    row.category,
+    row.method,
+  ].some((value) => value.toLowerCase().includes(term)))
+})
 
 function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   exportDialogVisible.value = false
 
   if (format === 'Imprimir' && import.meta.client) {
     window.print()
+  }
+}
+
+// --- Registrar ingreso ---
+// "Venta" se registra en el POS y "Inventario" (mercadería que entra) en el catálogo;
+// aquí solo se guarda un "otro ingreso" (reembolso, aporte, interés) en caja_movimiento.
+type IngresoTipo = 'Otro' | 'Venta' | 'Inventario'
+const tipoOptions: { label: string, value: IngresoTipo }[] = [
+  { label: 'Otro ingreso', value: 'Otro' },
+  { label: 'Venta', value: 'Venta' },
+  { label: 'Mercadería (inventario)', value: 'Inventario' },
+]
+const methodOptions = ['Efectivo', 'QR', 'Transferencia']
+
+const registerDialogVisible = ref(false)
+const savingIngreso = ref(false)
+const registerError = ref('')
+const registerForm = reactive({
+  tipo: 'Otro' as IngresoTipo,
+  concept: '',
+  method: 'Efectivo',
+  amount: 0,
+})
+
+const canSaveIngreso = computed(() => registerForm.concept.trim().length > 0 && Number(registerForm.amount || 0) > 0)
+
+function openRegisterDialog() {
+  registerForm.tipo = 'Otro'
+  registerForm.concept = ''
+  registerForm.method = 'Efectivo'
+  registerForm.amount = 0
+  registerError.value = ''
+  registerDialogVisible.value = true
+}
+
+function irAlPos() {
+  registerDialogVisible.value = false
+  void navigateTo('/pos')
+}
+
+function irAInventario() {
+  registerDialogVisible.value = false
+  void navigateTo('/pos/catalogo?accion=entrada')
+}
+
+async function saveIngreso() {
+  if (!canSaveIngreso.value || savingIngreso.value) {
+    return
+  }
+
+  savingIngreso.value = true
+  registerError.value = ''
+
+  try {
+    await $fetch('/api/pos/ingresos', {
+      method: 'POST',
+      body: {
+        categoria: 'otro_ingreso',
+        concepto: registerForm.concept.trim(),
+        monto: Number(registerForm.amount || 0),
+        metodo: registerForm.method.toLowerCase(),
+      },
+    })
+
+    registerDialogVisible.value = false
+    await refresh()
+  } catch (error) {
+    registerError.value = error instanceof Error ? error.message : 'No se pudo guardar el ingreso.'
+  } finally {
+    savingIngreso.value = false
   }
 }
 </script>
@@ -226,6 +302,7 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
           <InputText v-model="searchTerm" placeholder="Buscar venta, producto o método..." />
         </IconField>
 
+        <Button type="button" icon="pi pi-plus" label="Registrar ingreso" @click="openRegisterDialog" />
         <Button type="button" icon="pi pi-download" label="Exportar reporte" outlined @click="exportDialogVisible = true" />
       </div>
     </section>
@@ -295,17 +372,12 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
           <DataTable :value="trendRows" size="small" class="income-table trend-table">
             <Column field="label" :header="activePeriod === 'week' ? 'Día' : 'Semana'" />
             <Column field="range" header="Periodo" />
+            <Column header="Ventas">
+              <template #body="{ data }">{{ data.transactions }}</template>
+            </Column>
             <Column header="Ingresos">
               <template #body="{ data }">
                 <strong>{{ money(data.sales) }}</strong>
-              </template>
-            </Column>
-            <Column header="Meta">
-              <template #body="{ data }">{{ money(data.target || 0) }}</template>
-            </Column>
-            <Column header="Cumplimiento">
-              <template #body="{ data }">
-                <span class="target-pill" :class="{ 'is-ok': targetPercent(data) >= 100 }">{{ targetPercent(data) }}%</span>
               </template>
             </Column>
           </DataTable>
@@ -316,9 +388,9 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
                 <span>Comparativa mensual</span>
                 <h3>Últimos 5 meses</h3>
               </div>
-              <strong>
-                <i class="pi pi-arrow-up" aria-hidden="true" />
-                {{ currentMonthVariation.toFixed(1) }}% vs. {{ previousMonthComparison.label }}
+              <strong v-if="currentMonthVariation !== null">
+                <i :class="currentMonthVariation >= 0 ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" aria-hidden="true" />
+                {{ currentMonthVariation >= 0 ? '+' : '' }}{{ currentMonthVariation.toFixed(1) }}% vs. {{ previousMonthComparison.label }}
               </strong>
             </header>
 
@@ -327,15 +399,13 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
                 <span>{{ money(row.sales) }}</span>
                 <div>
                   <b :style="{ height: `${Math.max((row.sales / maxMonthlyComparisonValue) * 100, 8)}%` }" />
-                  <i :style="{ bottom: `${Math.min((row.target / maxMonthlyComparisonValue) * 100, 100)}%` }" />
                 </div>
                 <strong>{{ row.label }}</strong>
               </article>
             </div>
 
             <footer>
-              <span><b /> Ingresos reales</span>
-              <span><i /> Meta mensual</span>
+              <span><b /> Ingresos del mes</span>
               <em>Mejor mes: {{ bestMonthRow.label }} · {{ money(bestMonthRow.sales) }}</em>
             </footer>
           </section>
@@ -348,10 +418,64 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
       <span class="ai-advice__icon"><i class="pi pi-lightbulb" aria-hidden="true" /></span>
       <div>
         <h2>Consejo IA</h2>
-        <p v-for="line in currentCopy.advice" :key="line">{{ line }}</p>
+        <p v-for="line in advice" :key="line">{{ line }}</p>
       </div>
       <img src="/haru.png" alt="" aria-hidden="true">
     </section>
+
+    <Dialog v-model:visible="registerDialogVisible" modal header="Registrar ingreso" class="export-dialog">
+      <form class="register-form" @submit.prevent="saveIngreso">
+        <label class="register-field">
+          <span>Tipo de ingreso</span>
+          <SelectButton v-model="registerForm.tipo" :options="tipoOptions" option-label="label" option-value="value" :allow-empty="false" />
+        </label>
+
+        <!-- Venta real: se registra en el POS con sus productos. -->
+        <template v-if="registerForm.tipo === 'Venta'">
+          <Message severity="info" size="small" icon="pi pi-shopping-cart">
+            Las ventas se registran en el POS para descontar stock y guardar el detalle de productos.
+          </Message>
+          <footer class="register-actions">
+            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
+            <Button type="button" label="Ir al POS" icon="pi pi-arrow-right" icon-pos="right" @click="irAlPos" />
+          </footer>
+        </template>
+
+        <!-- Mercadería que entra: se registra en el inventario (suma stock). -->
+        <template v-else-if="registerForm.tipo === 'Inventario'">
+          <Message severity="info" size="small" icon="pi pi-box">
+            La mercadería que entra se registra en tu inventario para que sume stock y su costo se descuente al vender.
+          </Message>
+          <footer class="register-actions">
+            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
+            <Button type="button" label="Ir a inventario" icon="pi pi-arrow-right" icon-pos="right" @click="irAInventario" />
+          </footer>
+        </template>
+
+        <!-- Otro ingreso (no venta): se guarda directo. -->
+        <template v-else>
+          <label class="register-field">
+            <span>Concepto</span>
+            <InputText v-model="registerForm.concept" placeholder="Ej. Reembolso, aporte de socio, interés" />
+          </label>
+          <label class="register-field">
+            <span>Método</span>
+            <Select v-model="registerForm.method" :options="methodOptions" fluid />
+          </label>
+          <label class="register-field">
+            <span>Monto</span>
+            <InputNumber v-model="registerForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+          </label>
+
+          <Message v-if="registerError" severity="error" size="small">{{ registerError }}</Message>
+
+          <footer class="register-actions">
+            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
+            <Button type="submit" label="Guardar ingreso" icon="pi pi-check" :loading="savingIngreso" :disabled="!canSaveIngreso || savingIngreso" />
+          </footer>
+        </template>
+      </form>
+    </Dialog>
 
     <Dialog v-model:visible="exportDialogVisible" modal header="Exportar reporte" class="export-dialog">
       <div class="export-options">
@@ -674,23 +798,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   font-weight: 800;
 }
 
-.target-pill {
-  display: inline-flex;
-  min-width: 48px;
-  justify-content: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #fff8d8;
-  color: #9a6b00;
-  font-size: 0.72rem;
-  font-weight: 900;
-}
-
-.target-pill.is-ok {
-  background: #e8f7eb;
-  color: #0b6f38;
-}
-
 .month-comparison {
   display: grid;
   gap: 14px;
@@ -767,14 +874,6 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   background: linear-gradient(180deg, #2bbf55, #08742a);
 }
 
-.month-bar i {
-  position: absolute;
-  right: 10%;
-  left: 10%;
-  height: 0;
-  border-top: 1px dashed #f59e0b;
-}
-
 .month-bar strong {
   color: #334155;
   font-size: 0.72rem;
@@ -802,19 +901,11 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   gap: 6px;
 }
 
-.month-comparison footer b,
-.month-comparison footer i {
+.month-comparison footer b {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-}
-
-.month-comparison footer b {
   background: #0b6f38;
-}
-
-.month-comparison footer i {
-  border: 1px dashed #f59e0b;
 }
 
 .month-comparison footer em {
@@ -995,5 +1086,30 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   .ai-advice img {
     justify-self: start;
   }
+}
+
+/* Diálogo: registrar ingreso */
+.register-form {
+  display: grid;
+  gap: 14px;
+  min-width: min(86vw, 360px);
+}
+
+.register-field {
+  display: grid;
+  gap: 6px;
+}
+
+.register-field > span {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #26372c;
+}
+
+.register-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 </style>

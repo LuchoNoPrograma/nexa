@@ -9,7 +9,15 @@ export default defineEventHandler(async (event) => {
   const session = await requireStoreSession(event)
   await ensureDatabase()
 
-  const [actualResult, publicadasResult, productosResult, configResult] = await Promise.all([
+  const [
+    actualResult,
+    publicadasResult,
+    productosResult,
+    configResult,
+    publicadasSemanaResult,
+    bajoMovimientoResult,
+    sinImagenResult,
+  ] = await Promise.all([
     pool.query<MarketingPublicacion>(
       `
         select
@@ -71,6 +79,50 @@ export default defineEventHandler(async (event) => {
       `,
       [session.storeId],
     ),
+    // Publicaciones compartidas en los últimos 7 días: define el ritmo sugerido.
+    pool.query<{ total: number }>(
+      `
+        select count(*)::int as total
+        from marketing_publicacion
+        where tienda_id = $1
+          and estado = 'publicada'
+          and publicado_at >= now() - interval '7 days'
+      `,
+      [session.storeId],
+    ),
+    // Productos activos con stock que no se vendieron en los últimos 30 días:
+    // candidatos a oferta para liberar inventario parado.
+    pool.query<{ total: number }>(
+      `
+        select count(*)::int as total
+        from producto p
+        where p.tienda_id = $1
+          and p.activo = true
+          and p.tipo = 'producto'
+          and p.stock_actual > 0
+          and not exists (
+            select 1
+            from venta_item vi
+            join venta v on v.id = vi.venta_id
+            where vi.producto_id = p.id
+              and v.tienda_id = p.tienda_id
+              and v.estado <> 'anulada'
+              and v.fecha >= now() - interval '30 days'
+          )
+      `,
+      [session.storeId],
+    ),
+    // Productos activos sin imagen: las publicaciones con foto rinden más.
+    pool.query<{ total: number }>(
+      `
+        select count(*)::int as total
+        from producto
+        where tienda_id = $1
+          and activo = true
+          and (imagen_url is null or imagen_url = '')
+      `,
+      [session.storeId],
+    ),
   ])
 
   return {
@@ -83,6 +135,12 @@ export default defineEventHandler(async (event) => {
       ciudad: 'Cobija',
       departamento: 'Pando',
       confirmado: false,
+    },
+    // Datos para el motor de recomendaciones (cliente). Cálculo barato en SQL.
+    recoData: {
+      publicadasEstaSemana: publicadasSemanaResult.rows[0]?.total ?? 0,
+      productosBajoMovimiento: bajoMovimientoResult.rows[0]?.total ?? 0,
+      productosSinImagen: sinImagenResult.rows[0]?.total ?? 0,
     },
   }
 })

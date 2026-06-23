@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { ResultadoFinanzas } from '~~/shared/utils/finanzas'
+import { recomendacionesFinanzas } from '~~/shared/utils/recomendaciones/finanzas'
+import type { Recomendacion } from '~~/shared/utils/recomendaciones/tipos'
 
 definePageMeta({
   layout: 'pos',
@@ -160,10 +162,25 @@ const rosTexto = computed(() => {
   if (m >= 0) return `De cada Bs 100 que vendes, te quedan Bs ${m.toFixed(2)} de ganancia.`
   return `De cada Bs 100 que vendes, pierdes Bs ${Math.abs(m).toFixed(2)}.`
 })
+
+// --- Recomendaciones de Haru (motor de reglas, sin IA) ---
+// Se derivan del mismo resultado del periodo que ya muestra la página.
+const { open: abrirHaru } = useHaruChat()
+
+const recomendaciones = computed<Recomendacion[]>(() => {
+  const r = resumen.value
+  return recomendacionesFinanzas({
+    ventas: r?.ventas ?? 0,
+    costoVentas: r?.costo ?? 0,
+    gastos: r?.gastos ?? 0,
+    utilidadNeta: r?.ganancia ?? 0,
+  })
+})
 </script>
 
 <template>
-  <div class="fin">
+  <div class="fin-shell">
+    <div class="fin">
     <!-- Saludo cercano + selector de mes -->
     <header class="fin-greet">
       <div>
@@ -328,16 +345,47 @@ const rosTexto = computed(() => {
       </div>
       <img src="/haru.png" alt="" aria-hidden="true" class="haru-tip__mascot">
     </section>
+    </div>
+
+    <!-- Recomendaciones de Haru: a la derecha en desktop, al fondo en mobile -->
+    <PosRecomendacionesHaru
+      class="fin-reco"
+      :items="recomendaciones"
+      @accion="abrirHaru"
+      @principal="abrirHaru"
+    />
   </div>
 </template>
 
 <style scoped>
-.fin {
+/* Shell: contenido financiero + panel de recomendaciones de Haru.
+   Desktop ≥1100px → panel a la derecha (sticky); móvil → al fondo. */
+.fin-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   width: min(100%, 920px);
   margin: 0 auto;
+}
+
+.fin {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
   color: #102016;
+}
+
+@media (min-width: 1100px) {
+  .fin-shell {
+    grid-template-columns: minmax(0, 1fr) 330px;
+    align-items: start;
+    width: min(100%, 1320px);
+  }
+
+  .fin-reco {
+    position: sticky;
+    top: 16px;
+  }
 }
 
 /* Dos tarjetas grandes lado a lado en desktop, apiladas en tablet/móvil. */

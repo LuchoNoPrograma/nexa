@@ -4,6 +4,8 @@ import type {
   PosCashMovementType as MovementType,
   PosCashPaymentMethod as PaymentMethod,
 } from '~/stores/cash'
+import { recomendacionesCaja } from '~~/shared/utils/recomendaciones/caja'
+import type { Recomendacion } from '~~/shared/utils/recomendaciones/tipos'
 
 definePageMeta({
   layout: 'pos',
@@ -168,6 +170,19 @@ const depositAmount = computed(() => Math.max(Number(countedCash.value || 0) - N
 const productUnits = computed(() => productSales.value.reduce((sum, item) => sum + item.qty, 0))
 const productTotal = computed(() => productSales.value.reduce((sum, item) => sum + item.total, 0))
 const productRanking = computed(() => [...productSales.value].sort((a, b) => b.total - a.total))
+
+// --- Recomendaciones de Haru (motor de reglas, sin IA) ---
+// Se calculan con los datos reales del turno que ya están en memoria.
+const { open: abrirHaru } = useHaruChat()
+
+const recomendaciones = computed<Recomendacion[]>(() => recomendacionesCaja({
+  cajaAbierta: cashStatus.value === 'abierta',
+  numVentas: movements.value.filter(m => m.type === 'Ingreso' && m.source === 'venta').length,
+  ventasTurno: totalSales.value,
+  ventasPorCerrar: salesReadyToClose.value,
+  egresosTurno: movements.value.filter(m => m.type === 'Egreso').reduce((sum, m) => sum + m.amount, 0),
+  productoTop: productRanking.value[0]?.name ?? null,
+}))
 
 const paymentBreakdown = computed(() => paymentMethods.map((method) => {
   const income = movements.value
@@ -346,13 +361,6 @@ async function closeCashSession(printAfterClose = false) {
   if (printAfterClose) {
     printClosureReport()
   }
-}
-
-async function closeCashSessionAndDownloadPdf() {
-  await cashRegister.closeTurn(Number(countedCash.value || 0), closingNote.value)
-  closedAt.value = currentTime.value
-  closeDialogVisible.value = false
-  await downloadClosureReport()
 }
 
 function reopenCashSession() {
@@ -855,7 +863,8 @@ async function downloadProductReport() {
 </script>
 
 <template>
-  <div class="cash-page">
+  <div class="cash-shell">
+    <div class="cash-page">
     <!-- Encabezado: estado del turno + total del día bien visible -->
     <section class="cash-top">
       <div class="cash-state" :class="cashStatus === 'abierta' ? 'is-open' : 'is-closed'">
@@ -975,7 +984,6 @@ async function downloadProductReport() {
         </label>
 
         <footer>
-          <Button type="button" label="Cancelar" outlined severity="secondary" @click="openDialogVisible = false" />
           <Button type="submit" label="Abrir caja" icon="pi pi-unlock" />
         </footer>
       </form>
@@ -1010,7 +1018,6 @@ async function downloadProductReport() {
         </Message>
 
         <footer>
-          <Button type="button" label="Cancelar" outlined severity="secondary" @click="movementDialogVisible = false" />
           <Button type="submit" label="Guardar" icon="pi pi-check" :disabled="!movementForm.concept.trim() || Number(movementForm.amount || 0) <= 0" />
         </footer>
       </form>
@@ -1043,7 +1050,6 @@ async function downloadProductReport() {
       </div>
 
       <template #footer>
-        <Button type="button" label="Cerrar" outlined severity="secondary" @click="productDialogVisible = false" />
         <Button
           type="button"
           label="Descargar PDF"
@@ -1080,7 +1086,6 @@ async function downloadProductReport() {
       </div>
 
       <template #footer>
-        <Button type="button" label="Cerrar" outlined severity="secondary" @click="arqueoDialogVisible = false" />
         <Button
           type="button"
           label="Descargar PDF"
@@ -1130,40 +1135,72 @@ async function downloadProductReport() {
       </div>
 
       <template #footer>
-        <Button type="button" label="Cancelar" outlined severity="secondary" @click="closeDialogVisible = false" />
-        <Button type="button" label="Cerrar turno" severity="danger" outlined @click="closeCashSession(false)" />
         <Button
           type="button"
-          label="Descargar PDF"
-          icon="pi pi-download"
-          outlined
-          :loading="reportPdfDownloading === 'cierre'"
-          :disabled="!!reportPdfDownloading"
-          @click="downloadClosureReport"
-        />
-        <Button
-          type="button"
-          label="Cerrar y PDF"
-          icon="pi pi-download"
+          label="Cerrar e imprimir"
+          icon="pi pi-print"
           severity="danger"
-          outlined
           :loading="reportPdfDownloading === 'cierre'"
           :disabled="!!reportPdfDownloading || cashStatus === 'cerrada'"
-          @click="closeCashSessionAndDownloadPdf"
+          @click="closeCashSession(true)"
         />
-        <Button type="button" label="Cerrar e imprimir" icon="pi pi-print" severity="danger" @click="closeCashSession(true)" />
       </template>
     </Dialog>
+    </div>
+
+    <!-- Análisis del turno por Haru: a la derecha en desktop, al fondo en mobile -->
+    <PosRecomendacionesHaru
+      class="cash-reco"
+      titulo="Análisis del turno actual"
+      subtitulo="Con base en tus ventas y datos del turno."
+      boton-label="Ver plan de acción"
+      nota=""
+      :items="recomendaciones"
+      @principal="abrirHaru"
+    />
   </div>
 </template>
 
 <style scoped>
-.cash-page {
+/* La ✕ de cerrar de los diálogos de caja, en rojo (única forma de descartar
+   ahora que se quitaron los botones "Cancelar"/"Cerrar"). */
+:global(.cash-dialog .p-dialog-close-button) {
+  color: #dc2626;
+}
+
+:global(.cash-dialog .p-dialog-close-button:hover) {
+  background: #fdecea;
+  color: #b91c1c;
+}
+
+/* Shell: gestión de caja + panel de análisis del turno de Haru.
+   Desktop ≥1200px → panel a la derecha (sticky); móvil → al fondo. */
+.cash-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   max-width: 860px;
   margin: 0 auto;
+}
+
+.cash-page {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
   color: #102016;
+}
+
+@media (min-width: 1200px) {
+  .cash-shell {
+    grid-template-columns: minmax(0, 1fr) 330px;
+    align-items: start;
+    max-width: 1240px;
+  }
+
+  .cash-reco {
+    position: sticky;
+    top: 16px;
+  }
 }
 
 .cash-top,

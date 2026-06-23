@@ -316,7 +316,15 @@ watch(
   },
 )
 
-onMounted(loadCatalog)
+// Al llegar desde "Registrar ingreso/gasto → inventario" abrimos directo el diálogo
+// para registrar la mercadería que entró (?accion=entrada).
+const route = useRoute()
+onMounted(async () => {
+  await loadCatalog()
+  if (route.query.accion === 'entrada') {
+    openCreateProduct()
+  }
+})
 
 function matchesChip(product: CatalogProduct, key: ChipKey) {
   if (key === 'productos') {

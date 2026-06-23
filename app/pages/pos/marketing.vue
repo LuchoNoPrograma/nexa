@@ -6,6 +6,8 @@ import {
   type MarketingPublicacion,
   type RedSocial,
 } from '~~/shared/utils/marketing'
+import { recomendacionesMarketing } from '~~/shared/utils/recomendaciones/marketing'
+import type { Recomendacion } from '~~/shared/utils/recomendaciones/tipos'
 
 definePageMeta({
   layout: 'pos',
@@ -16,11 +18,18 @@ useHead({
   title: 'Marketing | NEXA',
 })
 
+type MarketingRecoData = {
+  publicadasEstaSemana: number
+  productosBajoMovimiento: number
+  productosSinImagen: number
+}
+
 type MarketingResponse = {
   actual: MarketingPublicacion | null
   publicadas: number
   totalProductos: number
   marketingConfig: MarketingConfig
+  recoData: MarketingRecoData
 }
 
 type MarketingConfig = {
@@ -43,6 +52,11 @@ const { data, refresh } = await useFetch<MarketingResponse>('/api/pos/marketing'
       ciudad: 'Cobija',
       departamento: 'Pando',
       confirmado: false,
+    },
+    recoData: {
+      publicadasEstaSemana: 0,
+      productosBajoMovimiento: 0,
+      productosSinImagen: 0,
     },
   }),
 })
@@ -524,6 +538,11 @@ async function generar(modo: Modo) {
       publicadas: data.value?.publicadas ?? 0,
       totalProductos: data.value?.totalProductos ?? 0,
       marketingConfig: marketingConfig.value,
+      recoData: data.value?.recoData ?? {
+        publicadasEstaSemana: 0,
+        productosBajoMovimiento: 0,
+        productosSinImagen: 0,
+      },
     }
     cerrarSelector()
     mostrarExitoHaru()
@@ -556,10 +575,35 @@ async function publicarEn(red: RedSocial) {
   }).catch(() => null)
   publicado.value = true
 }
+
+// --- Recomendaciones de Haru (motor de reglas, sin IA) ---
+// Se recalculan en el cliente a partir de los datos que ya trae la lectura inicial.
+const { open: abrirHaru } = useHaruChat()
+
+const recomendaciones = computed<Recomendacion[]>(() =>
+  recomendacionesMarketing({
+    totalProductos: data.value?.totalProductos ?? 0,
+    publicadasEstaSemana: data.value?.recoData?.publicadasEstaSemana ?? 0,
+    productosBajoMovimiento: data.value?.recoData?.productosBajoMovimiento ?? 0,
+    productosSinImagen: data.value?.recoData?.productosSinImagen ?? 0,
+  }),
+)
+
+// Acción de una recomendación: abre el selector y, si la regla apunta a un objetivo
+// concreto (combo, sobrante…), lo deja preseleccionado para el usuario.
+function aplicarReco(reco: Recomendacion) {
+  const valor = reco.accion?.valor
+  abrirSelector()
+  const objetivo = OBJETIVOS.find((obj) => obj.id === valor)
+  if (objetivo) {
+    objetivoSel.value = objetivo
+  }
+}
 </script>
 
 <template>
-  <div class="mkt">
+  <div class="mkt-shell">
+    <div class="mkt">
     <!-- Encabezado: marketing y la acción del día -->
     <header class="mkt-head">
       <div class="mkt-head__copy">
@@ -1001,16 +1045,50 @@ async function publicarEn(red: RedSocial) {
     <Transition name="flash">
       <div v-if="flashMsg" class="flash" role="status">{{ flashMsg }}</div>
     </Transition>
+    </div>
+
+    <!-- Recomendaciones de Haru: a la derecha en desktop, al fondo en mobile -->
+    <PosRecomendacionesHaru
+      v-if="!sinProductos"
+      class="mkt-reco"
+      :items="recomendaciones"
+      titulos-mayuscula
+      @accion="aplicarReco"
+      @principal="abrirHaru"
+    />
   </div>
 </template>
 
 <style scoped>
-.mkt {
+/* Shell: contenido principal + panel de recomendaciones de Haru.
+   Desktop ≥1100px → dos columnas (panel a la derecha, sticky).
+   Móvil → una columna; el panel queda al fondo por orden del DOM. */
+.mkt-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   max-width: 1040px;
   margin: 0 auto;
+}
+
+.mkt {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
   color: #102016;
+}
+
+@media (min-width: 1100px) {
+  .mkt-shell {
+    grid-template-columns: minmax(0, 1fr) 330px;
+    align-items: start;
+    max-width: 1400px;
+  }
+
+  .mkt-reco {
+    position: sticky;
+    top: 16px;
+  }
 }
 
 /* --- Encabezado --- */

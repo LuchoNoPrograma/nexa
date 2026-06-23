@@ -442,8 +442,14 @@ export default defineNuxtConfig({
     '@primevue/nuxt-module',
   ],
   icon: {
-    // Evita que Nitro empaquete colecciones Iconify enormes durante el build en Vercel.
-    serverBundle: 'remote',
+    // Sirve los iconos desde la colección instalada localmente (@iconify-json/*),
+    // sin pegarle a la API remota de Iconify (que falla sin internet en el equipo).
+    // 'scan' empaqueta SOLO los iconos realmente usados en el código, así no se infla
+    // el build de Vercel con la colección completa.
+    serverBundle: false,
+    clientBundle: {
+      scan: true,
+    },
   },
   css: [
     '~/assets/css/main.css',

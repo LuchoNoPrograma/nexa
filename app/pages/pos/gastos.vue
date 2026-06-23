@@ -105,11 +105,14 @@ const currentCopy = computed(() => periodCopy[activePeriod.value])
 
 // --- Gastos reales del periodo (API) ---
 type ApiGasto = { id: string, fecha: string, categoria: string, concepto: string, metodo: string, monto: number }
+type TrendRow = { label: string, range: string, sales: number, transactions: number }
+type MonthRow = { label: string, sales: number }
+type GastosResponse = { gastos: ApiGasto[], semana: TrendRow[], semanas: TrendRow[], meses: MonthRow[] }
 
-const { data: gastosData, refresh: refreshGastos } = await useFetch<{ gastos: ApiGasto[] }>('/api/pos/gastos', {
+const { data: gastosData, refresh: refreshGastos } = await useFetch<GastosResponse>('/api/pos/gastos', {
   query: computed(() => ({ periodo: activePeriod.value })),
   watch: [activePeriod],
-  default: () => ({ gastos: [] }),
+  default: () => ({ gastos: [], semana: [], semanas: [], meses: [] }),
 })
 
 const methodFromApi: Record<string, Method> = {
@@ -175,6 +178,22 @@ const operativeCategories = computed(() => {
     .sort((a, b) => b.amount - a.amount)
 })
 
+// --- Tendencia (igual que Ingresos): por día en semana, por semana en mes ---
+const weekRows = computed<TrendRow[]>(() => gastosData.value?.semana ?? [])
+const monthRows = computed<TrendRow[]>(() => gastosData.value?.semanas ?? [])
+const monthlyComparisonRows = computed<MonthRow[]>(() => gastosData.value?.meses ?? [])
+
+const trendRows = computed(() => activePeriod.value === 'month' ? monthRows.value : weekRows.value)
+const maxTrendValue = computed(() => Math.max(...trendRows.value.map(r => r.sales), 1))
+const maxMonthlyComparisonValue = computed(() => Math.max(...monthlyComparisonRows.value.map(r => r.sales), 1))
+const currentMonthComparison = computed(() => monthlyComparisonRows.value.at(-1) ?? { label: '—', sales: 0 })
+const previousMonthComparison = computed(() => monthlyComparisonRows.value.at(-2) ?? { label: '—', sales: 0 })
+const currentMonthVariation = computed(() => {
+  const previo = previousMonthComparison.value.sales
+  return previo > 0 ? ((currentMonthComparison.value.sales - previo) / previo) * 100 : null
+})
+const trendPanelTitle = computed(() => activePeriod.value === 'month' ? 'Gastos por semana' : 'Gastos por día')
+
 const metrics = computed<MetricCard[]>(() => [
   { label: 'Total gastado', value: money(total.value), meta: `${rows.value.length} gastos en el periodo`, icon: 'fluent-emoji:money-with-wings', tone: 'red' },
   { label: 'Compras de inventario', value: money(inventoryTotal.value), meta: `${sharePercent(inventoryTotal.value)}% · sube tu stock`, icon: 'fluent-emoji:package', tone: 'blue' },
@@ -235,10 +254,6 @@ async function saveExpense() {
     return
   }
 
-  const isInventory = registerForm.kind === 'Inventario'
-  const categoria = isInventory ? 'compra_inventario' : registerForm.category
-  const supplier = registerForm.supplier.trim()
-
   savingExpense.value = true
   registerError.value = ''
 
@@ -246,11 +261,10 @@ async function saveExpense() {
     await $fetch('/api/pos/gastos', {
       method: 'POST',
       body: {
-        categoria,
+        categoria: registerForm.category,
         concepto: registerForm.concept.trim(),
         monto: Number(registerForm.amount || 0),
         metodo: registerForm.method.toLowerCase(),
-        notas: isInventory && supplier ? `Proveedor: ${supplier}` : null,
       },
     })
 
@@ -261,6 +275,12 @@ async function saveExpense() {
   } finally {
     savingExpense.value = false
   }
+}
+
+// Inventario no se guarda como gasto plano: se registra en el inventario (suma stock).
+function irAInventario() {
+  registerDialogVisible.value = false
+  void navigateTo('/pos/catalogo?accion=entrada')
 }
 
 function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
@@ -393,6 +413,50 @@ function methodIcon(method: Method) {
       </article>
     </section>
 
+    <!-- Tendencia de gastos (igual que Ingresos): por día en Semana, por semana en Mes -->
+    <section v-if="activePeriod !== 'today'" class="expense-trend" aria-label="Tendencia de gastos">
+      <header class="panel-head">
+        <div>
+          <span>Tendencia</span>
+          <h2>{{ trendPanelTitle }}</h2>
+        </div>
+      </header>
+
+      <div class="trend-chart">
+        <article v-for="row in trendRows" :key="row.label" class="trend-bar">
+          <span>{{ money(row.sales) }}</span>
+          <div><b :style="{ height: `${Math.max((row.sales / maxTrendValue) * 100, 6)}%` }" /></div>
+          <strong>{{ row.label }}</strong>
+          <small>{{ row.range }}</small>
+        </article>
+      </div>
+
+      <div v-if="activePeriod === 'month'" class="month-comparison">
+        <header class="month-comparison__head">
+          <div>
+            <span>Comparativa mensual</span>
+            <h3>Últimos meses</h3>
+          </div>
+          <strong v-if="currentMonthVariation !== null" :class="currentMonthVariation > 0 ? 'is-up' : 'is-down'">
+            <i :class="currentMonthVariation > 0 ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" aria-hidden="true" />
+            {{ currentMonthVariation > 0 ? '+' : '' }}{{ currentMonthVariation.toFixed(1) }}% vs. {{ previousMonthComparison.label }}
+          </strong>
+        </header>
+        <div class="month-bars">
+          <article
+            v-for="row in monthlyComparisonRows"
+            :key="row.label"
+            class="month-bar"
+            :class="{ 'is-current': row.label === currentMonthComparison.label }"
+          >
+            <span>{{ money(row.sales) }}</span>
+            <div><b :style="{ height: `${Math.max((row.sales / maxMonthlyComparisonValue) * 100, 6)}%` }" /></div>
+            <strong>{{ row.label }}</strong>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="expense-grid">
       <article class="expense-panel main-panel">
         <header class="panel-head">
@@ -454,40 +518,46 @@ function methodIcon(method: Method) {
           <SelectButton v-model="registerForm.kind" :options="['Operativo', 'Inventario']" :allow-empty="false" />
         </label>
 
-        <Message v-if="registerForm.kind === 'Inventario'" severity="info" size="small" icon="pi pi-box" class="full">
-          Una compra de inventario también sumaría stock a tus productos.
-        </Message>
+        <!-- Inventario: no es un gasto plano, entra mercadería que suma stock.
+             Se registra en el inventario, así que llevamos al usuario allí. -->
+        <template v-if="registerForm.kind === 'Inventario'">
+          <Message severity="info" size="small" icon="pi pi-box" class="full">
+            La mercadería que compras suma stock a tus productos. La registramos en tu inventario para que el costo se descuente cuando la vendas.
+          </Message>
+          <footer class="full">
+            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
+            <Button type="button" label="Ir a inventario" icon="pi pi-arrow-right" icon-pos="right" @click="irAInventario" />
+          </footer>
+        </template>
 
-        <label v-if="registerForm.kind === 'Inventario'" class="field">
-          <span>Proveedor</span>
-          <InputText v-model="registerForm.supplier" placeholder="Ej. Frutería del Valle" />
-        </label>
-        <label v-else class="field">
-          <span>Categoría</span>
-          <Select v-model="registerForm.category" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
-        </label>
+        <template v-else>
+          <label class="field">
+            <span>Categoría</span>
+            <Select v-model="registerForm.category" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
+          </label>
 
-        <label class="field">
-          <span>Método de pago</span>
-          <Select v-model="registerForm.method" :options="methodOptions" fluid />
-        </label>
+          <label class="field">
+            <span>Método de pago</span>
+            <Select v-model="registerForm.method" :options="methodOptions" fluid />
+          </label>
 
-        <label class="field full">
-          <span>{{ registerForm.kind === 'Inventario' ? 'Qué compraste' : 'Concepto' }}</span>
-          <InputText v-model="registerForm.concept" :placeholder="registerForm.kind === 'Inventario' ? 'Ej. Fruta y açaí' : 'Ej. Pago de luz'" />
-        </label>
+          <label class="field full">
+            <span>Concepto</span>
+            <InputText v-model="registerForm.concept" placeholder="Ej. Pago de luz" />
+          </label>
 
-        <label class="field">
-          <span>Monto</span>
-          <InputNumber v-model="registerForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
-        </label>
+          <label class="field">
+            <span>Monto</span>
+            <InputNumber v-model="registerForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+          </label>
 
-        <Message v-if="registerError" severity="error" size="small" class="full">{{ registerError }}</Message>
+          <Message v-if="registerError" severity="error" size="small" class="full">{{ registerError }}</Message>
 
-        <footer class="full">
-          <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
-          <Button type="submit" label="Guardar gasto" icon="pi pi-check" :loading="savingExpense" :disabled="!canSaveExpense || savingExpense" />
-        </footer>
+          <footer class="full">
+            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
+            <Button type="submit" label="Guardar gasto" icon="pi pi-check" :loading="savingExpense" :disabled="!canSaveExpense || savingExpense" />
+          </footer>
+        </template>
       </form>
     </Dialog>
 
@@ -1252,5 +1322,156 @@ function methodIcon(method: Method) {
   .expense-method {
     display: none;
   }
+}
+
+/* --- Tendencia de gastos (paralelo a Ingresos, tema rojo) --- */
+.expense-trend {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #f1e3e0;
+  border-radius: 18px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.trend-chart {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: end;
+  gap: 8px;
+  min-height: 150px;
+}
+
+.trend-bar {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  align-content: end;
+  text-align: center;
+}
+
+.trend-bar > span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #b3261e;
+}
+
+.trend-bar > div {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 96px;
+}
+
+.trend-bar b {
+  display: block;
+  width: 100%;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, #f87171, #dc2626);
+}
+
+.trend-bar > strong {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.trend-bar > small {
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.month-comparison {
+  display: grid;
+  gap: 14px;
+  padding-top: 6px;
+  border-top: 1px dashed #efe1de;
+}
+
+.month-comparison__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.month-comparison__head span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.month-comparison__head h3 {
+  margin: 2px 0 0;
+  font-size: 1rem;
+  font-weight: 900;
+  color: #1f2937;
+}
+
+.month-comparison__head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.month-comparison__head strong.is-up {
+  color: #b3261e;
+}
+
+.month-comparison__head strong.is-down {
+  color: #0a8f3a;
+}
+
+.month-bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: end;
+  gap: 8px;
+  min-height: 130px;
+}
+
+.month-bar {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  align-content: end;
+}
+
+.month-bar > span {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #6b7280;
+}
+
+.month-bar > div {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 84px;
+}
+
+.month-bar b {
+  display: block;
+  width: 100%;
+  border-radius: 8px 8px 0 0;
+  background: #fca5a5;
+}
+
+.month-bar.is-current b {
+  background: linear-gradient(180deg, #f87171, #dc2626);
+}
+
+.month-bar > strong {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #1f2937;
 }
 </style>
