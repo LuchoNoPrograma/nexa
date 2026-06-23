@@ -4,6 +4,8 @@ import { cleanText, requireStoreAccess } from '../../../utils/posCatalog'
 
 type MarketingConfigBody = {
   contacto?: string
+  countryDialCode?: string
+  phone?: string
   ubicacion?: string
 }
 
@@ -11,15 +13,33 @@ function compactText(value: unknown, max: number) {
   return cleanText(value).replace(/\s+/g, ' ').slice(0, max)
 }
 
+function normalizePhone(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+const allowedDialCodes = new Set(['591', '51', '55'])
+
 export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
 
   const body = await readBody<MarketingConfigBody | null>(event)
-  const contacto = compactText(body?.contacto, 60)
+  const localPhone = normalizePhone(cleanText(body?.phone))
+  const countryDialCode = normalizePhone(cleanText(body?.countryDialCode) || '+591')
+  const contacto = localPhone
+    ? `${countryDialCode}${localPhone}`
+    : normalizePhone(compactText(body?.contacto, 60))
   const ubicacion = compactText(body?.ubicacion, 160)
 
-  if (contacto.length < 6) {
+  if (localPhone && !allowedDialCodes.has(countryDialCode)) {
+    throw createError({ statusCode: 400, statusMessage: 'Selecciona un codigo de pais valido.' })
+  }
+
+  if (localPhone && (localPhone.length < 7 || localPhone.length > 12 || contacto.length > 15)) {
+    throw createError({ statusCode: 400, statusMessage: 'Ingresa un numero de celular valido.' })
+  }
+
+  if (!localPhone && contacto.length < 6) {
     throw createError({ statusCode: 400, statusMessage: 'Ingresa un contacto comercial valido para tus publicaciones.' })
   }
 

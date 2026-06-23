@@ -156,9 +156,33 @@ const configDialogVisible = ref(false)
 const guardandoConfig = ref(false)
 const configError = ref('')
 const configForm = reactive({
-  contacto: '',
+  countryDialCode: '+591',
+  phone: '',
   ubicacion: '',
 })
+
+const marketingDialCodes = ['+591', '+51', '+55']
+
+function splitMarketingPhone(value?: string | null) {
+  const rawValue = (value ?? '').trim()
+  const cleanValue = rawValue.replace(/\D/g, '')
+  const dialCode = marketingDialCodes
+    .map(code => code.replace(/\D/g, ''))
+    .sort((a, b) => b.length - a.length)
+    .find(code => cleanValue.startsWith(code))
+
+  if (dialCode) {
+    return {
+      countryDialCode: `+${dialCode}`,
+      phone: cleanValue.slice(dialCode.length),
+    }
+  }
+
+  return {
+    countryDialCode: '+591',
+    phone: cleanValue || rawValue,
+  }
+}
 
 const marketingConfig = computed(() => data.value?.marketingConfig ?? {
   contacto: null,
@@ -175,7 +199,9 @@ const necesitaConfigMarketing = computed(() => {
 
 function syncConfigForm() {
   const config = marketingConfig.value
-  configForm.contacto = config.contacto ?? ''
+  const phoneData = splitMarketingPhone(config.contacto)
+  configForm.countryDialCode = phoneData.countryDialCode
+  configForm.phone = phoneData.phone
   configForm.ubicacion = config.ubicacion ?? ''
 }
 
@@ -204,7 +230,8 @@ async function guardarConfigMarketing() {
     await $fetch('/api/pos/marketing/config', {
       method: 'PUT',
       body: {
-        contacto: configForm.contacto,
+        countryDialCode: configForm.countryDialCode,
+        phone: configForm.phone,
         ubicacion: configForm.ubicacion,
       },
     })
@@ -998,11 +1025,13 @@ function aplicarReco(reco: Recomendacion) {
 
         <label class="marketing-config__field">
           <span>Contacto comercial</span>
-          <InputText
-            v-model="configForm.contacto"
-            fluid
-            maxlength="60"
-            placeholder="Ej: WhatsApp 71117696"
+          <SharedPhoneCountryInput
+            v-model:country-dial-code="configForm.countryDialCode"
+            v-model:phone="configForm.phone"
+            input-id="marketing-phone"
+            name="marketingPhone"
+            autocomplete="tel"
+            required
             :disabled="guardandoConfig"
           />
         </label>
