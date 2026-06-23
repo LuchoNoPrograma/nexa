@@ -1070,8 +1070,8 @@ async function openStockHistory(product: CatalogProduct | null) {
             <InputText id="product-name" v-model="form.name" autocomplete="off" placeholder="Ej. Coca Cola, Leche Pil, Pan..." />
           </div>
 
-          <div class="grid formgrid product-main-grid">
-            <div class="pfield col-12 md:col-4">
+          <div class="product-main-grid">
+            <div class="pfield">
               <label for="product-kind">Tipo</label>
               <Select
                 id="product-kind"
@@ -1083,7 +1083,7 @@ async function openStockHistory(product: CatalogProduct | null) {
               />
             </div>
 
-            <div class="pfield col-12 md:col-8">
+            <div class="pfield">
               <label for="product-category">Categoría / Rubro</label>
               <div class="category-picker">
                 <Select id="product-category" v-model="form.categoryId" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
@@ -2070,6 +2070,12 @@ async function openStockHistory(product: CatalogProduct | null) {
   gap: 6px;
 }
 
+.product-main-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
 .pgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(240px, 1fr));
@@ -2834,6 +2840,10 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 @media (max-width: 480px) {
+  .product-main-grid {
+    grid-template-columns: 1fr;
+  }
+
   .category-picker {
     grid-template-columns: 1fr;
   }
