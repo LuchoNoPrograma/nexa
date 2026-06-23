@@ -21,6 +21,8 @@ const currencyFormatter = new Intl.NumberFormat('es-BO', {
 
 const cashRegister = usePosCashRegister()
 const session = usePosSession()
+const catalogStore = useCatalogStore()
+const saleVoidDialog = useSaleVoidDialog()
 const cashStatus = cashRegister.cashStatus
 const movements = cashRegister.movements
 const productSales = cashRegister.productSales
@@ -41,6 +43,7 @@ const movementDialogVisible = ref(false)
 const arqueoDialogVisible = ref(false)
 const productDialogVisible = ref(false)
 const closeDialogVisible = ref(false)
+const voidingSaleId = ref('')
 
 type CashReportCell = {
   text: string
@@ -158,6 +161,7 @@ const totalSales = computed(() => movements.value
 
 const salesReadyToClose = computed(() => movements.value
   .filter((movement) => movement.source === 'venta' && movement.status === 'por_cerrar').length)
+const canVoidSales = computed(() => session.value?.roles.includes('propietario') ?? false)
 
 const depositAmount = computed(() => Math.max(Number(countedCash.value || 0) - Number(desiredFloat.value || 0), 0))
 
@@ -309,6 +313,31 @@ async function saveMovement() {
   resetMovementForm()
 }
 
+async function voidSaleFromMovement(movement: CashMovement) {
+  if (!movement.saleId || voidingSaleId.value) {
+    return
+  }
+
+  const reason = await saleVoidDialog.requestReason()
+
+  if (!reason) {
+    return
+  }
+
+  voidingSaleId.value = movement.saleId
+  try {
+    await cashRegister.voidSale(movement.saleId, reason)
+    catalogStore.invalidateCatalog()
+    void catalogStore.loadSaleProducts({ force: true, background: true }).catch(() => null)
+    await saleVoidDialog.success()
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    await saleVoidDialog.error(dataError?.statusMessage ?? 'Intenta nuevamente.')
+  } finally {
+    voidingSaleId.value = ''
+  }
+}
+
 async function closeCashSession(printAfterClose = false) {
   await cashRegister.closeTurn(Number(countedCash.value || 0), closingNote.value)
   closedAt.value = currentTime.value
@@ -445,6 +474,10 @@ async function downloadThermalReport(type: 'arqueo' | 'cierre' | 'producto', rep
   }
 
   reportPdfDownloading.value = type
+  const alerta = await notificarCarga({
+    titulo: 'Generando PDF',
+    texto: `Preparando ${reportDocument.title.toLowerCase()}...`,
+  })
   try {
     const filename = `${safeFileName(reportDocument.title)}-${safeFileName(reportShortDate())}.pdf`
     const response = await fetch('/api/pos/receipt/pdf', {
@@ -470,6 +503,11 @@ async function downloadThermalReport(type: 'arqueo' | 'cierre' | 'producto', rep
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    alerta.cerrar()
+    await alerta.exito('PDF descargado', 'El reporte se generó correctamente.')
+  } catch {
+    alerta.cerrar()
+    await alerta.error('No se pudo generar el PDF', 'Intenta nuevamente en unos segundos.')
   } finally {
     reportPdfDownloading.value = ''
   }
@@ -899,6 +937,18 @@ async function downloadProductReport() {
           <strong class="move-amount" :class="movementClass(movement.type)">
             {{ movementSign(movement.type) }} {{ money(movement.amount) }}
           </strong>
+          <Button
+            v-if="canVoidSales && movement.saleId && cashStatus === 'abierta'"
+            type="button"
+            icon="pi pi-ban"
+            label="Anular"
+            size="small"
+            severity="danger"
+            text
+            :loading="voidingSaleId === movement.saleId"
+            :disabled="Boolean(voidingSaleId)"
+            @click="voidSaleFromMovement(movement)"
+          />
         </li>
         <li v-if="!movements.length" class="move-empty">Aún no hay movimientos en este turno.</li>
       </ul>
@@ -1330,7 +1380,7 @@ async function downloadProductReport() {
 
 .move-list li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: center;
   padding: 11px 12px;

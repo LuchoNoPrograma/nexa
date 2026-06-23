@@ -75,7 +75,7 @@ export default defineEventHandler(async (event) => {
       if (existingSale.rowCount) {
         const overview = await getCashOverview(client, session.storeId)
         await client.query('commit')
-        return { ...overview, saleNumber: clientOperationId }
+        return { ...overview, saleId: existingSale.rows[0].id, saleNumber: clientOperationId }
       }
     }
 
@@ -273,12 +273,22 @@ export default defineEventHandler(async (event) => {
     const overview = await getCashOverview(client, session.storeId)
     await client.query('commit')
 
-    return { ...overview, saleNumber: cashSaleCode }
+    return { ...overview, saleId, saleNumber: cashSaleCode }
   } catch (error) {
     await client.query('rollback')
     if (clientOperationId && typeof error === 'object' && error && 'code' in error && error.code === '23505') {
+      const existingSale = await client.query<{ id: string }>(
+        `
+          select id
+          from venta
+          where tienda_id = $1
+            and numero = $2
+          limit 1
+        `,
+        [session.storeId, clientOperationId],
+      )
       const overview = await getCashOverview(client, session.storeId)
-      return { ...overview, saleNumber: clientOperationId }
+      return { ...overview, saleId: existingSale.rows[0]?.id, saleNumber: clientOperationId }
     }
     throw error
   } finally {

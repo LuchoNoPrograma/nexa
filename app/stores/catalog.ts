@@ -238,6 +238,24 @@ export const useCatalogStore = defineStore('catalog', () => {
     }
   }
 
+  function restoreLocalStock(items: Array<{ id: string, quantity: number, kind: PosSaleProduct['kind'] }>) {
+    for (const item of items) {
+      if (item.kind === 'servicio') {
+        continue
+      }
+
+      const saleProduct = saleProducts.value.find((current) => current.id === item.id)
+      if (saleProduct) {
+        saleProduct.stock += item.quantity
+      }
+
+      const catalogProduct = catalogProducts.value.find((current) => current.id === item.id)
+      if (catalogProduct) {
+        catalogProduct.stock += item.quantity
+      }
+    }
+  }
+
   function invalidateCatalog() {
     catalogLoadedAt.value = 0
     saleProductsLoadedAt.value = 0
@@ -278,6 +296,7 @@ export const useCatalogStore = defineStore('catalog', () => {
     refreshCatalogInBackground,
     saveSaleProductsLocally,
     applyLocalStock,
+    restoreLocalStock,
     invalidateCatalog,
     clear,
   }

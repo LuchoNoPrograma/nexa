@@ -22,6 +22,8 @@ type ReceiptPaymentLine = {
   amount: number
 }
 type SaleReceipt = {
+  saleId?: string
+  voided?: boolean
   number: string
   date: Date
   mode: SaleMode
@@ -38,6 +40,7 @@ const session = usePosSession()
 const cashRegister = usePosCashRegister()
 const offlineSales = usePosOfflineSales()
 const catalogStore = useCatalogStore()
+const saleVoidDialog = useSaleVoidDialog()
 const {
   saleProducts: products,
   saleProductsLoading: productsLoading,
@@ -51,6 +54,7 @@ const productInfoOpen = ref(false)
 const checkoutOpen = ref(false)
 const receiptOpen = ref(false)
 const receiptPdfDownloading = ref(false)
+const voidSaleLoading = ref(false)
 const discountDialogOpen = ref(false)
 const expandedComboIds = ref<Set<string>>(new Set())
 const saleMode = ref<SaleMode>('venta')
@@ -169,6 +173,7 @@ const changeAmount = computed(() => Math.max((receivedAmount.value ?? 0) - cashP
 const missingCashAmount = computed(() => Math.max(cashPaymentAmount.value - (receivedAmount.value ?? 0), 0))
 const cashPaymentInvalid = computed(() => hasCashPayment.value && missingCashAmount.value > 0)
 const checkoutInvalid = computed(() => splitPaymentInvalid.value || splitPaymentMismatch.value || cashPaymentInvalid.value)
+const canVoidSales = computed(() => session.value?.roles.includes('propietario') ?? false)
 const configuredDiscountLine = computed(() => cart.value.find((line) => line.name.toLowerCase().includes('funda para celular')))
 const configuredDiscountAmount = computed(() => Math.min((configuredDiscountLine.value?.quantity ?? 0) * 5, subtotal.value))
 const discountPreviewAmount = computed(() => {
@@ -411,6 +416,7 @@ async function confirmCharge() {
       const saleResult = await cashRegister.registerSale({ ...receipt, clientOperationId })
       receipt = {
         ...receipt,
+        saleId: saleResult.saleId,
         number: saleResult.saleNumber ?? receipt.number,
       }
       catalogStore.applyLocalStock(receipt.items)
@@ -518,6 +524,34 @@ function buildSaleReceipt(): SaleReceipt {
   }
 }
 
+async function voidLastReceipt() {
+  const receipt = lastReceipt.value
+
+  if (!receipt?.saleId || receipt.mode !== 'venta' || receipt.voided || voidSaleLoading.value) {
+    return
+  }
+
+  const reason = await saleVoidDialog.requestReason()
+
+  if (!reason) {
+    return
+  }
+
+  voidSaleLoading.value = true
+  try {
+    await cashRegister.voidSale(receipt.saleId, reason)
+    catalogStore.restoreLocalStock(receipt.items)
+    void catalogStore.saveSaleProductsLocally().catch(() => null)
+    lastReceipt.value = { ...receipt, voided: true }
+    await saleVoidDialog.success('Stock y caja fueron actualizados.')
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    await saleVoidDialog.error(dataError?.statusMessage ?? 'Intenta nuevamente.')
+  } finally {
+    voidSaleLoading.value = false
+  }
+}
+
 function buildReceiptPaymentLines(): ReceiptPaymentLine[] {
   if (!splitPayment.value) {
     return [{ label: paymentLabel(paymentMethod.value), amount: total.value }]
@@ -560,6 +594,10 @@ async function downloadReceiptPdf() {
   const filename = `${safeFileName(receipt.mode === 'venta' ? 'nota-venta' : 'cotizacion')}-${safeFileName(receipt.number)}.pdf`
 
   receiptPdfDownloading.value = true
+  const alerta = await notificarCarga({
+    titulo: 'Generando PDF',
+    texto: 'Preparando el comprobante para descargar...',
+  })
   try {
     const response = await fetch('/api/pos/receipt/pdf', {
       method: 'POST',
@@ -584,6 +622,11 @@ async function downloadReceiptPdf() {
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    alerta.cerrar()
+    await alerta.exito('PDF descargado', 'El comprobante se generó correctamente.')
+  } catch {
+    alerta.cerrar()
+    await alerta.error('No se pudo generar el PDF', 'Intenta nuevamente en unos segundos.')
   } finally {
     receiptPdfDownloading.value = false
   }
@@ -1756,8 +1799,8 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
       <aside class="receipt-actions">
         <header class="receipt-actions__header">
           <span>
-            <i class="pi pi-check" aria-hidden="true" />
-            {{ lastReceipt.mode === 'venta' ? 'Venta lista para caja' : 'Cotización guardada' }}
+            <i :class="lastReceipt.voided ? 'pi pi-ban' : 'pi pi-check'" aria-hidden="true" />
+            {{ lastReceipt.voided ? 'Venta anulada' : lastReceipt.mode === 'venta' ? 'Venta lista para caja' : 'Cotización guardada' }}
           </span>
         </header>
 
@@ -1778,6 +1821,17 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             @click="downloadReceiptPdf"
           />
           <Button type="button" label="Imprimir ticket" icon="pi pi-print" outlined @click="printReceipt" />
+          <Button
+            v-if="canVoidSales && lastReceipt.mode === 'venta' && lastReceipt.saleId"
+            type="button"
+            :label="lastReceipt.voided ? 'Venta anulada' : 'Anular venta'"
+            icon="pi pi-ban"
+            severity="danger"
+            outlined
+            :loading="voidSaleLoading"
+            :disabled="voidSaleLoading || lastReceipt.voided"
+            @click="voidLastReceipt"
+          />
         </div>
       </aside>
 

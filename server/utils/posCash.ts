@@ -16,6 +16,7 @@ export type CashSessionSummary = {
 
 export type CashMovementSummary = {
   id: string
+  saleId?: string
   time: string
   concept: string
   type: 'Ingreso' | 'Egreso'
@@ -200,6 +201,7 @@ export async function getCashOverview(client: PoolClient, storeId: string): Prom
     },
     movements: movementResult.rows.map((movement) => ({
       id: movement.id,
+      saleId: movement.ventaId ?? undefined,
       time: movement.time,
       concept: movement.concept,
       type: movementTypeLabel(movement.type),

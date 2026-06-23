@@ -15,6 +15,7 @@ export function usePosCashRegister() {
     refreshInBackground: store.refreshInBackground,
     addManualMovement: store.addManualMovement,
     registerSale: store.registerSale,
+    voidSale: store.voidSale,
     closeTurn: store.closeTurn,
     openTurn: store.openTurn,
   }

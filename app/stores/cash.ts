@@ -11,6 +11,7 @@ export type PosCashMovementStatus = 'por_cerrar' | 'cerrado'
 
 export type PosCashMovement = {
   id: string
+  saleId?: string
   time: string
   concept: string
   type: PosCashMovementType
@@ -65,6 +66,7 @@ type CashOverviewPayload = {
   session: CashSessionPayload | null
   movements: PosCashMovement[]
   productSales: PosCashProductSale[]
+  saleId?: string
   saleNumber?: string
 }
 
@@ -175,6 +177,13 @@ export const useCashStore = defineStore('cash', () => {
     return overview
   }
 
+  async function voidSale(saleId: string, reason: string) {
+    applyOverview(await $fetch<CashOverviewPayload>(`/api/pos/sales/${saleId}/void`, {
+      method: 'POST',
+      body: { reason },
+    }))
+  }
+
   async function closeTurn(countedCash: number, notes?: string) {
     applyOverview(await $fetch<CashOverviewPayload>('/api/pos/cash/close', {
       method: 'POST',
@@ -211,6 +220,7 @@ export const useCashStore = defineStore('cash', () => {
     refreshInBackground,
     addManualMovement,
     registerSale,
+    voidSale,
     closeTurn,
     openTurn,
     clear,

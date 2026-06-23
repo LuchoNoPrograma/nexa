@@ -28,3 +28,60 @@ export async function confirmarAccion(opts: {
 
   return result.isConfirmed
 }
+
+type AlertaCarga = {
+  cerrar: () => void
+  exito: (titulo: string, texto?: string) => Promise<void>
+  error: (titulo: string, texto?: string) => Promise<void>
+}
+
+export async function notificarCarga(opts: {
+  titulo: string
+  texto?: string
+}): Promise<AlertaCarga> {
+  if (!import.meta.client) {
+    return {
+      cerrar: () => {},
+      exito: async (_titulo: string, _texto?: string) => {},
+      error: async (_titulo: string, _texto?: string) => {},
+    }
+  }
+
+  const { default: Swal } = await import('sweetalert2')
+
+  void Swal.fire({
+    title: opts.titulo,
+    text: opts.texto,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    didOpen: () => {
+      Swal.showLoading()
+    },
+  })
+
+  return {
+    cerrar: () => Swal.close(),
+    exito: async (titulo: string, texto?: string) => {
+      await Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: titulo,
+        text: texto,
+        showConfirmButton: false,
+        timer: 2400,
+        timerProgressBar: true,
+      })
+    },
+    error: async (titulo: string, texto?: string) => {
+      await Swal.fire({
+        icon: 'error',
+        title: titulo,
+        text: texto,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#0a6f1f',
+      })
+    },
+  }
+}
