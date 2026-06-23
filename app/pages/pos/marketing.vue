@@ -47,7 +47,10 @@ const { data, refresh } = await useFetch<MarketingResponse>('/api/pos/marketing'
   }),
 })
 
-const post = computed(() => data.value?.actual ?? null)
+// La API puede devolver la última publicación guardada, pero la pantalla no debe
+// retomarla al volver desde otro menú. Solo mostramos lo generado en esta visita.
+const publicacionActual = ref<MarketingPublicacion | null>(null)
+const post = computed(() => publicacionActual.value)
 const sinProductos = computed(() => (data.value?.totalProductos ?? 0) === 0)
 
 // El texto es editable antes de publicar; el usuario puede ajustar el borrador.
@@ -120,7 +123,7 @@ const VIDEO_TIPS = [
 
 type ProductoOpcion = { id: string; name: string; category: string | null; kind: string }
 
-// Muestra el selector de objetivo (al entrar sin publicación o al pedir "otra idea").
+// Muestra el selector de objetivo al entrar o al pedir "otra idea".
 const mostrarSelector = ref(false)
 
 // Objetivo elegido (la tarjeta seleccionada).
@@ -515,10 +518,12 @@ async function generar(modo: Modo) {
         nota: nota.value.trim() || null,
       },
     })
+    publicacionActual.value = result.actual
     data.value = {
       actual: result.actual,
       publicadas: data.value?.publicadas ?? 0,
       totalProductos: data.value?.totalProductos ?? 0,
+      marketingConfig: marketingConfig.value,
     }
     cerrarSelector()
     mostrarExitoHaru()
