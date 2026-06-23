@@ -34,12 +34,44 @@ const closingNote = ref('')
 const closedAt = ref('')
 const lastPrintedAt = ref('')
 const cashLoadError = ref('')
+const reportPdfDownloading = ref<'arqueo' | 'cierre' | 'producto' | ''>('')
 
 const openDialogVisible = ref(false)
 const movementDialogVisible = ref(false)
 const arqueoDialogVisible = ref(false)
 const productDialogVisible = ref(false)
 const closeDialogVisible = ref(false)
+
+type CashReportCell = {
+  text: string
+  className?: string
+  sub?: string
+  colspan?: number
+}
+
+type CashReportRow = {
+  cells: CashReportCell[]
+  className?: string
+}
+
+type CashReportBlock =
+  | { type: 'section-title', title: string }
+  | { type: 'table', columns?: CashReportCell[], rows: CashReportRow[] }
+  | { type: 'grand', label: string, value: string }
+  | { type: 'sign', label: string }
+  | { type: 'footer', text?: string, strong?: string }
+
+type CashReportDocument = {
+  type: 'cash-report'
+  title: string
+  storeName: string
+  registerName: string
+  responsible: string
+  docTitle: string
+  docDate: string
+  docSubtitle: string
+  blocks: CashReportBlock[]
+}
 
 const openingForm = reactive({
   registerName: 'Caja principal',
@@ -287,6 +319,13 @@ async function closeCashSession(printAfterClose = false) {
   }
 }
 
+async function closeCashSessionAndDownloadPdf() {
+  await cashRegister.closeTurn(Number(countedCash.value || 0), closingNote.value)
+  closedAt.value = currentTime.value
+  closeDialogVisible.value = false
+  await downloadClosureReport()
+}
+
 function reopenCashSession() {
   openingForm.registerName = session.value?.store?.trim() || registerName.value || 'Caja principal'
   openingForm.openedBy = session.value?.name?.trim() || openedBy.value || 'Responsable de caja'
@@ -323,7 +362,7 @@ function reportShortDate() {
 }
 
 // CSS común para tickets de 80mm (mismo estilo que el comprobante de venta).
-function thermalCss() {
+function thermalCss(screen = true) {
   return `
     @page { size: 80mm auto; margin: 4mm; }
     * { box-sizing: border-box; }
@@ -355,7 +394,7 @@ function thermalCss() {
     .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
     footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #000; text-align: center; font-size: 9px; }
     footer strong { display: block; margin-top: 3px; }
-    @media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }
+    ${screen ? '@media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }' : ''}
   `
 }
 
@@ -400,6 +439,65 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
   }, 300)
 }
 
+async function downloadThermalReport(type: 'arqueo' | 'cierre' | 'producto', reportDocument: CashReportDocument) {
+  if (!import.meta.client || reportPdfDownloading.value) {
+    return
+  }
+
+  reportPdfDownloading.value = type
+  try {
+    const filename = `${safeFileName(reportDocument.title)}-${safeFileName(reportShortDate())}.pdf`
+    const response = await fetch('/api/pos/receipt/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        document: reportDocument,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('No se pudo generar el PDF.')
+    }
+
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } finally {
+    reportPdfDownloading.value = ''
+  }
+}
+
+function safeFileName(value: string) {
+  return value
+    .normalize('NFKD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[^a-zA-Z0-9-]+/g, '-')
+    .replaceAll(/^-|-$/g, '')
+    .toLowerCase()
+}
+
+function baseCashReportDocument(title: string, docTitle: string, docSubtitle: string, blocks: CashReportBlock[]): CashReportDocument {
+  return {
+    type: 'cash-report',
+    title,
+    storeName: storeReportName(),
+    registerName: registerName.value,
+    responsible: openedBy.value,
+    docTitle,
+    docDate: reportShortDate(),
+    docSubtitle,
+    blocks,
+  }
+}
+
 // Totales auxiliares que comparten arqueo y cierre.
 function reportTotals() {
   const otrosIngresos = movements.value
@@ -432,11 +530,7 @@ function reportHeaderHtml(docTitle: string, docSubtitle: string) {
 }
 
 // Arqueo de caja: resumen financiero en tabla (Ingresos / Egresos / Totales).
-function printArqueoReport() {
-  if (!import.meta.client) {
-    return
-  }
-
+function buildArqueoReportBody() {
   lastPrintedAt.value = currentTime.value
   const { otrosIngresos, egresos, totalMovimiento } = reportTotals()
 
@@ -444,7 +538,7 @@ function printArqueoReport() {
     .map((item) => `<tr><td>${escapeHtml(item.method)}</td><td class="amt">${escapeHtml(money(item.income))}</td></tr>`)
     .join('')
 
-  const body = `
+  return `
     ${reportHeaderHtml('Arqueo de caja', 'Expresado en bolivianos')}
 
     <div class="section-title">Ingresos</div>
@@ -472,16 +566,57 @@ function printArqueoReport() {
       <strong>${escapeHtml(reportLongDate())}</strong>
     </footer>
   `
-
-  openThermalReport('nexa-arqueo-caja', 'Arqueo de caja - NEXA', body)
 }
 
-// Cierre de caja: bitácora de movimientos (Hora / Detalle / Total) + resumen.
-function printClosureReport() {
+function buildArqueoReportDocument() {
+  lastPrintedAt.value = currentTime.value
+  const { otrosIngresos, egresos, totalMovimiento } = reportTotals()
+
+  return baseCashReportDocument('Arqueo de caja - NEXA', 'Arqueo de caja', 'Expresado en bolivianos', [
+    { type: 'section-title', title: 'Ingresos' },
+    {
+      type: 'table',
+      rows: [
+        ...paymentBreakdown.value.map(item => ({
+          cells: [
+            { text: item.method },
+            { text: money(item.income), className: 'amt' },
+          ],
+        })),
+        {
+          className: 'strong',
+          cells: [
+            { text: 'Total ventas' },
+            { text: money(totalSales.value), className: 'amt' },
+          ],
+        },
+      ],
+    },
+    { type: 'section-title', title: 'Otros ingresos' },
+    { type: 'table', rows: [{ cells: [{ text: 'Ingresos' }, { text: money(otrosIngresos), className: 'amt' }] }] },
+    { type: 'section-title', title: 'Egresos' },
+    { type: 'table', rows: [{ cells: [{ text: 'Egresos' }, { text: money(egresos), className: 'amt' }] }] },
+    { type: 'grand', label: 'Total efectivo en caja', value: money(expectedCash.value) },
+    { type: 'grand', label: 'Total movimiento en caja', value: money(totalMovimiento) },
+    { type: 'sign', label: 'Firma y sello cajero' },
+    { type: 'footer', text: `Turno: ${sessionDuration.value} · Impreso: ${lastPrintedAt.value}`, strong: reportLongDate() },
+  ])
+}
+
+function printArqueoReport() {
   if (!import.meta.client) {
     return
   }
 
+  openThermalReport('nexa-arqueo-caja', 'Arqueo de caja - NEXA', buildArqueoReportBody())
+}
+
+async function downloadArqueoReport() {
+  await downloadThermalReport('arqueo', buildArqueoReportDocument())
+}
+
+// Cierre de caja: bitácora de movimientos (Hora / Detalle / Total) + resumen.
+function buildClosureReportBody() {
   lastPrintedAt.value = currentTime.value
   const { otrosIngresos, egresos, totalMovimiento } = reportTotals()
 
@@ -501,7 +636,7 @@ function printClosureReport() {
       `).join('')
     : '<tr class="line"><td colspan="3">Sin movimientos en el turno.</td></tr>'
 
-  const body = `
+  return `
     ${reportHeaderHtml('Cierre de caja', 'Detalle de movimientos del turno')}
 
     <table class="rpt">
@@ -530,13 +665,81 @@ function printClosureReport() {
       <strong>¡Buena suerte!</strong>
     </footer>
   `
-
-  openThermalReport('nexa-cierre-caja', 'Cierre de caja - NEXA', body)
 }
 
-function printProductReport() {
+function buildClosureReportDocument() {
+  lastPrintedAt.value = currentTime.value
+  const { otrosIngresos, egresos, totalMovimiento } = reportTotals()
+  const ordered = [...movements.value].reverse()
+  const movementRows: CashReportRow[] = []
+
+  if (cashStatus.value === 'cerrada') {
+    movementRows.push({
+      className: 'line',
+      cells: [
+        { text: closedAt.value || lastPrintedAt.value, className: 'time' },
+        { text: 'Se generó el cierre' },
+        { text: '', className: 'amt' },
+      ],
+    })
+  }
+
+  if (ordered.length) {
+    movementRows.push(...ordered.map(movement => ({
+      className: 'line',
+      cells: [
+        { text: movement.time, className: 'time' },
+        { text: movement.concept, sub: `${movement.method} · ${movementStatusLabel(movement)}` },
+        { text: `${movementSign(movement.type)} ${money(movement.amount)}`, className: 'amt' },
+      ],
+    })))
+  } else {
+    movementRows.push({ className: 'line', cells: [{ text: 'Sin movimientos en el turno.', colspan: 3 }] })
+  }
+
+  return baseCashReportDocument('Cierre de caja - NEXA', 'Cierre de caja', 'Detalle de movimientos del turno', [
+    {
+      type: 'table',
+      columns: [
+        { text: 'Hora', className: 'time' },
+        { text: 'Detalle' },
+        { text: 'Total Bs', className: 'amt' },
+      ],
+      rows: movementRows,
+    },
+    { type: 'section-title', title: 'Resumen' },
+    {
+      type: 'table',
+      rows: [
+        { cells: [{ text: 'Total ventas' }, { text: money(totalSales.value), className: 'amt' }] },
+        { cells: [{ text: 'Otros ingresos' }, { text: money(otrosIngresos), className: 'amt' }] },
+        { cells: [{ text: 'Egresos' }, { text: money(egresos), className: 'amt' }] },
+        { className: 'strong', cells: [{ text: 'Total movimiento en caja' }, { text: money(totalMovimiento), className: 'amt' }] },
+        { className: 'strong', cells: [{ text: 'Total efectivo en caja' }, { text: money(expectedCash.value), className: 'amt' }] },
+      ],
+    },
+    { type: 'section-title', title: 'Observación' },
+    { type: 'table', rows: [{ cells: [{ text: closingNote.value || 'Sin observaciones.', colspan: 3 }] }] },
+    { type: 'sign', label: 'Firma y sello cajero' },
+    { type: 'footer', text: `Turno: ${sessionDuration.value} · Impreso: ${lastPrintedAt.value}`, strong: '¡Buena suerte!' },
+  ])
+}
+
+function printClosureReport() {
   if (!import.meta.client) {
     return
+  }
+
+  openThermalReport('nexa-cierre-caja', 'Cierre de caja - NEXA', buildClosureReportBody())
+}
+
+async function downloadClosureReport() {
+  await downloadThermalReport('cierre', buildClosureReportDocument())
+}
+
+function buildProductReportBody() {
+  if (!import.meta.client) {
+    return ''
   }
 
   const rows = productRanking.value.length
@@ -549,7 +752,7 @@ function printProductReport() {
       `).join('')
     : '<tr class="line"><td colspan="3">Sin ventas registradas.</td></tr>'
 
-  const body = `
+  return `
     ${reportHeaderHtml('Reporte por producto', 'Total mercadería vendida')}
 
     <table class="rpt">
@@ -563,8 +766,53 @@ function printProductReport() {
       <strong>${escapeHtml(reportLongDate())}</strong>
     </footer>
   `
+}
 
-  openThermalReport('nexa-reporte-productos', 'Reporte por producto - NEXA', body)
+function buildProductReportDocument() {
+  const rows: CashReportRow[] = productRanking.value.length
+    ? productRanking.value.map(item => ({
+        className: 'line',
+        cells: [
+          { text: item.name },
+          { text: String(item.qty), className: 'qty' },
+          { text: money(item.total), className: 'amt' },
+        ],
+      }))
+    : [{ className: 'line', cells: [{ text: 'Sin ventas registradas.', colspan: 3 }] }]
+
+  rows.push({
+    className: 'strong',
+    cells: [
+      { text: `Total (${productUnits.value} u.)` },
+      { text: '', className: 'qty' },
+      { text: money(productTotal.value), className: 'amt' },
+    ],
+  })
+
+  return baseCashReportDocument('Reporte por producto - NEXA', 'Reporte por producto', 'Total mercadería vendida', [
+    {
+      type: 'table',
+      columns: [
+        { text: 'Detalle' },
+        { text: 'C.', className: 'qty' },
+        { text: 'Total', className: 'amt' },
+      ],
+      rows,
+    },
+    { type: 'footer', text: `Turno: ${sessionDuration.value}`, strong: reportLongDate() },
+  ])
+}
+
+function printProductReport() {
+  if (!import.meta.client) {
+    return
+  }
+
+  openThermalReport('nexa-reporte-productos', 'Reporte por producto - NEXA', buildProductReportBody())
+}
+
+async function downloadProductReport() {
+  await downloadThermalReport('producto', buildProductReportDocument())
 }
 </script>
 
@@ -746,6 +994,15 @@ function printProductReport() {
 
       <template #footer>
         <Button type="button" label="Cerrar" outlined severity="secondary" @click="productDialogVisible = false" />
+        <Button
+          type="button"
+          label="Descargar PDF"
+          icon="pi pi-download"
+          outlined
+          :loading="reportPdfDownloading === 'producto'"
+          :disabled="!!reportPdfDownloading"
+          @click="downloadProductReport"
+        />
         <Button type="button" label="Imprimir" icon="pi pi-print" @click="printProductReport" />
       </template>
     </Dialog>
@@ -774,6 +1031,15 @@ function printProductReport() {
 
       <template #footer>
         <Button type="button" label="Cerrar" outlined severity="secondary" @click="arqueoDialogVisible = false" />
+        <Button
+          type="button"
+          label="Descargar PDF"
+          icon="pi pi-download"
+          outlined
+          :loading="reportPdfDownloading === 'arqueo'"
+          :disabled="!!reportPdfDownloading"
+          @click="downloadArqueoReport"
+        />
         <Button type="button" label="Imprimir arqueo" icon="pi pi-print" outlined @click="printArqueoReport" />
         <Button type="button" label="Continuar al cierre" icon="pi pi-arrow-right" severity="danger" :disabled="cashStatus === 'cerrada'" @click="arqueoDialogVisible = false; closeDialogVisible = true" />
       </template>
@@ -816,6 +1082,25 @@ function printProductReport() {
       <template #footer>
         <Button type="button" label="Cancelar" outlined severity="secondary" @click="closeDialogVisible = false" />
         <Button type="button" label="Cerrar turno" severity="danger" outlined @click="closeCashSession(false)" />
+        <Button
+          type="button"
+          label="Descargar PDF"
+          icon="pi pi-download"
+          outlined
+          :loading="reportPdfDownloading === 'cierre'"
+          :disabled="!!reportPdfDownloading"
+          @click="downloadClosureReport"
+        />
+        <Button
+          type="button"
+          label="Cerrar y PDF"
+          icon="pi pi-download"
+          severity="danger"
+          outlined
+          :loading="reportPdfDownloading === 'cierre'"
+          :disabled="!!reportPdfDownloading || cashStatus === 'cerrada'"
+          @click="closeCashSessionAndDownloadPdf"
+        />
         <Button type="button" label="Cerrar e imprimir" icon="pi pi-print" severity="danger" @click="closeCashSession(true)" />
       </template>
     </Dialog>

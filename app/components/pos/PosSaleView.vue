@@ -50,6 +50,7 @@ const selectedProduct = ref<Product | null>(null)
 const productInfoOpen = ref(false)
 const checkoutOpen = ref(false)
 const receiptOpen = ref(false)
+const receiptPdfDownloading = ref(false)
 const discountDialogOpen = ref(false)
 const expandedComboIds = ref<Set<string>>(new Set())
 const saleMode = ref<SaleMode>('venta')
@@ -550,16 +551,81 @@ function printReceipt() {
   openReceiptWindow(lastReceipt.value, true)
 }
 
-function downloadReceiptPdf() {
-  if (!lastReceipt.value) {
+async function downloadReceiptPdf() {
+  if (!lastReceipt.value || receiptPdfDownloading.value) {
     return
   }
 
-  openReceiptWindow(lastReceipt.value, true)
+  const receipt = lastReceipt.value
+  const filename = `${safeFileName(receipt.mode === 'venta' ? 'nota-venta' : 'cotizacion')}-${safeFileName(receipt.number)}.pdf`
+
+  receiptPdfDownloading.value = true
+  try {
+    const response = await fetch('/api/pos/receipt/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        document: buildReceiptPdfDocument(receipt),
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('No se pudo generar el PDF.')
+    }
+
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } finally {
+    receiptPdfDownloading.value = false
+  }
 }
 
-function openReceiptWindow(receipt: SaleReceipt, autoPrint = false) {
-  const popup = window.open('', '_blank', 'width=420,height=720')
+function buildReceiptPdfDocument(receipt: SaleReceipt) {
+  return {
+    type: 'sale',
+    storeName: storeReceiptName(),
+    address: 'Av. Principal #123, Zona Central',
+    phone: 'Tel. 70000000',
+    docLabel: receipt.mode === 'venta' ? 'Nota de venta' : 'Cotización',
+    number: receipt.number,
+    dateLabel: receiptDate(receipt.date),
+    seller: receipt.seller,
+    items: receipt.items.map(line => ({
+      name: line.name,
+      quantity: line.quantity,
+      price: `Bs ${money(line.price)}`,
+      total: `Bs ${money(line.price * line.quantity)}`,
+      kind: line.kind,
+    })),
+    subtotal: `Bs ${money(receipt.subtotal)}`,
+    discount: receipt.discount > 0
+      ? {
+          label: receipt.discountLabel,
+          amount: `- Bs ${money(receipt.discount)}`,
+        }
+      : null,
+    total: `Bs ${money(receipt.total)}`,
+    paymentSummary: receiptPaymentSummary(receipt),
+    payments: receipt.paymentLines.map(line => ({
+      label: line.label.replace(' / Transferencia', ''),
+      amount: `Bs ${money(line.amount)}`,
+    })),
+    footerNote: 'Este documento no es una factura válida',
+    footerStrong: '¡Gracias por su compra!',
+  }
+}
+
+function openReceiptWindow(receipt: SaleReceipt, autoPrint = false, target = '_blank') {
+  const popup = window.open('', target, 'width=420,height=720')
 
   if (!popup) {
     return
@@ -569,7 +635,24 @@ function openReceiptWindow(receipt: SaleReceipt, autoPrint = false) {
   popup.document.close()
 }
 
-function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false) {
+function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false, screen = true) {
+  const styles = buildReceiptTicketStyles({ screen })
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(receipt.number)}</title>
+  <style>${styles}</style>
+</head>
+<body>
+  ${buildReceiptTicketMarkup(receipt)}
+  ${autoPrint ? '<script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>' : ''}
+</body>
+</html>`
+}
+
+function buildReceiptTicketMarkup(receipt: SaleReceipt) {
   const rows = receipt.items.map((line) => `
     <section class="item">
       <div class="item-main">
@@ -587,44 +670,12 @@ function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false) {
     <div><span>${escapeHtml(line.label.replace(' / Transferencia', ''))}</span><b>Bs ${money(line.amount)}</b></div>
   `).join('')
 
-  return `<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>${escapeHtml(receipt.number)}</title>
-  <style>
-    @page { size: 80mm auto; margin: 4mm; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
-    .ticket { width: 72mm; margin: 0 auto; padding: 2mm 0; }
-    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 5px; }
-    h1 { margin: 0; font-size: 14px; font-weight: 900; }
-    header p { margin: 2px 0 0; font-size: 9px; }
-    .doc { margin: 6px 0; padding: 5px; border: 1px solid #000; text-align: center; }
-    .doc span { display: block; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-    .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, monospace; }
-    .meta div, .summary div, .payment div, .item-main { display: flex; justify-content: space-between; gap: 8px; }
-    .section-title { display: flex; align-items: center; gap: 8px; margin: 7px 0 3px; color: #000; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
-    .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
-    .item { padding: 4px 0; border-bottom: 1px dashed #000; }
-    .item strong, .summary strong { font-weight: 900; }
-    .item b, .summary b, .payment b { font: 900 10px ui-monospace, monospace; white-space: nowrap; }
-    .item-meta, .meta, .payment, small { color: #111; }
-    ul { margin: 2px 0 0 8px; padding-left: 8px; color: #111; }
-    .total { margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 900; }
-    .total b { font: 900 13px ui-monospace, monospace; }
-    footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 9px; }
-    footer strong { display: block; margin-top: 3px; color: #000; }
-    @media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }
-  </style>
-</head>
-<body>
-  <main class="ticket">
-        <header>
-          <h1>${escapeHtml(storeReceiptName())}</h1>
-          <p>Av. Principal #123, Zona Central</p>
-          <p>Tel. 70000000</p>
-        </header>
+  return `<main class="ticket">
+    <header>
+      <h1>${escapeHtml(storeReceiptName())}</h1>
+      <p>Av. Principal #123, Zona Central</p>
+      <p>Tel. 70000000</p>
+    </header>
     <section class="doc">
       <span>${receipt.mode === 'venta' ? 'Nota de venta' : 'Cotización'}</span>
       <strong>${escapeHtml(receipt.number)}</strong>
@@ -650,10 +701,58 @@ function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false) {
       <em>Este documento no es una factura válida</em>
       <strong>¡Gracias por su compra!</strong>
     </footer>
-  </main>
-  ${autoPrint ? '<script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>' : ''}
-</body>
-</html>`
+  </main>`
+}
+
+function buildReceiptTicketStyles(options: { screen: boolean }) {
+  return `
+    @page { size: 80mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
+    .ticket {
+      width: 80mm;
+      margin: 0 auto;
+      padding: 5mm;
+      border: 1px solid #111;
+      background: #fff;
+      color: #000;
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      line-height: 1.25;
+    }
+    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 7px; }
+    h1 { margin: 0; font-size: 14px; font-weight: 900; }
+    header p { margin: 2px 0 0; font-size: 9px; color: #000; }
+    .doc { margin: 8px 0; padding: 6px; border: 1px solid #000; text-align: center; }
+    .doc span { display: block; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .doc small { color: #000; }
+    .meta { display: grid; gap: 3px; }
+    .meta div, .summary div, .payment div, .item-main, .total { display: flex; justify-content: space-between; gap: 8px; }
+    .section-title { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; color: #000; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
+    .item { padding: 5px 0; border-bottom: 1px dashed #000; break-inside: avoid; }
+    .item strong, .summary strong, .meta b { font-weight: 900; }
+    .item-main strong { min-width: 0; padding-right: 6px; overflow-wrap: anywhere; }
+    .item b, .summary b, .payment b, .total b { font: 900 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
+    .item-meta, .meta, .payment, small { color: #000; }
+    ul { margin: 2px 0 0 8px; padding-left: 8px; color: #000; }
+    .summary, .payment { display: grid; gap: 3px; }
+    .total { margin-top: 7px; padding-top: 7px; border-top: 2px solid #000; align-items: baseline; font-size: 13px; font-weight: 900; text-transform: uppercase; }
+    .total b { font-size: 13px; }
+    footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 9px; }
+    footer strong { display: block; margin-top: 3px; color: #000; }
+    ${options.screen ? '@media screen { body { background: #f3f4f6; padding: 16px; } .ticket { box-shadow: 0 12px 30px rgba(0,0,0,.16); } }' : ''}
+  `
+}
+
+function safeFileName(value: string) {
+  return value
+    .normalize('NFKD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[^a-zA-Z0-9-]+/g, '-')
+    .replaceAll(/^-|-$/g, '')
+    .toLowerCase()
 }
 
 function escapeHtml(value: string) {
@@ -1670,7 +1769,14 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         </div>
 
         <div class="receipt-actions__buttons">
-          <Button type="button" label="Guardar / PDF" icon="pi pi-download" @click="downloadReceiptPdf" />
+          <Button
+            type="button"
+            label="Descargar PDF"
+            icon="pi pi-download"
+            :loading="receiptPdfDownloading"
+            :disabled="receiptPdfDownloading"
+            @click="downloadReceiptPdf"
+          />
           <Button type="button" label="Imprimir ticket" icon="pi pi-print" outlined @click="printReceipt" />
         </div>
       </aside>
