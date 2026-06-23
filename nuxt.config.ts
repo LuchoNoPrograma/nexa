@@ -442,11 +442,12 @@ export default defineNuxtConfig({
     '@primevue/nuxt-module',
   ],
   icon: {
-    // Sirve los iconos desde la colección instalada localmente (@iconify-json/fluent-emoji)
-    // vía el endpoint del servidor: funciona offline en desarrollo (sin API remota de
-    // Iconify) y compila en Vercel. No usamos clientBundle/scan porque su módulo virtual
-    // (nuxt-icon-client-bundle) rompía el build en Vercel.
-    serverBundle: 'local',
+    // En producción (Vercel) servimos los iconos desde la API de Iconify ('remote'):
+    // así el build no empaqueta la colección completa de fluent-emoji (decenas de MB),
+    // que causaba OOM/SIGKILL en el contenedor de Vercel. En desarrollo usamos la
+    // colección instalada localmente (@iconify-json/fluent-emoji) para funcionar sin
+    // internet. No usamos clientBundle/scan: su módulo virtual rompía el build en Vercel.
+    serverBundle: process.env.NODE_ENV === 'production' ? 'remote' : 'local',
   },
   css: [
     '~/assets/css/main.css',
