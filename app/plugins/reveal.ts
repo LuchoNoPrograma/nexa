@@ -27,7 +27,8 @@ export default defineNuxtPlugin((nuxtApp) => {
       return {}
     },
     mounted(el: HTMLElement, binding) {
-      if (!import.meta.client || prefersReduced) {
+      // Sin JS de animación posible o IO no soportado → mostrar siempre.
+      if (!import.meta.client || prefersReduced || !io) {
         el.classList.add('is-visible')
         return
       }
@@ -39,7 +40,15 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (binding.value?.blur) el.classList.add('reveal--blur')
       const delay = binding.value?.delay
       if (delay) el.style.setProperty('--reveal-delay', `${delay}ms`)
-      io?.observe(el)
+      io.observe(el)
+      // Failsafe: si por cualquier motivo el observer no dispara, revelar igual
+      // para que el contenido NUNCA se quede invisible.
+      window.setTimeout(() => {
+        if (!el.classList.contains('is-visible')) {
+          el.classList.add('is-visible')
+          io?.unobserve(el)
+        }
+      }, 1600 + (delay || 0))
     },
     unmounted(el: HTMLElement) {
       io?.unobserve(el)

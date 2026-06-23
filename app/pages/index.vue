@@ -21,22 +21,30 @@ const socials = [
 const tools = [
   {
     title: 'Haru · Asesor 24/7',
+    icon: 'pi pi-sparkles',
+    desc: 'Tu asesor con IA: analiza tu negocio y te dice dónde actuar.',
     src: '/tools/haru-asesor.jpg',
     alt: 'Haru, el jaguar asesor de NEXA, trabajando frente a la computadora en una oficina',
   },
   {
     title: 'Finanzas',
+    icon: 'pi pi-wallet',
+    desc: 'Controla ingresos, gastos y utilidad neta para saber cuánto ganas de verdad.',
     src: '/tools/finanzas.jpg',
     alt: 'Billetes, monedas y un cuaderno de cuentas de un pequeño negocio',
   },
   {
     title: 'Marketing y ventas',
+    icon: 'pi pi-megaphone',
+    desc: 'Registra tus ventas e impulsa tu negocio con ideas de promoción listas para usar.',
     src: '/tools/marketing.jpg',
     alt: 'Teléfono mostrando íconos de redes sociales para promocionar un negocio',
     pos: '50% 18%',
   },
   {
     title: 'Inventario',
+    icon: 'pi pi-box',
+    desc: 'Lleva el control de tus productos y recibe alertas cuando algo está por agotarse.',
     src: '/tools/inventario.jpg',
     alt: 'Estantería de tienda con productos ordenados para control de inventario',
   },
@@ -78,15 +86,20 @@ const tools = [
     <!-- Herramientas para crecer -->
     <section id="herramientas" class="mx-auto w-[min(1240px,calc(100%-32px))] py-20">
       <h2 class="section-title text-center" v-reveal>Herramientas para crecer</h2>
+      <p class="section-lead mx-auto mt-4 max-w-2xl text-center" v-reveal="{ delay: 80 }">
+        Todo lo que tu negocio necesita en un solo lugar: vende, controla tu inventario, ordena tus finanzas y haz crecer tu marca con la ayuda de Haru.
+      </p>
 
-      <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div v-for="(tool, i) in tools" :key="tool.title" v-reveal="{ variant: 'scale', delay: i * 120, blur: true }">
+      <div class="mt-12 tools-grid">
+        <div v-for="tool in tools" :key="tool.title">
           <article class="grow-card">
             <img :src="tool.src" :alt="tool.alt" class="grow-card__img" :style="tool.pos ? { objectPosition: tool.pos } : null" loading="lazy" />
             <div class="grow-card__scrim" />
+            <span v-if="tool.icon" class="grow-card__icon"><i :class="tool.icon" /></span>
             <div class="grow-card__body">
               <h3 class="grow-card__title font-display">{{ tool.title }}</h3>
-              <a href="#" class="grow-card__link">Explorar<i class="pi pi-arrow-right text-xs" /></a>
+              <p v-if="tool.desc" class="grow-card__desc">{{ tool.desc }}</p>
+              <NuxtLink to="/registro" class="grow-card__link">Explorar<i class="pi pi-arrow-right text-xs" /></NuxtLink>
             </div>
           </article>
         </div>
@@ -381,6 +394,23 @@ const tools = [
   font-weight: 600;
 }
 /* ---- Tarjetas "Herramientas para crecer" ---- */
+/* Grid propio: evita el choque con PrimeFlex (.grid { display:flex }) */
+.tools-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .tools-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .tools-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .grow-card {
   position: relative;
   overflow: hidden;
@@ -408,7 +438,27 @@ const tools = [
 .grow-card__scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 35%, rgba(3, 26, 11, 0.85) 100%);
+  background: linear-gradient(180deg, rgba(3, 26, 11, 0.05) 20%, rgba(3, 26, 11, 0.55) 55%, rgba(3, 26, 11, 0.94) 100%);
+}
+.grow-card__icon {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 1.1rem;
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+.grow-card:hover .grow-card__icon {
+  background: rgba(53, 197, 92, 0.9);
+  transform: scale(1.06);
 }
 .grow-card__body {
   position: absolute;
@@ -420,6 +470,12 @@ const tools = [
   font-size: 1.05rem;
   font-weight: 800;
   line-height: 1.2;
+}
+.grow-card__desc {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
 }
 .grow-card__link {
   display: inline-flex;
