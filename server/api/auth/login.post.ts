@@ -64,7 +64,12 @@ export default defineEventHandler(async (event) => {
 
   const user = userResult.rows[0]
 
-  if (!user || !(await verifyPassword(password, user.password_hash))) {
+  if (!user) {
+    recordLoginFailure(rateLimitKey)
+    throw createError({ statusCode: 404, statusMessage: 'No existe este usuario.' })
+  }
+
+  if (!(await verifyPassword(password, user.password_hash))) {
     recordLoginFailure(rateLimitKey)
     throw createError({ statusCode: 401, statusMessage: 'Credenciales invalidas.' })
   }

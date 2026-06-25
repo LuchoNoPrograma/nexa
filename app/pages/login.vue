@@ -18,6 +18,7 @@ const form = reactive({
 const showPassword = ref(false)
 const loading = ref(false)
 const authError = ref('')
+const authErrorKind = ref<'not_found' | 'credentials' | ''>('')
 const REMEMBER_KEY = 'nexa-login-remember'
 const sessionStore = useSessionStore()
 
@@ -33,6 +34,7 @@ onMounted(async () => {
 
 async function onSubmit() {
   authError.value = ''
+  authErrorKind.value = ''
   loading.value = true
 
   try {
@@ -53,8 +55,17 @@ async function onSubmit() {
 
     await sessionStore.load({ force: true })
     await navigateTo('/pos/inicio')
-  } catch {
-    authError.value = 'Credenciales inválidas. Verifica tu correo, CI o celular y contraseña.'
+  } catch (error) {
+    const fetchError = error as { statusCode?: number; data?: { statusCode?: number } }
+    const statusCode = Number(fetchError.statusCode ?? fetchError.data?.statusCode ?? 0)
+
+    if (statusCode === 404) {
+      authErrorKind.value = 'not_found'
+      authError.value = 'No existe este usuario.'
+    } else {
+      authErrorKind.value = 'credentials'
+      authError.value = 'Credenciales inválidas. Verifica tu correo, CI o celular y contraseña.'
+    }
   } finally {
     loading.value = false
   }
@@ -158,10 +169,16 @@ async function onSubmit() {
             <a href="#recuperar">¿Olvidaste tu contraseña?</a>
           </div>
 
-          <p v-if="authError" class="login-error" role="alert">
+          <p v-if="authError && authErrorKind !== 'not_found'" class="login-error" role="alert">
             <i class="pi pi-exclamation-triangle" aria-hidden="true" />
             <span>{{ authError }}</span>
           </p>
+
+          <div v-else-if="authErrorKind === 'not_found'" class="login-error login-error--action" role="alert">
+            <i class="pi pi-user-times" aria-hidden="true" />
+            <span>No existe este usuario.</span>
+            <NuxtLink to="/registro">Regístrate aquí</NuxtLink>
+          </div>
 
           <Button
             type="submit"
@@ -188,10 +205,6 @@ async function onSubmit() {
             <button type="button" class="login-social__btn" aria-label="Continuar con Google">
               <i class="pi pi-google" aria-hidden="true" />
               <span>Google</span>
-            </button>
-            <button type="button" class="login-social__btn" aria-label="Continuar con Facebook">
-              <i class="pi pi-facebook" aria-hidden="true" />
-              <span>Facebook</span>
             </button>
           </div>
         </form>
@@ -501,6 +514,28 @@ async function onSubmit() {
   font-weight: 700;
 }
 
+.login-error--action {
+  flex-wrap: wrap;
+}
+
+.login-error--action a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(159, 18, 57, 0.28);
+  border-radius: 9px;
+  color: #7f1d1d;
+  background: #ffffff;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.login-error--action a:hover {
+  border-color: rgba(159, 18, 57, 0.45);
+  background: #ffe4e6;
+}
+
 .login-submit {
   display: inline-flex !important;
   align-items: center;
@@ -549,7 +584,7 @@ async function onSubmit() {
 
 .login-social {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -579,12 +614,8 @@ async function onSubmit() {
   font-size: 1.1rem;
 }
 
-.login-social__btn:first-child i {
+.login-social__btn i {
   color: #ea4335;
-}
-
-.login-social__btn:last-child i {
-  color: #1877f2;
 }
 
 .login-register {
