@@ -317,16 +317,10 @@ async function startQuote() {
 
   saleMode.value = 'cotizacion'
 
-  const { default: Swal } = await import('sweetalert2')
-  void Swal.fire({
-    toast: true,
-    position: 'top-end',
-    icon: 'info',
-    title: 'Estás cotizando',
-    text: 'No se cobrará. Agrega productos y guarda el presupuesto.',
-    showConfirmButton: false,
-    timer: 3200,
-    timerProgressBar: true,
+  void notificarExito({
+    icono: 'info',
+    titulo: 'Estás cotizando',
+    texto: 'No se cobrará. Agrega productos y guarda el presupuesto.',
   })
 
   if (window.matchMedia('(max-width: 760px)').matches) {

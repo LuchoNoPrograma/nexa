@@ -432,9 +432,23 @@ function resetForm() {
   catalogError.value = ''
 }
 
+function denyCatalogAction(message: string) {
+  catalogError.value = message
+  void notificarPermiso(message)
+  return false
+}
+
+function requireCatalogManage(message: string) {
+  return canManageProducts.value || denyCatalogAction(message)
+}
+
+async function notifyCatalogValidation(titulo: string, message: string, icono: 'info' | 'warning' = 'info') {
+  catalogError.value = message
+  await notificarValidacion({ titulo, texto: message, icono })
+}
+
 function openCreateProduct() {
-  if (!canManageProducts.value) {
-    catalogError.value = 'No autorizado para registrar productos. Pide acceso de Inventario o Administrador.'
+  if (!requireCatalogManage('No autorizado para registrar productos. Pide acceso de Inventario o Administrador.')) {
     return
   }
 
@@ -447,8 +461,7 @@ function openCreateProduct() {
 }
 
 function openCreateInternalItem() {
-  if (!canManageProducts.value) {
-    catalogError.value = 'No autorizado para registrar insumos. Pide acceso de Inventario o Administrador.'
+  if (!requireCatalogManage('No autorizado para registrar insumos. Pide acceso de Inventario o Administrador.')) {
     return
   }
 
@@ -632,8 +645,7 @@ function removeVariant(index: number) {
 }
 
 function openCreateCategory(fromProduct = false) {
-  if (!canManageProducts.value) {
-    catalogError.value = 'No autorizado para registrar categorías. Pide acceso de Inventario o Administrador.'
+  if (!requireCatalogManage('No autorizado para registrar categorías. Pide acceso de Inventario o Administrador.')) {
     return
   }
 
@@ -653,8 +665,7 @@ function openEditProduct(product: CatalogProduct | null) {
   if (!product) {
     return
   }
-  if (!canManageProducts.value) {
-    catalogError.value = 'No autorizado para editar productos. Pide acceso de Inventario o Administrador.'
+  if (!requireCatalogManage('No autorizado para editar productos. Pide acceso de Inventario o Administrador.')) {
     return
   }
 
@@ -712,8 +723,7 @@ function openStockAdjustment(product: CatalogProduct | null) {
   if (!product || product.kind === 'servicio') {
     return
   }
-  if (!canManageProducts.value) {
-    catalogError.value = 'No autorizado para ajustar stock. Pide acceso de Inventario o Administrador.'
+  if (!requireCatalogManage('No autorizado para ajustar stock. Pide acceso de Inventario o Administrador.')) {
     return
   }
 
@@ -731,8 +741,7 @@ function openUseInternalItem(product: CatalogProduct | null) {
   if (!product || !isInternalItem(product)) {
     return
   }
-  if (!canManageProducts.value) {
-    catalogError.value = 'No autorizado para usar insumos. Pide acceso de Inventario o Administrador.'
+  if (!requireCatalogManage('No autorizado para usar insumos. Pide acceso de Inventario o Administrador.')) {
     return
   }
 
@@ -839,25 +848,14 @@ async function refreshCatalog() {
   })
 }
 
-function apiErrorMessage(error: unknown, fallback: string) {
-  const apiError = error as {
-    data?: { statusMessage?: string; message?: string }
-    statusMessage?: string
-    message?: string
-  }
-
-  return apiError.data?.statusMessage
-    || apiError.data?.message
-    || apiError.statusMessage
-    || apiError.message
-    || fallback
-}
-
 async function saveProduct() {
   catalogError.value = ''
 
   if (!form.name.trim()) {
-    catalogError.value = internalItemMode.value ? 'El nombre del insumo es obligatorio.' : 'El nombre del producto es obligatorio.'
+    await notifyCatalogValidation(
+      'Falta el nombre',
+      internalItemMode.value ? 'El nombre del insumo es obligatorio.' : 'El nombre del producto es obligatorio.',
+    )
     return
   }
 
@@ -941,8 +939,16 @@ async function saveProduct() {
     internalDialogOpen.value = false
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
+    await notificarExito({
+      titulo: internalItemMode.value ? 'Insumo guardado' : 'Producto guardado',
+      texto: internalItemMode.value ? 'El insumo quedó listo para controlar su stock.' : 'El producto quedó listo en el catálogo.',
+    })
   } catch (error) {
-    catalogError.value = apiErrorMessage(error, 'No se pudo guardar el producto.')
+    catalogError.value = await notificarErrorApi(
+      internalItemMode.value ? 'No se pudo guardar el insumo' : 'No se pudo guardar el producto',
+      error,
+      'No se pudo guardar el producto.',
+    )
   } finally {
     saving.value = false
   }
@@ -952,7 +958,7 @@ async function saveCategory() {
   catalogError.value = ''
 
   if (!categoryForm.name.trim()) {
-    catalogError.value = 'La categoría requiere un nombre.'
+    await notifyCatalogValidation('Falta el nombre', 'La categoría requiere un nombre.')
     return
   }
 
@@ -985,8 +991,12 @@ async function saveCategory() {
     categoryDialogFromProduct.value = false
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
+    await notificarExito({
+      titulo: 'Categoría guardada',
+      texto: 'Ya puedes usarla para organizar productos e insumos.',
+    })
   } catch (error) {
-    catalogError.value = apiErrorMessage(error, 'No se pudo guardar la categoría.')
+    catalogError.value = await notificarErrorApi('No se pudo guardar la categoría', error, 'No se pudo guardar la categoría.')
   } finally {
     saving.value = false
   }
@@ -1000,12 +1010,27 @@ async function saveStockAdjustment() {
   catalogError.value = ''
 
   if (stockAmount.value <= 0 && stockMode.value !== 'fijar') {
-    catalogError.value = 'La cantidad debe ser mayor a cero.'
+    await notifyCatalogValidation('Cantidad inválida', 'La cantidad debe ser mayor a cero.')
     return
   }
 
   if (stockMode.value === 'restar' && stockAmount.value > stockProduct.value.stock) {
-    catalogError.value = 'El ajuste no puede dejar stock negativo.'
+    await notifyCatalogValidation('Stock insuficiente', 'El ajuste no puede dejar stock negativo.', 'warning')
+    return
+  }
+
+  const internalUse = isInternalItem(stockProduct.value) && stockMode.value === 'restar'
+  const confirmed = await confirmarAccion({
+    titulo: internalUse ? 'Usar insumo' : 'Confirmar ajuste',
+    texto: internalUse
+      ? `Se descontará ${stockAmount.value} de ${stockProduct.value.name}.`
+      : `El stock de ${stockProduct.value.name} quedará en ${stockResult.value}.`,
+    confirmar: internalUse ? 'Sí, usar' : 'Confirmar',
+    cancelar: 'Cancelar',
+    peligro: stockMode.value === 'restar',
+  })
+
+  if (!confirmed) {
     return
   }
 
@@ -1026,8 +1051,12 @@ async function saveStockAdjustment() {
     stockDialogOpen.value = false
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
+    await notificarExito({
+      titulo: internalUse ? 'Insumo descontado' : 'Stock actualizado',
+      texto: internalUse ? 'El consumo interno quedó registrado.' : 'El movimiento de inventario quedó registrado.',
+    })
   } catch (error) {
-    catalogError.value = apiErrorMessage(error, 'No se pudo ajustar el stock.')
+    catalogError.value = await notificarErrorApi('No se pudo ajustar el stock', error, 'No se pudo ajustar el stock.')
   } finally {
     saving.value = false
   }
@@ -1047,8 +1076,8 @@ async function openStockHistory(product: CatalogProduct | null) {
   try {
     const response = await $fetch<{ movements: StockMovement[] }>(`/api/pos/catalog/products/${product.id}/stock`)
     historyRows.value = response.movements
-  } catch {
-    catalogError.value = 'No se pudo cargar el historial de stock.'
+  } catch (error) {
+    catalogError.value = await notificarErrorApi('No se pudo cargar el historial', error, 'No se pudo cargar el historial de stock.')
   } finally {
     historyLoading.value = false
   }
@@ -1162,7 +1191,7 @@ async function openStockHistory(product: CatalogProduct | null) {
     <section class="product-list-panel" aria-label="Lista de productos">
       <header class="product-list-head">
         <strong>{{ statsLine }}</strong>
-        <span>Precio, costo y stock listos para venta</span>
+        <span>{{ loading ? 'Cargando tabla de productos e insumos...' : 'Precio, costo y stock listos para operar' }}</span>
       </header>
 
       <DataTable
@@ -1193,7 +1222,13 @@ async function openStockHistory(product: CatalogProduct | null) {
             </div>
           </div>
         </template>
-        <template #loading>Cargando productos...</template>
+        <template #loading>
+          <div class="table-loading-state">
+            <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+            <strong>Cargando tabla</strong>
+            <span>Productos, insumos, costos y stock se están actualizando.</span>
+          </div>
+        </template>
 
         <Column header="Producto" style="min-width: 18rem">
           <template #body="{ data }">
@@ -1905,6 +1940,13 @@ async function openStockHistory(product: CatalogProduct | null) {
     >
       <DataTable :value="historyRows" :loading="historyLoading" size="small" class="history-table">
         <template #empty>No hay movimientos registrados para este producto.</template>
+        <template #loading>
+          <div class="table-loading-state is-compact">
+            <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+            <strong>Cargando historial</strong>
+            <span>Estamos buscando los movimientos de stock.</span>
+          </div>
+        </template>
         <Column header="Fecha" style="min-width: 9.5rem">
           <template #body="{ data }">
             <span class="cell-muted">{{ formatDate(data.createdAt) }}</span>
@@ -2316,6 +2358,37 @@ async function openStockHistory(product: CatalogProduct | null) {
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.table-loading-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 44px 16px;
+  color: #64748b;
+  text-align: center;
+}
+
+.table-loading-state.is-compact {
+  padding: 30px 16px;
+}
+
+.table-loading-state i {
+  color: var(--catalog-accent);
+  font-size: 1.65rem;
+}
+
+.table-loading-state strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.table-loading-state span {
+  max-width: 36ch;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 /* Botones blancos nítidos (Escanear, Importar, Editar, Stock) como el mockup */
