@@ -98,6 +98,18 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const existingBusiness = await pool.query(
+    'select 1 from tienda where lower(trim(nombre)) = lower(trim($1)) limit 1',
+    [businessName],
+  )
+  if (existingBusiness.rowCount) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Ya existe un negocio con ese nombre en NEXA. Usa un nombre que permita distinguirlo.',
+      data: { reason: 'store_name_already_registered' },
+    })
+  }
+
   const passwordHash = await hashPassword(password)
   const slug = await uniqueStoreSlug(businessName)
   const token = createSessionToken()

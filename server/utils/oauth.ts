@@ -181,8 +181,8 @@ async function createGoogleUserWithStore(profile: GoogleProfile): Promise<string
     const slug = await uniqueStoreSlug(client, businessName)
     const storeResult = await client.query<{ id: string }>(
       `
-        insert into tienda (owner_id, nombre, slug, ciudad, departamento, pais, plan, activo)
-        values ($1, $2, $3, 'Cobija', 'Pando', 'Bolivia', 'demo', true)
+        insert into tienda (owner_id, nombre, slug, ciudad, departamento, pais, plan, activo, perfil_negocio_confirmado)
+        values ($1, $2, $3, 'Cobija', 'Pando', 'Bolivia', 'demo', true, false)
         returning id
       `,
       [userId, businessName, slug],

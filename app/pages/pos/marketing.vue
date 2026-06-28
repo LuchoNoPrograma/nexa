@@ -148,38 +148,6 @@ const productos = ref<ProductoOpcion[]>([])
 const cargandoProductos = ref(false)
 const productoElegido = ref<string>('')
 const comboIds = ref<string[]>([])
-const configDialogVisible = ref(false)
-const guardandoConfig = ref(false)
-const configError = ref('')
-const configForm = reactive({
-  countryDialCode: '+591',
-  phone: '',
-  ubicacion: '',
-})
-
-const marketingDialCodes = ['+591', '+51', '+55']
-
-function splitMarketingPhone(value?: string | null) {
-  const rawValue = (value ?? '').trim()
-  const cleanValue = rawValue.replace(/\D/g, '')
-  const dialCode = marketingDialCodes
-    .map(code => code.replace(/\D/g, ''))
-    .sort((a, b) => b.length - a.length)
-    .find(code => cleanValue.startsWith(code))
-
-  if (dialCode) {
-    return {
-      countryDialCode: `+${dialCode}`,
-      phone: cleanValue.slice(dialCode.length),
-    }
-  }
-
-  return {
-    countryDialCode: '+591',
-    phone: cleanValue || rawValue,
-  }
-}
-
 const marketingConfig = computed(() => data.value?.marketingConfig ?? {
   contacto: null,
   ubicacion: null,
@@ -193,54 +161,22 @@ const necesitaConfigMarketing = computed(() => {
   return !config.confirmado || !config.contacto?.trim() || !config.ubicacion?.trim()
 })
 
-function syncConfigForm() {
-  const config = marketingConfig.value
-  const phoneData = splitMarketingPhone(config.contacto)
-  configForm.countryDialCode = phoneData.countryDialCode
-  configForm.phone = phoneData.phone
-  configForm.ubicacion = config.ubicacion ?? ''
-}
-
-watch(marketingConfig, () => {
-  if (!configDialogVisible.value) {
-    syncConfigForm()
-  }
-}, { immediate: true })
-
 onMounted(() => {
   if (marketingStatus.value === 'success' && necesitaConfigMarketing.value) {
-    configDialogVisible.value = true
+    pedirConfigMarketing()
   }
+  window.addEventListener('nexa:business-profile-saved', refreshMarketingProfile)
 })
 
 function pedirConfigMarketing() {
-  syncConfigForm()
-  configError.value = ''
-  configDialogVisible.value = true
+  window.dispatchEvent(new CustomEvent('nexa:open-business-profile'))
 }
 
-async function guardarConfigMarketing() {
-  configError.value = ''
-  guardandoConfig.value = true
-  try {
-    await $fetch('/api/pos/marketing/config', {
-      method: 'PUT',
-      body: {
-        countryDialCode: configForm.countryDialCode,
-        phone: configForm.phone,
-        ubicacion: configForm.ubicacion,
-      },
-    })
-    await refresh()
-    configDialogVisible.value = false
-    flash('Datos públicos guardados')
-  } catch (error: unknown) {
-    const dataError = (error as { data?: { statusMessage?: string } })?.data
-    configError.value = dataError?.statusMessage ?? 'No se pudo guardar la configuración.'
-  } finally {
-    guardandoConfig.value = false
-  }
+function refreshMarketingProfile() {
+  void refresh()
 }
+
+onBeforeUnmount(() => window.removeEventListener('nexa:business-profile-saved', refreshMarketingProfile))
 
 async function cargarProductos() {
   if (productos.value.length || cargandoProductos.value) {
@@ -1038,70 +974,6 @@ function aplicarReco(reco: Recomendacion) {
       </div>
     </Dialog>
 
-    <Dialog
-      v-model:visible="configDialogVisible"
-      modal
-      :closable="!guardandoConfig && !necesitaConfigMarketing"
-      :close-on-escape="!guardandoConfig && !necesitaConfigMarketing"
-      :dismissable-mask="false"
-      class="marketing-config-dialog"
-    >
-      <form class="marketing-config" @submit.prevent="guardarConfigMarketing">
-        <span class="marketing-config__icon"><i class="pi pi-megaphone" aria-hidden="true" /></span>
-        <div class="marketing-config__copy">
-          <span class="marketing-config__kicker">Datos para publicidad</span>
-          <h2>Confirma el contacto del negocio</h2>
-          <p>Usaremos estos datos en las imágenes y textos de marketing. Deben ser públicos del negocio, no necesariamente tus datos personales.</p>
-        </div>
-
-        <div class="marketing-config__field">
-          <label for="marketing-phone">Contacto comercial</label>
-          <SharedPhoneCountryInput
-            v-model:country-dial-code="configForm.countryDialCode"
-            v-model:phone="configForm.phone"
-            input-id="marketing-phone"
-            name="marketingPhone"
-            autocomplete="tel"
-            required
-            :disabled="guardandoConfig"
-          />
-        </div>
-
-        <div class="marketing-config__field">
-          <label for="marketing-location">Ubicación pública</label>
-          <InputText
-            id="marketing-location"
-            v-model="configForm.ubicacion"
-            fluid
-            maxlength="160"
-            placeholder="Ej: Av. Principal, zona Central"
-            :disabled="guardandoConfig"
-          />
-        </div>
-
-        <p v-if="configError" class="marketing-config__error" role="alert">
-          <i class="pi pi-exclamation-triangle" aria-hidden="true" />
-          {{ configError }}
-        </p>
-
-        <div class="marketing-config__actions">
-          <button
-            v-if="!necesitaConfigMarketing"
-            type="button"
-            class="btn-ghost"
-            :disabled="guardandoConfig"
-            @click="configDialogVisible = false"
-          >
-            Cancelar
-          </button>
-          <button type="submit" class="btn-primary" :disabled="guardandoConfig">
-            <i :class="guardandoConfig ? 'pi pi-spin pi-spinner' : 'pi pi-check'" aria-hidden="true" />
-            {{ guardandoConfig ? 'Guardando…' : 'Guardar datos' }}
-          </button>
-        </div>
-      </form>
-    </Dialog>
-
     <!-- Aviso flotante de acciones -->
     <Transition name="flash">
       <div v-if="flashMsg" class="flash" role="status">{{ flashMsg }}</div>
@@ -1386,102 +1258,6 @@ function aplicarReco(reco: Recomendacion) {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-:global(.marketing-config-dialog.p-dialog) {
-  width: min(92vw, 470px);
-  border-radius: 20px;
-  overflow: hidden;
-}
-
-:global(.marketing-config-dialog .p-dialog-header) {
-  display: none;
-}
-
-:global(.marketing-config-dialog .p-dialog-content) {
-  padding: 0;
-  border-radius: 20px;
-  overflow: hidden;
-}
-
-.marketing-config {
-  display: grid;
-  gap: 16px;
-  padding: 26px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(242, 194, 0, 0.16), transparent 40%),
-    #fff;
-}
-
-.marketing-config__icon {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
-  background: #fff8d7;
-  color: #9c7100;
-  font-size: 1.7rem;
-}
-
-.marketing-config__copy {
-  display: grid;
-  gap: 7px;
-}
-
-.marketing-config__kicker {
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #9c7100;
-}
-
-.marketing-config h2 {
-  margin: 0;
-  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  font-size: 1.16rem;
-  font-weight: 900;
-  line-height: 1.18;
-  color: #071327;
-}
-
-.marketing-config p {
-  margin: 0;
-  font-size: 0.84rem;
-  font-weight: 650;
-  line-height: 1.45;
-  color: #52615a;
-}
-
-.marketing-config__field {
-  display: grid;
-  gap: 7px;
-}
-
-.marketing-config__field label,
-.marketing-config__field span {
-  font-size: 0.82rem;
-  font-weight: 850;
-  color: #26372c;
-}
-
-.marketing-config__error {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #fff1f1;
-  color: #ad1f2b;
-}
-
-.marketing-config__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 2px;
 }
 
 /* --- Estado vacío --- */

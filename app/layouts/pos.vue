@@ -67,6 +67,10 @@ function toggleMenu() {
   }
 }
 
+function openBusinessProfile() {
+  window.dispatchEvent(new CustomEvent('nexa:open-business-profile'))
+}
+
 function restoreSidebarWidth() {
   setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)
 }
@@ -236,7 +240,7 @@ function rutaPermitida(path: string) {
 const activeTitle = computed(() => String(route.meta.posTitle ?? 'Ventas'))
 
 const userInitials = computed(() => {
-  const name = session.value?.name?.trim()
+  const name = session.value?.store?.trim()
   if (!name) {
     return 'NX'
   }
@@ -565,13 +569,13 @@ function selectModule(to?: string) {
           </span>
           <Button type="button" text rounded icon="pi pi-bell" class="topbar-icon-btn" v-tooltip.bottom="{ value: 'Notificaciones', showDelay: 150 }" aria-label="Notificaciones" />
           <Button type="button" text rounded icon="pi pi-question-circle" class="topbar-icon-btn" v-tooltip.bottom="{ value: 'Ayuda', showDelay: 150 }" aria-label="Ayuda" />
-          <div class="user-chip">
+          <button type="button" class="user-chip" title="Configurar perfil del negocio" @click="openBusinessProfile">
             <span class="user-chip__avatar">{{ userInitials }}</span>
             <span class="user-chip__meta">
-              <strong>{{ session?.name }}</strong>
+              <strong>{{ session?.store }}</strong>
               <small v-if="session?.role">{{ session.role }}</small>
             </span>
-          </div>
+          </button>
           <Button type="button" text rounded icon="pi pi-sign-out" class="topbar-icon-btn" v-tooltip.bottom="{ value: 'Cerrar sesión', showDelay: 150 }" aria-label="Cerrar sesión" @click="logout" />
         </div>
       </header>
@@ -590,6 +594,8 @@ function selectModule(to?: string) {
         </Transition>
       </div>
     </section>
+
+    <PosBusinessProfileDialog />
 
     <!-- Bottom navigation (mobile only): Inicio · Caja · [Ventas] · Inventario · Más -->
     <nav class="pos-bottom-nav" aria-label="Accesos rápidos">
@@ -1286,7 +1292,12 @@ function selectModule(to?: string) {
   border-radius: 999px;
   background: #f1f5f2;
   border: 1px solid #e4ebe6;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
+
+.user-chip:hover { border-color: #b9d0c1; background: #eaf6ed; }
 
 .user-chip__avatar {
   display: grid;

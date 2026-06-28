@@ -12,6 +12,7 @@ export type CurrentSession = {
   defaultMargin: number | null
   onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
   tipoNegocio: 'produccion' | 'comercial' | 'servicios' | null
+  perfilNegocioConfirmado: boolean
   roles: string[]
   permisos: string[]
 }
@@ -38,7 +39,8 @@ export async function getCurrentSession(event: Parameters<typeof getCookie>[0]):
         t.id as "storeId",
         t.margen_default::float as "defaultMargin",
         t.onboarding_diagnostico as "onboardingDiagnostico",
-        t.tipo_negocio as "tipoNegocio"
+        t.tipo_negocio as "tipoNegocio",
+        coalesce(t.perfil_negocio_confirmado, true) as "perfilNegocioConfirmado"
       from sesion s
       join usuario u on u.id = s.usuario_id
       left join usuario_rol platform_user_role on platform_user_role.usuario_id = u.id and platform_user_role.tienda_id is null

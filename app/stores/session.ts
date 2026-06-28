@@ -11,6 +11,7 @@ export type PosSession = {
   defaultMargin: number | null
   onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
   tipoNegocio: 'produccion' | 'comercial' | 'servicios' | null
+  perfilNegocioConfirmado: boolean
   roles: string[]
   permisos: string[]
 }
