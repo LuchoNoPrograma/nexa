@@ -50,17 +50,24 @@ const countryOptions = computed(() => {
 
 function splitFullPhone(value?: string) {
   const cleanValue = (value ?? '').trim()
+  const digitsValue = onlyPhoneDigits(cleanValue)
   const defaultCountry = countryOptions.value[0] ?? fallbackCountries[0]!
   const country = [...countryOptions.value]
     .sort((a, b) => b.dialCode.length - a.dialCode.length)
-    .find(option => cleanValue.startsWith(option.dialCode))
+    .find((option) => {
+      const dialDigits = onlyPhoneDigits(option.dialCode)
+      return cleanValue.startsWith(option.dialCode) || digitsValue.startsWith(dialDigits)
+    })
     ?? defaultCountry
+  const dialDigits = onlyPhoneDigits(country.dialCode)
 
   return {
     dialCode: country.dialCode,
     phone: cleanValue.startsWith(country.dialCode)
       ? cleanValue.slice(country.dialCode.length).trim()
-      : cleanValue,
+      : digitsValue.startsWith(dialDigits)
+        ? digitsValue.slice(dialDigits.length)
+        : cleanValue,
   }
 }
 
@@ -73,6 +80,8 @@ function countryByDialCode(value?: string) {
     ?? countryOptions.value[0]
     ?? fallbackCountries[0]!
 }
+
+const phonePlaceholder = computed(() => countryByDialCode(dialCodeModel.value).example)
 
 const dialCodeModel = computed({
   get() {
@@ -89,8 +98,15 @@ const phoneModel = computed({
     return props.phone ?? splitFullPhone(props.modelValue).phone
   },
   set(value: string) {
-    emit('update:phone', value)
-    emit('update:modelValue', value.trim() ? `${dialCodeModel.value}${onlyPhoneDigits(value)}` : '')
+    const splitValue = splitFullPhone(value)
+    const phone = splitValue.phone
+
+    if (splitValue.dialCode !== dialCodeModel.value) {
+      emit('update:countryDialCode', splitValue.dialCode)
+    }
+
+    emit('update:phone', phone)
+    emit('update:modelValue', phone.trim() ? `${splitValue.dialCode}${onlyPhoneDigits(phone)}` : '')
   },
 })
 </script>
@@ -128,6 +144,9 @@ const phoneModel = computed({
       v-model="phoneModel"
       class="phone-country-input__number"
       type="tel"
+      inputmode="tel"
+      pattern="[0-9 ]*"
+      :placeholder="phonePlaceholder"
       :name="name"
       :autocomplete="autocomplete"
       :required="required"

@@ -1054,8 +1054,8 @@ function aplicarReco(reco: Recomendacion) {
           <p>Usaremos estos datos en las imágenes y textos de marketing. Deben ser públicos del negocio, no necesariamente tus datos personales.</p>
         </div>
 
-        <label class="marketing-config__field">
-          <span>Contacto comercial</span>
+        <div class="marketing-config__field">
+          <label for="marketing-phone">Contacto comercial</label>
           <SharedPhoneCountryInput
             v-model:country-dial-code="configForm.countryDialCode"
             v-model:phone="configForm.phone"
@@ -1065,18 +1065,19 @@ function aplicarReco(reco: Recomendacion) {
             required
             :disabled="guardandoConfig"
           />
-        </label>
+        </div>
 
-        <label class="marketing-config__field">
-          <span>Ubicación pública</span>
+        <div class="marketing-config__field">
+          <label for="marketing-location">Ubicación pública</label>
           <InputText
+            id="marketing-location"
             v-model="configForm.ubicacion"
             fluid
             maxlength="160"
             placeholder="Ej: Av. Principal, zona Central"
             :disabled="guardandoConfig"
           />
-        </label>
+        </div>
 
         <p v-if="configError" class="marketing-config__error" role="alert">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />
@@ -1458,6 +1459,7 @@ function aplicarReco(reco: Recomendacion) {
   gap: 7px;
 }
 
+.marketing-config__field label,
 .marketing-config__field span {
   font-size: 0.82rem;
   font-weight: 850;

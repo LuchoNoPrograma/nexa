@@ -1163,51 +1163,60 @@ async function openStockHistory(product: CatalogProduct | null) {
     </section>
 
     <section class="catalog-toolbar" aria-label="Búsqueda y filtros">
-      <IconField class="catalog-search">
-        <InputIcon>
-          <i class="pi pi-search" />
-        </InputIcon>
-        <InputText v-model="searchTerm" placeholder="Buscar producto, SKU o código de barras" />
-      </IconField>
+      <label class="filter-field catalog-search-field">
+        <span>Buscar</span>
+        <IconField class="catalog-search">
+          <InputIcon>
+            <i class="pi pi-search" />
+          </InputIcon>
+          <InputText v-model="searchTerm" placeholder="Producto, SKU o código de barras" />
+        </IconField>
+      </label>
 
       <div class="filter-composer">
         <div class="filter-composer__main">
-          <Select
-            v-model="activeChip"
-            :options="productFilters"
-            optionLabel="label"
-            optionValue="key"
-            class="filter-type-select"
-            aria-label="Filtrar por tipo"
-          />
-          <Select
-            v-model="selectedCategoryId"
-            :options="categoryFilters"
-            optionLabel="name"
-            optionValue="id"
-            filter
-            class="filter-category-select"
-            aria-label="Filtrar por categoría"
-          >
-            <template #option="{ option }">
-              <div class="filter-option" :class="{ 'is-action': option.action === 'create' }">
-                <i :class="option.action === 'create' ? 'pi pi-plus' : 'pi pi-folder'" aria-hidden="true" />
-                <span>{{ option.name }}</span>
-                <small v-if="option.count !== null">{{ option.count }}</small>
-              </div>
-            </template>
-            <template #emptyfilter>
-              <button
-                type="button"
-                class="filter-empty-action"
-                :disabled="!canManageProducts"
-                @click.stop.prevent="openCreateCategory()"
-              >
-                <i class="pi pi-plus" aria-hidden="true" />
-                <span>No se encontraron categorías. Crear categoría</span>
-              </button>
-            </template>
-          </Select>
+          <label class="filter-field">
+            <span>Tipo</span>
+            <Select
+              v-model="activeChip"
+              :options="productFilters"
+              optionLabel="label"
+              optionValue="key"
+              class="filter-type-select"
+              aria-label="Filtrar por tipo"
+            />
+          </label>
+          <label class="filter-field">
+            <span>Categoría</span>
+            <Select
+              v-model="selectedCategoryId"
+              :options="categoryFilters"
+              optionLabel="name"
+              optionValue="id"
+              filter
+              class="filter-category-select"
+              aria-label="Filtrar por categoría"
+            >
+              <template #option="{ option }">
+                <div class="filter-option" :class="{ 'is-action': option.action === 'create' }">
+                  <i :class="option.action === 'create' ? 'pi pi-plus' : 'pi pi-folder'" aria-hidden="true" />
+                  <span>{{ option.name }}</span>
+                  <small v-if="option.count !== null">{{ option.count }}</small>
+                </div>
+              </template>
+              <template #emptyfilter>
+                <button
+                  type="button"
+                  class="filter-empty-action"
+                  :disabled="!canManageProducts"
+                  @click.stop.prevent="openCreateCategory()"
+                >
+                  <i class="pi pi-plus" aria-hidden="true" />
+                  <span>No se encontraron categorías. Crear categoría</span>
+                </button>
+              </template>
+            </Select>
+          </label>
           <Button
             type="button"
             icon="pi pi-filter-slash"
@@ -2085,6 +2094,10 @@ async function openStockHistory(product: CatalogProduct | null) {
   font-weight: 650;
 }
 
+.catalog-search-field {
+  width: 100%;
+}
+
 .filter-composer {
   display: grid;
   gap: 7px;
@@ -2095,7 +2108,20 @@ async function openStockHistory(product: CatalogProduct | null) {
   display: grid;
   grid-template-columns: minmax(160px, 0.5fr) minmax(220px, 1fr) auto;
   gap: 8px;
-  align-items: center;
+  align-items: end;
+}
+
+.filter-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.filter-field > span {
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .filter-type-select,
