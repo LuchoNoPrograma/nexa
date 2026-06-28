@@ -448,6 +448,21 @@ function precioDesdeTexto(texto: string) {
   return match?.[0]?.replace(/\s+/g, ' ') ?? ''
 }
 
+function contactoParaImagen(value?: string | null) {
+  const digits = (value ?? '').replace(/\D/g, '')
+  const countries = [
+    { dialCode: '591', name: 'Bolivia' },
+    { dialCode: '55', name: 'Brasil' },
+    { dialCode: '51', name: 'Perú' },
+  ]
+  const country = countries.find(item => digits.startsWith(item.dialCode))
+
+  return {
+    localNumber: country ? digits.slice(country.dialCode.length) : digits,
+    countryName: country?.name ?? 'Bolivia',
+  }
+}
+
 const promptImagenChatGpt = computed(() => {
   if (!post.value) {
     return ''
@@ -462,7 +477,7 @@ const promptImagenChatGpt = computed(() => {
   const audiencia = post.value.audiencia || 'clientes locales'
   const objetivo = post.value.objetivo || enfoque.titulo.toLowerCase()
   const config = marketingConfig.value
-  const contacto = config.contacto?.trim()
+  const contacto = contactoParaImagen(config.contacto)
   const ubicacion = config.ubicacion?.trim()
   const ciudad = config.ciudad || 'Cobija'
   const departamento = config.departamento || 'Pando'
@@ -473,7 +488,9 @@ const promptImagenChatGpt = computed(() => {
     `Formato: ${formato}, listo para ${redActiva.value.nombre}.`,
     `Marca/nombre visible: ${storeName.value}.`,
     `Ubicación visible: ${ubicacion ? `${ubicacion}, ${ciudad}, ${departamento}, Bolivia` : `${ciudad}, ${departamento}, Bolivia`}.`,
-    contacto ? `Contacto visible: ${contacto}.` : 'No muestres contacto si no aparece claramente en estas instrucciones.',
+    contacto.localNumber
+      ? `Contacto visible: muestra una bandera pequeña de ${contacto.countryName} seguida del número local ${contacto.localNumber}. No escribas el prefijo internacional.`
+      : 'No muestres contacto si no aparece claramente en estas instrucciones.',
     `Producto/promoción: ${producto}.`,
     precio ? `Precio visible permitido: ${precio}.` : 'No muestres precio si no aparece claramente en estas instrucciones.',
     `Enfoque: ${enfoque.titulo}. ${enfoque.instruccion}`,
@@ -485,6 +502,7 @@ const promptImagenChatGpt = computed(() => {
     '- Usa jerarquía clara: producto primero, precio/dato segundo, marca local de forma discreta.',
     '- Integra el nombre de la marca como parte del diseño, por ejemplo en un cartel pequeño, cintillo superior o sello limpio.',
     '- Integra contacto y ubicación en una franja inferior o cartel secundario, legible pero sin competir con el producto.',
+    '- En el contacto, usa la bandera indicada como señal del país. No reemplaces la bandera por +591, +51, +55 ni otro prefijo escrito.',
     '- Fondo publicitario limpio relacionado con el rubro del producto, con formas suaves, superficie cuidada, luces comerciales y detalles mínimos del contexto.',
     '- Si el rubro es abarrotes/hogar, usa una ambientación de compra familiar limpia: colores frescos, sensación de hogar y consumo diario, sin mostrar una tienda como fondo.',
     '- Colores vivos pero controlados, buen contraste, iluminación profesional, sombras naturales, acabado moderno y confiable.',
