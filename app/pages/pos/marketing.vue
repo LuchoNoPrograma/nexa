@@ -41,7 +41,7 @@ type MarketingConfig = {
 }
 
 // Carga inicial: solo lee lo guardado, NO llama a la IA.
-const { data, refresh } = await useFetch<MarketingResponse>('/api/pos/marketing', {
+const { data, refresh, status: marketingStatus } = await useFetch<MarketingResponse>('/api/pos/marketing', {
   default: () => ({
     actual: null,
     publicadas: 0,
@@ -208,7 +208,7 @@ watch(marketingConfig, () => {
 }, { immediate: true })
 
 onMounted(() => {
-  if (necesitaConfigMarketing.value) {
+  if (marketingStatus.value === 'success' && necesitaConfigMarketing.value) {
     configDialogVisible.value = true
   }
 })
