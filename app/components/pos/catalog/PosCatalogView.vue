@@ -450,6 +450,7 @@ function resetForm() {
   releaseLocalImagePreview()
   pendingImage.value = null
   originalImageUrl.value = ''
+  originalStock.value = 0
   Object.assign(form, emptyProductForm())
   internalItemMode.value = false
   resetSections()
@@ -567,6 +568,7 @@ const imageInput = ref<HTMLInputElement | null>(null)
 const imageProcessing = ref(false)
 const pendingImage = ref<Blob | null>(null)
 const originalImageUrl = ref('')
+const originalStock = ref(0)
 let localImagePreviewUrl = ''
 
 function releaseLocalImagePreview() {
@@ -696,6 +698,7 @@ function openEditProduct(product: CatalogProduct | null) {
   releaseLocalImagePreview()
   pendingImage.value = null
   originalImageUrl.value = product.imageUrl ?? ''
+  originalStock.value = product.stock
   Object.assign(form, {
     id: product.id,
     categoryId: product.categoryId,
@@ -937,6 +940,19 @@ async function saveProduct() {
         method: 'PUT',
         body: payload,
       })
+
+      if (internalItemMode.value && Number(form.stock) !== originalStock.value) {
+        await $fetch(`/api/pos/catalog/products/${form.id}/stock`, {
+          method: 'POST',
+          body: {
+            type: 'fijar',
+            quantity: Number(form.stock) || 0,
+            reason: 'recuento',
+            branch: 'Matriz',
+            notes: 'Stock actualizado desde la edición del insumo.',
+          },
+        })
+      }
     } else {
       const response = await $fetch<{ id: string }>('/api/pos/catalog/products', {
         method: 'POST',
@@ -1771,8 +1787,8 @@ async function openStockHistory(product: CatalogProduct | null) {
                 {{ form.id ? 'Stock actual' : 'Stock inicial' }}
                 <span v-if="!form.id" class="req">*</span>
               </label>
-              <InputNumber id="internal-stock" v-model="form.stock" :min="0" :maxFractionDigits="2" :disabled="Boolean(form.id)" fluid />
-              <small v-if="form.id" class="field-help">Usa “Usar” o “Stock” para registrar movimientos.</small>
+              <InputNumber id="internal-stock" v-model="form.stock" :min="0" :maxFractionDigits="2" fluid />
+              <small v-if="form.id" class="field-help">Al guardar, el cambio quedará registrado como ajuste de inventario.</small>
             </div>
           </div>
 

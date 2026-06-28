@@ -81,8 +81,6 @@ function countryByDialCode(value?: string) {
     ?? fallbackCountries[0]!
 }
 
-const phonePlaceholder = computed(() => countryByDialCode(dialCodeModel.value).example)
-
 const dialCodeModel = computed({
   get() {
     return props.countryDialCode ?? splitFullPhone(props.modelValue).dialCode
@@ -98,6 +96,14 @@ const phoneModel = computed({
     return props.phone ?? splitFullPhone(props.modelValue).phone
   },
   set(value: string) {
+    // Con modelos separados, el prefijo ya se administra en countryDialCode.
+    // Solo el modelo combinado necesita detectar y separar un prefijo pegado.
+    if (props.phone !== undefined) {
+      emit('update:phone', value)
+      emit('update:modelValue', value.trim() ? `${dialCodeModel.value}${onlyPhoneDigits(value)}` : '')
+      return
+    }
+
     const splitValue = splitFullPhone(value)
     const phone = splitValue.phone
 
@@ -109,11 +115,17 @@ const phoneModel = computed({
     emit('update:modelValue', phone.trim() ? `${splitValue.dialCode}${onlyPhoneDigits(phone)}` : '')
   },
 })
+
+const phonePlaceholder = computed(() => countryByDialCode(dialCodeModel.value).example)
+
+function updatePhone(event: Event) {
+  phoneModel.value = (event.target as HTMLInputElement).value
+}
 </script>
 
 <template>
-  <InputGroup class="phone-country-input">
-    <InputGroupAddon class="phone-country-input__prefix">
+  <div class="phone-country-input">
+    <div class="phone-country-input__prefix">
       <Select
         v-model="dialCodeModel"
         :options="countryOptions"
@@ -137,11 +149,11 @@ const phoneModel = computed({
           </span>
         </template>
       </Select>
-    </InputGroupAddon>
+    </div>
 
-    <InputText
+    <input
       :id="inputId"
-      v-model="phoneModel"
+      :value="phoneModel"
       class="phone-country-input__number"
       type="tel"
       inputmode="tel"
@@ -151,8 +163,9 @@ const phoneModel = computed({
       :autocomplete="autocomplete"
       :required="required"
       :disabled="disabled"
+      @input="updatePhone"
     />
-  </InputGroup>
+  </div>
 </template>
 
 <style scoped>
@@ -166,7 +179,9 @@ const phoneModel = computed({
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.phone-country-input :deep(.p-inputgroupaddon) {
+.phone-country-input__prefix {
+  display: flex;
+  min-width: 0;
   padding: 0;
   border: 0;
   border-radius: 10px 0 0 10px;
@@ -239,7 +254,7 @@ const phoneModel = computed({
   box-shadow: none !important;
 }
 
-.phone-country-input:focus-within :deep(.p-inputgroupaddon),
+.phone-country-input:focus-within .phone-country-input__prefix,
 .phone-country-input:focus-within .phone-country-input__number {
   border-color: rgba(11, 152, 47, 0.24);
 }
