@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     id: string
     email: string
     name: string
-    password_hash: string
+    password_hash: string | null
   }>(
     `
       select id, email, nombre as name, password_hash
@@ -67,6 +67,12 @@ export default defineEventHandler(async (event) => {
   if (!user) {
     recordLoginFailure(rateLimitKey)
     throw createError({ statusCode: 404, statusMessage: 'No existe este usuario.' })
+  }
+
+  // Cuenta creada solo con Google: no tiene contraseña local. Se guía al usuario
+  // al método correcto en lugar de dar un "credenciales inválidas" confuso.
+  if (!user.password_hash) {
+    throw createError({ statusCode: 409, statusMessage: 'Esta cuenta usa "Continuar con Google". Inicia sesión con ese botón.' })
   }
 
   if (!(await verifyPassword(password, user.password_hash))) {

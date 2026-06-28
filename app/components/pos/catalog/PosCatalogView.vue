@@ -381,6 +381,9 @@ function resetSections() {
 }
 
 function resetForm() {
+  releaseLocalImagePreview()
+  pendingImage.value = null
+  originalImageUrl.value = ''
   Object.assign(form, emptyProductForm())
   resetSections()
   catalogError.value = ''
@@ -453,16 +456,28 @@ function applySuggestedPrice() {
 }
 
 // --- Foto del producto ---
-// Por ahora la imagen se guarda comprimida dentro de la base de datos (base64).
-// Más adelante migraremos a un storage de archivos real.
+// La foto se comprime en el navegador, se previsualiza localmente y se sube a
+// Storage al guardar. En PostgreSQL solo queda la URL publica.
 const imageInput = ref<HTMLInputElement | null>(null)
 const imageProcessing = ref(false)
+const pendingImage = ref<Blob | null>(null)
+const originalImageUrl = ref('')
+let localImagePreviewUrl = ''
+
+function releaseLocalImagePreview() {
+  if (localImagePreviewUrl) {
+    URL.revokeObjectURL(localImagePreviewUrl)
+    localImagePreviewUrl = ''
+  }
+}
 
 function pickImage() {
   imageInput.value?.click()
 }
 
 function clearImage() {
+  releaseLocalImagePreview()
+  pendingImage.value = null
   form.imageUrl = ''
   if (imageInput.value) {
     imageInput.value.value = ''
@@ -489,7 +504,11 @@ async function onImagePick(event: Event) {
 
   imageProcessing.value = true
   try {
-    form.imageUrl = await compressImage(file)
+    const compressed = await compressImage(file)
+    releaseLocalImagePreview()
+    pendingImage.value = compressed
+    localImagePreviewUrl = URL.createObjectURL(compressed)
+    form.imageUrl = localImagePreviewUrl
     form.icon = ''
   } catch {
     catalogError.value = 'No se pudo procesar la imagen. Intenta con otra.'
@@ -499,9 +518,9 @@ async function onImagePick(event: Event) {
   }
 }
 
-// Reduce la foto a 480px de lado máximo y la exporta como JPEG para que el
-// base64 quede liviano (≈30-80 KB) antes de guardarlo.
-function compressImage(file: File, maxSize = 480, quality = 0.72): Promise<string> {
+// Reduce la foto a 1200px y la exporta como JPEG. Evita enviar la imagen
+// original del telefono y mantiene el archivo por debajo del limite del bucket.
+function compressImage(file: File, maxSize = 1200, quality = 0.78): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -519,7 +538,13 @@ function compressImage(file: File, maxSize = 480, quality = 0.72): Promise<strin
           return
         }
         context.drawImage(image, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/jpeg', quality))
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('blob'))
+          }
+        }, 'image/jpeg', quality)
       }
       image.onerror = () => reject(new Error('image'))
       image.src = reader.result as string
@@ -556,6 +581,9 @@ function openEditProduct(product: CatalogProduct | null) {
     return
   }
 
+  releaseLocalImagePreview()
+  pendingImage.value = null
+  originalImageUrl.value = product.imageUrl ?? ''
   Object.assign(form, {
     id: product.id,
     categoryId: product.categoryId,
@@ -707,6 +735,8 @@ async function saveProduct() {
 
   saving.value = true
 
+  // Conserva la foto anterior hasta que Storage confirme el reemplazo.
+  const storedImageUrl = pendingImage.value ? originalImageUrl.value : form.imageUrl
   const payload = {
     categoryId: form.categoryId,
     sku: form.sku,
@@ -722,7 +752,7 @@ async function saveProduct() {
     minStock: form.minStock,
     maxStock: form.maxStock,
     minMargin: form.minMargin,
-    imageUrl: form.imageUrl,
+    imageUrl: storedImageUrl,
     icon: form.icon,
     visiblePos: form.visiblePos,
     variants: form.variants
@@ -745,18 +775,34 @@ async function saveProduct() {
   }
 
   try {
+    let productId = form.id
     if (form.id) {
       await $fetch(`/api/pos/catalog/products/${form.id}`, {
         method: 'PUT',
         body: payload,
       })
     } else {
-      await $fetch('/api/pos/catalog/products', {
+      const response = await $fetch<{ id: string }>('/api/pos/catalog/products', {
         method: 'POST',
         body: payload,
       })
+      productId = response.id
+      // Si Storage falla, un segundo intento actualiza este mismo producto en
+      // vez de crear un duplicado.
+      form.id = response.id
     }
 
+    if (pendingImage.value && productId) {
+      const imageForm = new FormData()
+      imageForm.append('image', pendingImage.value, 'producto.jpg')
+      await $fetch(`/api/pos/catalog/products/${productId}/image`, {
+        method: 'POST',
+        body: imageForm,
+      })
+    }
+
+    releaseLocalImagePreview()
+    pendingImage.value = null
     productDialogOpen.value = false
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
@@ -983,7 +1029,7 @@ async function openStockHistory(product: CatalogProduct | null) {
           <template #body="{ data }">
             <div class="product-cell">
               <span class="product-thumb">
-                <img v-if="data.imageUrl" :src="data.imageUrl" :alt="data.name" />
+                <img v-if="data.imageUrl" :src="data.imageUrl" :alt="data.name" loading="lazy" decoding="async" />
                 <span v-else-if="data.icon" class="thumb-emoji">{{ data.icon }}</span>
                 <i v-else :class="productIcon(data)" aria-hidden="true" />
               </span>
@@ -1395,7 +1441,7 @@ async function openStockHistory(product: CatalogProduct | null) {
       <form class="stock-form" @submit.prevent="saveStockAdjustment">
         <header v-if="stockProduct" class="stock-product-head">
           <span class="product-thumb">
-            <img v-if="stockProduct.imageUrl" :src="stockProduct.imageUrl" :alt="stockProduct.name" />
+            <img v-if="stockProduct.imageUrl" :src="stockProduct.imageUrl" :alt="stockProduct.name" loading="lazy" decoding="async" />
             <span v-else-if="stockProduct.icon" class="thumb-emoji">{{ stockProduct.icon }}</span>
             <i v-else :class="productIcon(stockProduct)" aria-hidden="true" />
           </span>

@@ -27,6 +27,16 @@ onMounted(async () => {
   form.remember = savedRemember === '1'
   localStorage.removeItem('nexa-login-identificador')
 
+  // Feedback de retorno del flujo de Google (el callback redirige aquí si falla).
+  const oauthStatus = useRoute().query.oauth
+  if (oauthStatus === 'error') {
+    authErrorKind.value = 'credentials'
+    authError.value = 'No se pudo continuar con Google. Intenta de nuevo.'
+  } else if (oauthStatus === 'cancelado') {
+    authErrorKind.value = 'credentials'
+    authError.value = 'Cancelaste el inicio con Google.'
+  }
+
   if (await sessionStore.load().catch(() => null)) {
     void navigateTo('/pos/inicio')
   }
@@ -202,10 +212,10 @@ async function onSubmit() {
           </div>
 
           <div class="login-social">
-            <button type="button" class="login-social__btn" aria-label="Continuar con Google">
+            <a href="/api/auth/oauth/google/start" class="login-social__btn" aria-label="Continuar con Google">
               <i class="pi pi-google" aria-hidden="true" />
               <span>Google</span>
-            </button>
+            </a>
           </div>
         </form>
 
@@ -600,6 +610,7 @@ async function onSubmit() {
   color: #1d2330;
   font-size: 0.88rem;
   font-weight: 800;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }

@@ -11,7 +11,14 @@ export async function hashPassword(password: string) {
   return `scrypt$${salt}$${derivedKey.toString('hex')}`
 }
 
-export async function verifyPassword(password: string, storedHash: string) {
+export async function verifyPassword(password: string, storedHash: string | null | undefined) {
+  // Las cuentas creadas solo con OAuth no tienen contraseña local (password_hash
+  // null). Sin esta guarda, intentar login por correo en esas cuentas rompía con
+  // un TypeError al hacer null.split('$').
+  if (!storedHash) {
+    return false
+  }
+
   const [algorithm, salt, key] = storedHash.split('$')
 
   if (algorithm !== 'scrypt' || !salt || !key) {

@@ -7,6 +7,7 @@ export type PosOfflineProduct = {
   price: number
   stock: number
   kind: 'producto' | 'servicio' | 'combo'
+  imageUrl: string | null
 }
 
 export function usePosOfflineProducts() {

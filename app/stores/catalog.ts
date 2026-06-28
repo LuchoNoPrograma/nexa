@@ -10,6 +10,7 @@ export type PosSaleProduct = {
   price: number
   stock: number
   kind: 'producto' | 'servicio' | 'combo'
+  imageUrl: string | null
 }
 
 export type CatalogCategory = {

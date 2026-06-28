@@ -1208,7 +1208,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
             <span class="product-card__meta">
               <span class="product-card__icon" :class="{ 'is-combo': product.kind === 'combo' }">
-                <i :class="product.kind === 'combo' ? 'pi pi-box' : 'pi pi-cube'" aria-hidden="true" />
+                <img :src="product.imageUrl || '/social-preview-placeholder.jpg'" :alt="product.imageUrl ? product.name : 'Haru, imagen referencial del producto'" loading="lazy" decoding="async" fetchpriority="low">
               </span>
               <span class="product-card__kind">{{ product.kind }}</span>
             </span>
@@ -1239,7 +1239,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
             @keydown="handleProductCardKeydown($event, product)"
           >
             <span class="product-row__icon" :class="{ 'is-combo': product.kind === 'combo' }">
-              <i :class="product.kind === 'combo' ? 'pi pi-clone' : 'pi pi-cube'" aria-hidden="true" />
+              <img :src="product.imageUrl || '/social-preview-placeholder.jpg'" :alt="product.imageUrl ? product.name : 'Haru, imagen referencial del producto'" loading="lazy" decoding="async" fetchpriority="low">
             </span>
 
             <div class="product-row__info">
@@ -1287,19 +1287,26 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
           class="cart-line"
           :class="{ 'is-combo': line.kind === 'combo', 'is-recently-added': recentAddedProductId === line.id }"
         >
-          <header class="cart-line__header">
-            <strong>{{ line.name }}</strong>
-            <span v-if="line.kind === 'combo'" class="cart-line__tag">
-              <i class="pi pi-box" aria-hidden="true" />
-              Combo
+          <div class="cart-line__product">
+            <span class="cart-line__thumb">
+              <img :src="line.imageUrl || '/social-preview-placeholder.jpg'" :alt="line.imageUrl ? line.name : 'Haru, imagen referencial del producto'" loading="lazy" decoding="async" fetchpriority="low">
             </span>
-            <button type="button" :aria-label="`Ver información de ${line.name}`" @click="openProductInfo(line)">
-              <i class="pi pi-info-circle" aria-hidden="true" />
-            </button>
-          </header>
+            <div class="cart-line__product-copy">
+              <header class="cart-line__header">
+                <strong>{{ line.name }}</strong>
+                <span v-if="line.kind === 'combo'" class="cart-line__tag">
+                  <i class="pi pi-box" aria-hidden="true" />
+                  Combo
+                </span>
+                <button type="button" :aria-label="`Ver información de ${line.name}`" @click="openProductInfo(line)">
+                  <i class="pi pi-info-circle" aria-hidden="true" />
+                </button>
+              </header>
 
-          <div class="cart-line__info">
-            <span>Bs {{ money(line.price) }}</span>
+              <div class="cart-line__info">
+                <span>Bs {{ money(line.price) }}</span>
+              </div>
+            </div>
           </div>
 
           <div class="cart-line__actions">
@@ -1936,7 +1943,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
       <section class="product-info__body">
         <div class="product-info__visual" :class="{ 'is-combo': selectedProduct.kind === 'combo' }">
-          <i :class="selectedProduct.kind === 'combo' ? 'pi pi-clone' : 'pi pi-cube'" aria-hidden="true" />
+          <img :src="selectedProduct.imageUrl || '/social-preview-placeholder.jpg'" :alt="selectedProduct.imageUrl ? selectedProduct.name : 'Haru, imagen referencial del producto'" decoding="async">
         </div>
 
         <div class="product-info__main">
@@ -2272,7 +2279,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 142px;
+  min-height: 166px;
   gap: 8px;
   padding: 10px 10px 12px;
   border: 1px solid #dde4ec;
@@ -2306,19 +2313,33 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 /* Fila de ícono + tipo, debajo del nombre. */
 .product-card__meta {
   display: inline-flex;
+  min-height: 66px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .product-card__icon {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 66px;
+  height: 66px;
   flex: 0 0 auto;
+  overflow: hidden;
   place-items: center;
-  border-radius: 8px;
+  border: 1px solid #e1e8e4;
+  border-radius: 10px;
   color: #ffffff;
   background: linear-gradient(135deg, var(--primary-200), var(--primary-500));
+}
+
+.product-card__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 180ms ease;
+}
+
+.product-card:hover .product-card__icon img {
+  transform: scale(1.035);
 }
 
 .product-card__icon.is-combo {
@@ -2327,7 +2348,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .product-card__kind {
-  font-size: 0.55rem;
+  font-size: 0.58rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2453,6 +2474,16 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 .product-row__icon.is-combo {
   color: #a65300;
   background: #ffe59b;
+}
+
+.product-row__icon {
+  overflow: hidden;
+}
+
+.product-row__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .product-row__info {
@@ -2624,6 +2655,38 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .cart-line.is-combo {
   border-left: 3px solid #f59e0b;
+}
+
+.cart-line__product {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 9px;
+}
+
+.cart-line__thumb {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  place-items: center;
+  align-self: center;
+  border: 1px solid #e3e9ef;
+  border-radius: 8px;
+  color: var(--primary-600);
+  background: #f2f7f4;
+}
+
+.cart-line__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cart-line__product-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
 }
 
 .cart-line__header {
@@ -4238,12 +4301,20 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 .product-info__visual {
   display: grid;
   min-height: 132px;
+  overflow: hidden;
   place-items: center;
   border: 1px solid var(--primary-100);
   border-radius: 12px;
   color: var(--primary-700);
   background: var(--primary-50);
   font-size: 3rem;
+}
+
+.product-info__visual img {
+  width: 100%;
+  height: 100%;
+  min-height: 132px;
+  object-fit: cover;
 }
 
 .product-info__visual.is-combo {
