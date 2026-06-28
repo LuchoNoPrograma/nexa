@@ -17,6 +17,7 @@ const form = reactive({
 
 const showPassword = ref(false)
 const loading = ref(false)
+const googleLoading = ref(false)
 const authError = ref('')
 const authErrorKind = ref<'not_found' | 'credentials' | ''>('')
 const REMEMBER_KEY = 'nexa-login-remember'
@@ -43,6 +44,8 @@ onMounted(async () => {
 })
 
 async function onSubmit() {
+  if (loading.value || googleLoading.value) return
+
   authError.value = ''
   authErrorKind.value = ''
   loading.value = true
@@ -79,6 +82,15 @@ async function onSubmit() {
   } finally {
     loading.value = false
   }
+}
+
+function onGoogleClick(event: MouseEvent) {
+  if (loading.value || googleLoading.value) {
+    event.preventDefault()
+    return
+  }
+
+  googleLoading.value = true
 }
 </script>
 
@@ -129,7 +141,7 @@ async function onSubmit() {
           <p>Inicia sesión para continuar <span class="login-leaf" aria-hidden="true">🌿</span></p>
         </div>
 
-        <form class="login-form" @submit.prevent="onSubmit">
+        <form class="login-form" :aria-busy="loading || googleLoading" @submit.prevent="onSubmit">
           <div class="login-field">
             <label for="identificador">Correo, CI o celular</label>
             <span class="login-input">
@@ -141,6 +153,7 @@ async function onSubmit() {
                 name="identificador"
                 placeholder="ejemplo@correo.com, CI o celular"
                 autocomplete="username"
+                :disabled="loading || googleLoading"
                 required
               >
             </span>
@@ -157,6 +170,7 @@ async function onSubmit() {
                 name="password"
                 placeholder="Ingresa tu contraseña"
                 autocomplete="current-password"
+                :disabled="loading || googleLoading"
                 required
               >
               <button
@@ -164,6 +178,7 @@ async function onSubmit() {
                 class="login-input__toggle"
                 :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
                 :aria-pressed="showPassword"
+                :disabled="loading || googleLoading"
                 @click="showPassword = !showPassword"
               >
                 <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'" aria-hidden="true" />
@@ -173,7 +188,7 @@ async function onSubmit() {
 
           <div class="login-form__row">
             <label class="login-check">
-              <input v-model="form.remember" type="checkbox" name="remember">
+              <input v-model="form.remember" type="checkbox" name="remember" :disabled="loading || googleLoading">
               <span>Mantener sesión en este dispositivo</span>
             </label>
             <a href="#recuperar">¿Olvidaste tu contraseña?</a>
@@ -192,11 +207,12 @@ async function onSubmit() {
 
           <Button
             type="submit"
-            :loading="loading"
+            :disabled="loading || googleLoading"
             class="btn-shine login-submit"
           >
-            <span>Iniciar sesión</span>
-            <svg class="login-paw" viewBox="0 0 24 24" aria-hidden="true">
+            <i v-if="loading" class="pi pi-spinner pi-spin" aria-hidden="true" />
+            <span>{{ loading ? 'Iniciando sesión…' : 'Iniciar sesión' }}</span>
+            <svg v-if="!loading" class="login-paw" viewBox="0 0 24 24" aria-hidden="true">
               <ellipse cx="6.2" cy="10.2" rx="1.7" ry="2.3" />
               <ellipse cx="10.4" cy="6.8" rx="1.8" ry="2.5" />
               <ellipse cx="14.6" cy="6.8" rx="1.8" ry="2.5" />
@@ -212,9 +228,16 @@ async function onSubmit() {
           </div>
 
           <div class="login-social">
-            <a href="/api/auth/oauth/google/start" class="login-social__btn" aria-label="Continuar con Google">
-              <i class="pi pi-google" aria-hidden="true" />
-              <span>Google</span>
+            <a
+              href="/api/auth/oauth/google/start"
+              class="login-social__btn"
+              :class="{ 'login-social__btn--loading': loading || googleLoading }"
+              :aria-label="googleLoading ? 'Conectando con Google' : 'Continuar con Google'"
+              :aria-disabled="loading || googleLoading"
+              @click="onGoogleClick"
+            >
+              <i :class="googleLoading ? 'pi pi-spinner pi-spin' : 'pi pi-google'" aria-hidden="true" />
+              <span>{{ googleLoading ? 'Conectando…' : 'Google' }}</span>
             </a>
           </div>
         </form>
@@ -451,6 +474,17 @@ async function onSubmit() {
   font-weight: 500;
 }
 
+.login-input input:disabled,
+.login-input__toggle:disabled,
+.login-check input:disabled {
+  cursor: not-allowed;
+}
+
+.login-input:has(input:disabled) {
+  background: #f5f7f6;
+  opacity: 0.72;
+}
+
 .login-input__toggle {
   display: grid;
   width: 30px;
@@ -573,6 +607,11 @@ async function onSubmit() {
   background: linear-gradient(160deg, #14b536, var(--brand-600)) !important;
 }
 
+.login-submit:disabled {
+  cursor: wait !important;
+  opacity: 0.82;
+}
+
 .login-divider {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -619,6 +658,12 @@ async function onSubmit() {
   border-color: rgba(15, 158, 46, 0.4);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
   transform: translateY(-2px);
+}
+
+.login-social__btn--loading {
+  pointer-events: none;
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .login-social__btn i {
