@@ -34,7 +34,7 @@ type ProductForm = {
   costComponents: CostComponent[]
 }
 
-type ChipKey = 'todos' | 'productos' | 'servicios' | 'stockBajo' | 'combos'
+type ChipKey = 'todos' | 'productos' | 'insumos' | 'servicios' | 'stockBajo' | 'combos'
 
 type StockMovement = {
   id: string
@@ -57,13 +57,16 @@ const {
   catalogLoading: loading,
   catalogError: storeCatalogError,
 } = storeToRefs(catalogStore)
+const { puede } = useAcceso()
 const saving = ref(false)
 const productDialogOpen = ref(false)
+const internalDialogOpen = ref(false)
 const categoryDialogOpen = ref(false)
 const stockDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
 const catalogError = ref('')
 const categoryDialogFromProduct = ref(false)
+const internalItemMode = ref(false)
 
 const searchTerm = ref('')
 const activeChip = ref<ChipKey>('todos')
@@ -142,6 +145,21 @@ const stockReasons = [
   { label: 'Otro', value: 'otro' },
 ]
 
+const stockReasonOptions = computed(() => {
+  if (isInternalItem(stockProduct.value)) {
+    return [
+      { label: 'Uso interno', value: 'otro' },
+      { label: 'Compra recibida', value: 'compra_recibida' },
+      { label: 'Recuento', value: 'recuento' },
+      { label: 'Devolución', value: 'devolucion' },
+      { label: 'Producto dañado', value: 'producto_daniado' },
+      { label: 'Otro', value: 'otro' },
+    ]
+  }
+
+  return stockReasons
+})
+
 const emojiOptions = ['📦', '🛒', '🥤', '🍞', '🥛', '🧴', '💊', '👕', '🔧', '⚽', '🎁', '🐾', '💄', '🚗', '🍎', '🧼']
 
 const primeIconOptions = [
@@ -179,6 +197,7 @@ const primeIconOptions = [
 
 const session = usePosSession()
 const storeDefaultMargin = computed(() => session.value?.defaultMargin ?? 20)
+const canManageProducts = computed(() => puede('producto.gestionar'))
 
 const sections = reactive({
   codes: false,
@@ -194,6 +213,7 @@ function toggleSection(key: keyof typeof sections) {
 const productFilters: { key: ChipKey; label: string }[] = [
   { key: 'todos', label: 'Todo' },
   { key: 'productos', label: 'Productos' },
+  { key: 'insumos', label: 'Insumos' },
   { key: 'servicios', label: 'Servicios' },
   { key: 'stockBajo', label: 'Stock bajo' },
   { key: 'combos', label: 'Combos' },
@@ -222,11 +242,14 @@ const unitSelectOptions = computed(() => {
 const lowStockCount = computed(() =>
   products.value.filter((product) => product.kind === 'producto' && product.stock <= product.minStock).length,
 )
-const noStockCount = computed(() =>
-  products.value.filter((product) => product.kind === 'producto' && product.stock <= 0).length,
-)
+const internalItemsCount = computed(() => products.value.filter((product) => isInternalItem(product)).length)
+const saleItemsCount = computed(() => products.value.filter((product) => product.kind === 'producto' && !isInternalItem(product)).length)
 const stockManagedProducts = computed(() => products.value.filter((product) => product.kind !== 'servicio'))
-const inventorySale = computed(() => stockManagedProducts.value.reduce((sum, product) => sum + product.price * product.stock, 0))
+const inventorySale = computed(() =>
+  stockManagedProducts.value
+    .filter((product) => !isInternalItem(product))
+    .reduce((sum, product) => sum + product.price * product.stock, 0),
+)
 
 const categoryOptions = computed(() => [
   { label: 'Sin categoría', value: null },
@@ -280,6 +303,22 @@ const statsLine = computed(() => {
   return `${shown} de ${products.value.length} ítems visibles`
 })
 
+const productDialogTitle = computed(() => {
+  if (form.id) {
+    return 'Editar producto'
+  }
+
+  return internalItemMode.value ? 'Registrar insumo' : 'Crear producto'
+})
+
+const productSubmitLabel = computed(() => {
+  if (form.id) {
+    return 'Guardar cambios'
+  }
+
+  return internalItemMode.value ? 'Guardar insumo' : 'Crear producto'
+})
+
 const stockResult = computed(() => {
   const currentStock = stockProduct.value?.stock ?? 0
 
@@ -328,7 +367,10 @@ onMounted(async () => {
 
 function matchesChip(product: CatalogProduct, key: ChipKey) {
   if (key === 'productos') {
-    return product.kind === 'producto'
+    return product.kind === 'producto' && !isInternalItem(product)
+  }
+  if (key === 'insumos') {
+    return isInternalItem(product)
   }
   if (key === 'servicios') {
     return product.kind === 'servicio'
@@ -385,16 +427,42 @@ function resetForm() {
   pendingImage.value = null
   originalImageUrl.value = ''
   Object.assign(form, emptyProductForm())
+  internalItemMode.value = false
   resetSections()
   catalogError.value = ''
 }
 
 function openCreateProduct() {
+  if (!canManageProducts.value) {
+    catalogError.value = 'No autorizado para registrar productos. Pide acceso de Inventario o Administrador.'
+    return
+  }
+
   resetForm()
   // Pre-llena el tipo de costeo desde el tipo de negocio global de la tienda
   // (definido en el diagnóstico). El dueño puede cambiarlo por producto.
   form.costingType = costingTypePorDefecto(session.value?.tipoNegocio ?? null)
+  internalItemMode.value = false
   productDialogOpen.value = true
+}
+
+function openCreateInternalItem() {
+  if (!canManageProducts.value) {
+    catalogError.value = 'No autorizado para registrar insumos. Pide acceso de Inventario o Administrador.'
+    return
+  }
+
+  resetForm()
+  internalItemMode.value = true
+  form.kind = 'producto'
+  form.costingType = 'reventa'
+  form.unit = 'paquete'
+  form.price = 0
+  form.visiblePos = false
+  form.icon = '🧴'
+  sections.advanced = true
+  sections.codes = true
+  internalDialogOpen.value = true
 }
 
 const liveProfit = computed(() => {
@@ -415,7 +483,7 @@ const costComponentsTotal = computed(() =>
   form.costComponents.reduce((sum, component) => sum + (Number(component.monto) || 0), 0),
 )
 // Cuando hay desglose, su suma manda sobre el campo Costo (y lo bloquea).
-const usesCostBreakdown = computed(() => form.costComponents.length > 0)
+const usesCostBreakdown = computed(() => !internalItemMode.value && form.costComponents.length > 0)
 
 watch([costComponentsTotal, usesCostBreakdown], ([total, uses]) => {
   if (uses) {
@@ -564,6 +632,11 @@ function removeVariant(index: number) {
 }
 
 function openCreateCategory(fromProduct = false) {
+  if (!canManageProducts.value) {
+    catalogError.value = 'No autorizado para registrar categorías. Pide acceso de Inventario o Administrador.'
+    return
+  }
+
   Object.assign(categoryForm, {
     id: null,
     name: '',
@@ -578,6 +651,10 @@ function openCreateCategory(fromProduct = false) {
 
 function openEditProduct(product: CatalogProduct | null) {
   if (!product) {
+    return
+  }
+  if (!canManageProducts.value) {
+    catalogError.value = 'No autorizado para editar productos. Pide acceso de Inventario o Administrador.'
     return
   }
 
@@ -617,15 +694,26 @@ function openEditProduct(product: CatalogProduct | null) {
       monto: component.monto,
     })),
   })
+  internalItemMode.value = isInternalItem(product)
   resetSections()
-  sections.variants = form.variants.length > 0
-  sections.cost = form.costComponents.length > 0
+  sections.variants = !internalItemMode.value && form.variants.length > 0
+  sections.cost = !internalItemMode.value && form.costComponents.length > 0
+  sections.codes = internalItemMode.value
+  sections.advanced = internalItemMode.value
   catalogError.value = ''
-  productDialogOpen.value = true
+  if (internalItemMode.value) {
+    internalDialogOpen.value = true
+  } else {
+    productDialogOpen.value = true
+  }
 }
 
 function openStockAdjustment(product: CatalogProduct | null) {
   if (!product || product.kind === 'servicio') {
+    return
+  }
+  if (!canManageProducts.value) {
+    catalogError.value = 'No autorizado para ajustar stock. Pide acceso de Inventario o Administrador.'
     return
   }
 
@@ -635,6 +723,25 @@ function openStockAdjustment(product: CatalogProduct | null) {
   stockReason.value = 'recuento'
   stockBranch.value = 'Matriz'
   stockNotes.value = ''
+  catalogError.value = ''
+  stockDialogOpen.value = true
+}
+
+function openUseInternalItem(product: CatalogProduct | null) {
+  if (!product || !isInternalItem(product)) {
+    return
+  }
+  if (!canManageProducts.value) {
+    catalogError.value = 'No autorizado para usar insumos. Pide acceso de Inventario o Administrador.'
+    return
+  }
+
+  stockProduct.value = product
+  stockMode.value = 'restar'
+  stockAmount.value = 1
+  stockReason.value = 'otro'
+  stockBranch.value = 'Matriz'
+  stockNotes.value = 'Uso interno del negocio'
   catalogError.value = ''
   stockDialogOpen.value = true
 }
@@ -651,7 +758,7 @@ function money(value: number) {
 }
 
 function margin(product: CatalogProduct | null) {
-  if (!product || product.price <= 0) {
+  if (!product || product.price <= 0 || isInternalItem(product)) {
     return '0%'
   }
   return `${Math.round(((product.price - product.cost) / product.price) * 100)}%`
@@ -661,7 +768,14 @@ function isLowStock(product: CatalogProduct) {
   return product.kind === 'producto' && product.stock <= product.minStock
 }
 
+function isInternalItem(product: CatalogProduct | null) {
+  return Boolean(product && product.kind === 'producto' && !product.visiblePos && product.price <= 0)
+}
+
 function productIcon(product: CatalogProduct) {
+  if (isInternalItem(product)) {
+    return 'pi pi-box'
+  }
   if (product.kind === 'servicio') {
     return 'pi pi-bolt'
   }
@@ -725,11 +839,25 @@ async function refreshCatalog() {
   })
 }
 
+function apiErrorMessage(error: unknown, fallback: string) {
+  const apiError = error as {
+    data?: { statusMessage?: string; message?: string }
+    statusMessage?: string
+    message?: string
+  }
+
+  return apiError.data?.statusMessage
+    || apiError.data?.message
+    || apiError.statusMessage
+    || apiError.message
+    || fallback
+}
+
 async function saveProduct() {
   catalogError.value = ''
 
   if (!form.name.trim()) {
-    catalogError.value = 'El nombre del producto es obligatorio.'
+    catalogError.value = internalItemMode.value ? 'El nombre del insumo es obligatorio.' : 'El nombre del producto es obligatorio.'
     return
   }
 
@@ -737,41 +865,47 @@ async function saveProduct() {
 
   // Conserva la foto anterior hasta que Storage confirme el reemplazo.
   const storedImageUrl = pendingImage.value ? originalImageUrl.value : form.imageUrl
+  const variantsPayload = internalItemMode.value
+    ? []
+    : form.variants
+        .filter((variant) => variant.name.trim())
+        .map((variant) => ({
+          name: variant.name,
+          sku: variant.sku,
+          barcode: variant.barcode,
+          cost: variant.cost,
+          price: variant.price,
+          stock: variant.stock,
+        }))
+  const costComponentsPayload = internalItemMode.value
+    ? []
+    : form.costComponents
+        .filter((component) => component.nombre.trim())
+        .map((component) => ({
+          tipo: component.tipo,
+          nombre: component.nombre,
+          monto: component.monto,
+        }))
   const payload = {
     categoryId: form.categoryId,
     sku: form.sku,
     barcode: form.barcode,
     name: form.name,
     description: form.description,
-    kind: form.kind,
-    costingType: form.costingType,
+    kind: internalItemMode.value ? 'producto' : form.kind,
+    costingType: internalItemMode.value ? 'reventa' : form.costingType,
     unit: form.unit,
     cost: form.cost,
-    price: form.price,
+    price: internalItemMode.value ? 0 : form.price,
     stock: form.stock,
     minStock: form.minStock,
     maxStock: form.maxStock,
-    minMargin: form.minMargin,
+    minMargin: internalItemMode.value ? null : form.minMargin,
     imageUrl: storedImageUrl,
     icon: form.icon,
-    visiblePos: form.visiblePos,
-    variants: form.variants
-      .filter((variant) => variant.name.trim())
-      .map((variant) => ({
-        name: variant.name,
-        sku: variant.sku,
-        barcode: variant.barcode,
-        cost: variant.cost,
-        price: variant.price,
-        stock: variant.stock,
-      })),
-    costComponents: form.costComponents
-      .filter((component) => component.nombre.trim())
-      .map((component) => ({
-        tipo: component.tipo,
-        nombre: component.nombre,
-        monto: component.monto,
-      })),
+    visiblePos: internalItemMode.value ? false : form.visiblePos,
+    variants: variantsPayload,
+    costComponents: costComponentsPayload,
   }
 
   try {
@@ -804,10 +938,11 @@ async function saveProduct() {
     releaseLocalImagePreview()
     pendingImage.value = null
     productDialogOpen.value = false
+    internalDialogOpen.value = false
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
   } catch (error) {
-    catalogError.value = error instanceof Error ? error.message : 'No se pudo guardar el producto.'
+    catalogError.value = apiErrorMessage(error, 'No se pudo guardar el producto.')
   } finally {
     saving.value = false
   }
@@ -850,8 +985,8 @@ async function saveCategory() {
     categoryDialogFromProduct.value = false
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
-  } catch {
-    catalogError.value = 'No se pudo guardar la categoría.'
+  } catch (error) {
+    catalogError.value = apiErrorMessage(error, 'No se pudo guardar la categoría.')
   } finally {
     saving.value = false
   }
@@ -892,7 +1027,7 @@ async function saveStockAdjustment() {
     catalogStore.invalidateCatalog()
     await catalogStore.loadCatalog({ force: true })
   } catch (error) {
-    catalogError.value = error instanceof Error ? error.message : 'No se pudo ajustar el stock.'
+    catalogError.value = apiErrorMessage(error, 'No se pudo ajustar el stock.')
   } finally {
     saving.value = false
   }
@@ -931,7 +1066,23 @@ async function openStockHistory(product: CatalogProduct | null) {
 
       <div class="catalog-primary-actions">
         <Button type="button" text size="small" icon="pi pi-refresh" label="Actualizar" :loading="loading" @click="refreshCatalog" />
-        <Button type="button" icon="pi pi-plus" label="Nuevo producto" class="new-product-button" @click="openCreateProduct" />
+        <Button
+          type="button"
+          icon="pi pi-box"
+          label="Registrar insumo"
+          outlined
+          severity="secondary"
+          :disabled="!canManageProducts"
+          @click="openCreateInternalItem"
+        />
+        <Button
+          type="button"
+          icon="pi pi-plus"
+          label="Nuevo producto"
+          class="new-product-button"
+          :disabled="!canManageProducts"
+          @click="openCreateProduct"
+        />
       </div>
     </header>
 
@@ -941,16 +1092,16 @@ async function openStockHistory(product: CatalogProduct | null) {
 
     <section class="catalog-summary" aria-label="Resumen del inventario">
       <article>
-        <span>Ítems</span>
-        <strong>{{ products.length }}</strong>
+        <span>Productos</span>
+        <strong>{{ saleItemsCount }}</strong>
+      </article>
+      <article>
+        <span>Insumos</span>
+        <strong>{{ internalItemsCount }}</strong>
       </article>
       <article>
         <span>Stock bajo</span>
         <strong :class="{ 'is-danger': lowStockCount > 0 }">{{ lowStockCount }}</strong>
-      </article>
-      <article>
-        <span>Sin stock</span>
-        <strong :class="{ 'is-danger': noStockCount > 0 }">{{ noStockCount }}</strong>
       </article>
       <article>
         <span>Valor venta</span>
@@ -972,7 +1123,15 @@ async function openStockHistory(product: CatalogProduct | null) {
           <small>{{ category.count }}</small>
         </button>
       </div>
-      <Button type="button" text size="small" icon="pi pi-tags" label="Nueva categoría" @click="openCreateCategory()" />
+      <Button
+        type="button"
+        text
+        size="small"
+        icon="pi pi-tags"
+        label="Nueva categoría"
+        :disabled="!canManageProducts"
+        @click="openCreateCategory()"
+      />
     </section>
 
     <section class="catalog-toolbar" aria-label="Búsqueda y filtros">
@@ -1018,9 +1177,20 @@ async function openStockHistory(product: CatalogProduct | null) {
         <template #empty>
           <div class="empty-products">
             <i class="pi pi-box" aria-hidden="true" />
-            <strong>No hay productos con estos filtros</strong>
-            <span>Cambia la búsqueda o crea un producto nuevo.</span>
-            <Button type="button" icon="pi pi-plus" label="Nuevo producto" @click="openCreateProduct" />
+            <strong>No hay ítems con estos filtros</strong>
+            <span>Crea un producto para vender o registra insumos de uso interno.</span>
+            <div class="empty-products__actions">
+              <Button
+                type="button"
+                icon="pi pi-box"
+                label="Registrar insumo"
+                outlined
+                severity="secondary"
+                :disabled="!canManageProducts"
+                @click="openCreateInternalItem"
+              />
+              <Button type="button" icon="pi pi-plus" label="Nuevo producto" :disabled="!canManageProducts" @click="openCreateProduct" />
+            </div>
           </div>
         </template>
         <template #loading>Cargando productos...</template>
@@ -1035,7 +1205,10 @@ async function openStockHistory(product: CatalogProduct | null) {
               </span>
               <div class="product-cell__text">
                 <strong>{{ data.name }}</strong>
-                <small>{{ data.categoryName || 'Sin categoría' }} · {{ data.sku ? `SKU ${data.sku}` : 'Sin SKU' }}</small>
+                <small>
+                  {{ isInternalItem(data) ? 'Insumo interno' : data.categoryName || 'Sin categoría' }}
+                  · {{ data.sku ? `SKU ${data.sku}` : 'Sin SKU' }}
+                </small>
               </div>
             </div>
           </template>
@@ -1044,7 +1217,8 @@ async function openStockHistory(product: CatalogProduct | null) {
         <Column field="price" header="Precio venta" sortable style="min-width: 8rem">
           <template #body="{ data }">
             <span class="cell-label">Precio venta</span>
-            <strong class="cell-price">Bs {{ money(data.price) }}</strong>
+            <span v-if="isInternalItem(data)" class="cell-muted">No aplica</span>
+            <strong v-else class="cell-price">Bs {{ money(data.price) }}</strong>
           </template>
         </Column>
 
@@ -1058,7 +1232,8 @@ async function openStockHistory(product: CatalogProduct | null) {
         <Column header="Margen" style="min-width: 6.5rem">
           <template #body="{ data }">
             <span class="cell-label">Margen</span>
-            <span class="margin-pill">{{ margin(data) }}</span>
+            <span v-if="isInternalItem(data)" class="cell-muted">No aplica</span>
+            <span v-else class="margin-pill">{{ margin(data) }}</span>
           </template>
         </Column>
 
@@ -1074,7 +1249,8 @@ async function openStockHistory(product: CatalogProduct | null) {
           <template #body="{ data }">
             <span class="cell-label">Señales</span>
             <div class="signal-badges">
-              <span v-if="data.visiblePos" class="signal-badge is-sale">A la venta</span>
+              <span v-if="isInternalItem(data)" class="signal-badge">Uso interno</span>
+              <span v-else-if="data.visiblePos" class="signal-badge is-sale">A la venta</span>
               <span v-if="isLowStock(data)" class="signal-badge is-low">Stock bajo</span>
             </div>
           </template>
@@ -1083,15 +1259,36 @@ async function openStockHistory(product: CatalogProduct | null) {
         <Column header="Acciones" style="min-width: 13rem">
           <template #body="{ data }">
             <div class="row-actions">
-              <Button type="button" size="small" icon="pi pi-pencil" label="Editar" outlined severity="secondary" @click.stop="openEditProduct(data)" />
               <Button
+                type="button"
+                size="small"
+                icon="pi pi-pencil"
+                label="Editar"
+                outlined
+                severity="secondary"
+                :disabled="!canManageProducts"
+                @click.stop="openEditProduct(data)"
+              />
+              <Button
+                v-if="isInternalItem(data)"
+                type="button"
+                size="small"
+                icon="pi pi-minus-circle"
+                label="Usar"
+                outlined
+                severity="secondary"
+                :disabled="!canManageProducts || data.stock <= 0"
+                @click.stop="openUseInternalItem(data)"
+              />
+              <Button
+                v-else
                 type="button"
                 size="small"
                 icon="pi pi-sliders-h"
                 label="Stock"
                 outlined
                 severity="secondary"
-                :disabled="data.kind === 'servicio'"
+                :disabled="data.kind === 'servicio' || !canManageProducts"
                 @click.stop="openStockAdjustment(data)"
               />
               <Button
@@ -1112,20 +1309,30 @@ async function openStockHistory(product: CatalogProduct | null) {
     <Dialog
       v-model:visible="productDialogOpen"
       modal
-      :header="form.id ? 'Editar producto' : 'Crear producto'"
+      :header="productDialogTitle"
       class="product-dialog"
-      :style="{ width: 'min(860px, calc(100vw - 24px))' }"
+      :style="{ width: 'min(1120px, calc(100vw - 24px))' }"
     >
       <form class="pform" @submit.prevent="saveProduct">
         <div class="pform-body">
           <!-- Nombre -->
           <div class="pfield">
             <label for="product-name">Nombre <span class="req">*</span></label>
-            <InputText id="product-name" v-model="form.name" autocomplete="off" placeholder="Ej. Coca Cola, Leche Pil, Pan..." />
+            <InputText
+              id="product-name"
+              v-model="form.name"
+              autocomplete="off"
+              :placeholder="internalItemMode ? 'Ej. Vasos descartables, bombillas, bolsas...' : 'Ej. Coca Cola, Leche Pil, Pan...'"
+            />
           </div>
 
-          <div class="product-main-grid">
-            <div class="pfield">
+          <div v-if="internalItemMode" class="internal-form-note">
+            <i class="pi pi-box" aria-hidden="true" />
+            <span>Insumo de uso interno: controla costo y stock, no aparece para cobrar ni para publicar como producto.</span>
+          </div>
+
+          <div class="product-main-grid" :class="{ 'is-internal': internalItemMode }">
+            <div v-if="!internalItemMode" class="pfield">
               <label for="product-kind">Tipo</label>
               <Select
                 id="product-kind"
@@ -1153,7 +1360,7 @@ async function openStockHistory(product: CatalogProduct | null) {
           </div>
 
           <!-- Costo por partes (opcional): siempre visible, sin plegar -->
-          <div v-if="form.kind !== 'combo'" class="cost-section">
+          <div v-if="form.kind !== 'combo' && !internalItemMode" class="cost-section">
             <p class="step-heading"><i class="pi pi-calculator" aria-hidden="true" /> Costo por partes <span class="step-heading__opt">opcional</span></p>
 
             <div v-if="form.kind === 'producto'" class="pfield">
@@ -1205,10 +1412,13 @@ async function openStockHistory(product: CatalogProduct | null) {
           </div>
 
           <!-- Costo / margen por unidad -->
-          <p class="step-heading"><i class="pi pi-tag" aria-hidden="true" /> Costo y precio de venta</p>
+          <p class="step-heading">
+            <i class="pi pi-tag" aria-hidden="true" />
+            {{ internalItemMode ? 'Costo y stock del insumo' : 'Costo y precio de venta' }}
+          </p>
           <div class="pgrid">
             <div class="pfield">
-              <label for="product-cost">Costo por unidad</label>
+              <label for="product-cost">{{ internalItemMode ? 'Costo de compra' : 'Costo por unidad' }}</label>
               <InputNumber
                 id="product-cost"
                 v-model="form.cost"
@@ -1221,7 +1431,7 @@ async function openStockHistory(product: CatalogProduct | null) {
               />
               <small v-if="usesCostBreakdown" class="field-help">Se calcula del desglose de arriba.</small>
             </div>
-            <div class="pfield">
+            <div v-if="!internalItemMode" class="pfield">
               <label for="product-margin">Margen deseado por unidad</label>
               <InputNumber
                 id="product-margin"
@@ -1236,7 +1446,7 @@ async function openStockHistory(product: CatalogProduct | null) {
             </div>
           </div>
 
-          <div class="price-helper">
+          <div v-if="!internalItemMode" class="price-helper">
             <div class="price-helper__main">
               <span class="price-helper__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
               <div class="price-helper__text">
@@ -1256,7 +1466,7 @@ async function openStockHistory(product: CatalogProduct | null) {
           </div>
 
           <!-- Ganancia en vivo -->
-          <div class="profit-box" :class="{ 'is-negative': liveProfit.profit < 0, 'is-positive': liveProfit.profit > 0 }">
+          <div v-if="!internalItemMode" class="profit-box" :class="{ 'is-negative': liveProfit.profit < 0, 'is-positive': liveProfit.profit > 0 }">
             <span class="profit-box__label">
               <i :class="liveProfit.profit < 0 ? 'pi pi-exclamation-triangle' : 'pi pi-wallet'" aria-hidden="true" />
               {{ liveProfit.profit < 0 ? 'Estás perdiendo en cada venta' : 'Ganas con este precio' }}
@@ -1265,7 +1475,7 @@ async function openStockHistory(product: CatalogProduct | null) {
           </div>
 
           <div class="pgrid">
-            <div class="pfield">
+            <div v-if="!internalItemMode" class="pfield">
               <label for="product-price">Precio venta <span class="req">*</span></label>
               <InputNumber
                 id="product-price"
@@ -1291,21 +1501,21 @@ async function openStockHistory(product: CatalogProduct | null) {
           <!-- Sección: Códigos e imagen -->
           <button type="button" class="section-toggle" :class="{ 'is-open': sections.codes }" @click="toggleSection('codes')">
             <span><i class="pi pi-chevron-right" aria-hidden="true" /> Códigos e imagen</span>
-            <small>Código de barras, unidad, foto</small>
+            <small>{{ internalItemMode ? 'Unidad, foto o icono' : 'Código de barras, unidad, foto' }}</small>
           </button>
           <div v-show="sections.codes" class="section-body">
             <div class="pgrid">
-              <div class="pfield">
+              <div v-if="!internalItemMode" class="pfield">
                 <label for="product-barcode">Código de barras</label>
                 <InputText id="product-barcode" v-model="form.barcode" autocomplete="off" placeholder="Escanea o escribe el código" />
               </div>
               <div class="pfield">
-                <label for="product-unit">Unidad de venta</label>
+                <label for="product-unit">{{ internalItemMode ? 'Unidad del insumo' : 'Unidad de venta' }}</label>
                 <Select id="product-unit" v-model="form.unit" :options="unitSelectOptions" optionLabel="label" optionValue="value" fluid />
               </div>
             </div>
             <div class="pfield">
-              <label>Foto del producto</label>
+              <label>{{ internalItemMode ? 'Foto o icono del insumo' : 'Foto del producto' }}</label>
               <div class="image-row">
                 <span class="image-preview">
                   <img v-if="form.imageUrl" :src="form.imageUrl" alt="Vista previa" />
@@ -1373,7 +1583,7 @@ async function openStockHistory(product: CatalogProduct | null) {
           <!-- Sección: Detalles avanzados -->
           <button type="button" class="section-toggle" :class="{ 'is-open': sections.advanced }" @click="toggleSection('advanced')">
             <span><i class="pi pi-chevron-right" aria-hidden="true" /> Detalles avanzados</span>
-            <small>Stock mín/máx, descripción, visibilidad</small>
+            <small>{{ internalItemMode ? 'Stock mín/máx y descripción' : 'Stock mín/máx, descripción, visibilidad' }}</small>
           </button>
           <div v-show="sections.advanced" class="section-body">
             <div class="pgrid">
@@ -1390,7 +1600,7 @@ async function openStockHistory(product: CatalogProduct | null) {
               <label for="product-description">Descripción</label>
               <Textarea id="product-description" v-model="form.description" rows="2" autoResize />
             </div>
-            <div class="check-row">
+            <div v-if="!internalItemMode" class="check-row">
               <label>
                 <Checkbox v-model="form.visiblePos" binary />
                 <span>
@@ -1403,6 +1613,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 
           <!-- Sección: Variantes -->
           <button
+            v-if="!internalItemMode"
             type="button"
             class="section-toggle"
             :class="{ 'is-open': sections.variants, 'is-disabled': form.kind === 'servicio' }"
@@ -1412,7 +1623,7 @@ async function openStockHistory(product: CatalogProduct | null) {
             <span><i class="pi pi-chevron-right" aria-hidden="true" /> Variantes</span>
             <small>{{ form.kind === 'servicio' ? 'No aplica a servicios' : form.variants.length ? `${form.variants.length} variante(s)` : 'Sin variantes' }}</small>
           </button>
-          <div v-show="sections.variants" class="section-body">
+          <div v-if="!internalItemMode" v-show="sections.variants" class="section-body">
             <div v-for="(variant, index) in form.variants" :key="index" class="variant-row">
               <InputText v-model="variant.name" placeholder="Nombre (ej. Talla M)" class="variant-name" />
               <InputNumber v-model="variant.cost" mode="decimal" :min="0" :minFractionDigits="2" :maxFractionDigits="2" placeholder="Costo" class="variant-cost" />
@@ -1426,7 +1637,138 @@ async function openStockHistory(product: CatalogProduct | null) {
 
         <footer class="pform-footer">
           <Button type="button" outlined label="Cancelar" severity="secondary" @click="productDialogOpen = false" />
-          <Button type="submit" :label="form.id ? 'Guardar cambios' : 'Crear producto'" :loading="saving" />
+          <Button type="submit" :label="productSubmitLabel" :loading="saving" />
+        </footer>
+      </form>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="internalDialogOpen"
+      modal
+      :header="form.id ? 'Editar insumo' : 'Registrar insumo'"
+      class="product-dialog internal-dialog"
+      :style="{ width: 'min(820px, calc(100vw - 24px))' }"
+    >
+      <form class="pform" @submit.prevent="saveProduct">
+        <div class="pform-body internal-form-body">
+          <div class="internal-form-note">
+            <i class="pi pi-box" aria-hidden="true" />
+            <span>Insumo de uso interno. Se descuenta con “Usar” cuando se consume en el negocio, sin pasar por ventas.</span>
+          </div>
+
+          <div class="pfield">
+            <label for="internal-name">Nombre <span class="req">*</span></label>
+            <InputText id="internal-name" v-model="form.name" autocomplete="off" placeholder="Ej. Vasos descartables, bombillas, bolsas..." />
+          </div>
+
+          <div class="internal-dialog-grid">
+            <div class="pfield">
+              <label for="internal-category">Categoría</label>
+              <div class="category-picker">
+                <Select id="internal-category" v-model="form.categoryId" :options="categoryOptions" optionLabel="label" optionValue="value" fluid />
+                <Button type="button" icon="pi pi-plus" label="Nueva" outlined @click="openCreateCategory(true)" />
+              </div>
+            </div>
+
+            <div class="pfield">
+              <label for="internal-unit">Unidad</label>
+              <Select id="internal-unit" v-model="form.unit" :options="unitSelectOptions" optionLabel="label" optionValue="value" fluid />
+            </div>
+          </div>
+
+          <div class="internal-dialog-grid">
+            <div class="pfield">
+              <label for="internal-cost">Costo de compra</label>
+              <InputNumber
+                id="internal-cost"
+                v-model="form.cost"
+                prefix="Bs "
+                :min="0"
+                :minFractionDigits="2"
+                :maxFractionDigits="2"
+                fluid
+              />
+            </div>
+
+            <div class="pfield">
+              <label for="internal-stock">
+                {{ form.id ? 'Stock actual' : 'Stock inicial' }}
+                <span v-if="!form.id" class="req">*</span>
+              </label>
+              <InputNumber id="internal-stock" v-model="form.stock" :min="0" :maxFractionDigits="2" :disabled="Boolean(form.id)" fluid />
+              <small v-if="form.id" class="field-help">Usa “Usar” o “Stock” para registrar movimientos.</small>
+            </div>
+          </div>
+
+          <div class="internal-dialog-grid">
+            <div class="pfield">
+              <label for="internal-min-stock">Stock mínimo</label>
+              <InputNumber id="internal-min-stock" v-model="form.minStock" :min="0" :maxFractionDigits="2" fluid />
+            </div>
+            <div class="pfield">
+              <label for="internal-max-stock">Stock máximo</label>
+              <InputNumber id="internal-max-stock" v-model="form.maxStock" :min="0" :maxFractionDigits="2" placeholder="Opcional" fluid />
+            </div>
+          </div>
+
+          <div class="pfield">
+            <label for="internal-description">Descripción / uso</label>
+            <Textarea id="internal-description" v-model="form.description" rows="2" autoResize placeholder="Ej. Para bebidas, empaque, limpieza, preparación..." />
+          </div>
+
+          <button type="button" class="section-toggle" :class="{ 'is-open': sections.codes }" @click="toggleSection('codes')">
+            <span><i class="pi pi-chevron-right" aria-hidden="true" /> Foto o icono</span>
+            <small>Opcional</small>
+          </button>
+          <div v-show="sections.codes" class="section-body">
+            <div class="image-row">
+              <span class="image-preview">
+                <img v-if="form.imageUrl" :src="form.imageUrl" alt="Vista previa" />
+                <span v-else-if="form.icon">{{ form.icon }}</span>
+                <i v-else class="pi pi-image" aria-hidden="true" />
+              </span>
+              <div class="image-picker">
+                <input ref="imageInput" type="file" accept="image/*" capture="environment" hidden @change="onImagePick" />
+                <div class="image-actions">
+                  <Button
+                    type="button"
+                    size="small"
+                    icon="pi pi-camera"
+                    :label="form.imageUrl ? 'Cambiar foto' : 'Subir foto'"
+                    :loading="imageProcessing"
+                    @click="pickImage"
+                  />
+                  <Button
+                    v-if="form.imageUrl"
+                    type="button"
+                    size="small"
+                    icon="pi pi-trash"
+                    label="Quitar"
+                    outlined
+                    severity="secondary"
+                    @click="clearImage"
+                  />
+                </div>
+                <div class="emoji-grid">
+                  <button
+                    v-for="emoji in emojiOptions"
+                    :key="emoji"
+                    type="button"
+                    class="emoji-btn"
+                    :class="{ 'is-active': form.icon === emoji }"
+                    @click="form.icon = form.icon === emoji ? '' : emoji"
+                  >
+                    {{ emoji }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="pform-footer">
+          <Button type="button" outlined label="Cancelar" severity="secondary" @click="internalDialogOpen = false" />
+          <Button type="submit" :label="form.id ? 'Guardar insumo' : 'Registrar insumo'" :loading="saving" />
         </footer>
       </form>
     </Dialog>
@@ -1488,7 +1830,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 
         <div class="pfield">
           <label for="stock-reason">Motivo</label>
-          <Select id="stock-reason" v-model="stockReason" :options="stockReasons" optionLabel="label" optionValue="value" fluid />
+          <Select id="stock-reason" v-model="stockReason" :options="stockReasonOptions" optionLabel="label" optionValue="value" fluid />
         </div>
 
         <div class="pfield">
@@ -1600,7 +1942,9 @@ async function openStockHistory(product: CatalogProduct | null) {
   --catalog-accent-strong: #066322;
   --catalog-accent-soft: #e4f4ea;
   display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 12px;
+  min-height: calc(100svh - 128px);
   padding: 8px 0 0;
 }
 
@@ -1774,6 +2118,7 @@ async function openStockHistory(product: CatalogProduct | null) {
 }
 
 .product-list-panel {
+  min-height: min(640px, calc(100svh - 360px));
   overflow: hidden;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -1804,6 +2149,10 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .catalog-table {
   font-size: 0.88rem;
+}
+
+.catalog-table :deep(.p-datatable-wrapper) {
+  min-height: min(520px, calc(100svh - 450px));
 }
 
 .cell-label {
@@ -1962,6 +2311,13 @@ async function openStockHistory(product: CatalogProduct | null) {
   font-size: 0.86rem;
 }
 
+.empty-products__actions {
+  display: inline-flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Botones blancos nítidos (Escanear, Importar, Editar, Stock) como el mockup */
 .catalog-workspace :deep(.p-button-outlined.p-button-secondary) {
   background: #ffffff !important;
@@ -2105,9 +2461,13 @@ async function openStockHistory(product: CatalogProduct | null) {
 .pform-body {
   display: grid;
   gap: 16px;
-  max-height: min(72vh, 660px);
+  max-height: calc(100dvh - 178px);
   overflow-y: auto;
   padding: 18px 22px;
+}
+
+.internal-form-body {
+  gap: 14px;
 }
 
 .pform-footer {
@@ -2128,6 +2488,30 @@ async function openStockHistory(product: CatalogProduct | null) {
   display: grid;
   grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
   gap: 14px;
+}
+
+.product-main-grid.is-internal {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.internal-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.internal-form-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .pgrid {
@@ -2895,6 +3279,10 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 @media (max-width: 480px) {
   .product-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-dialog-grid {
     grid-template-columns: 1fr;
   }
 
