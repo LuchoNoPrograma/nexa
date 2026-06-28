@@ -4,8 +4,8 @@
 // se refleja en el selector del diagnóstico y en la página /pos/planes.
 //
 // Precios tomados del estudio de factibilidad IMPULSA/NEXA (Tabla 25 "Planes de
-// acceso"): Gratuito 0 Bs, Mensual 25 Bs, Anual 270 Bs (ahorro de 30 Bs frente
-// a pagar 12 meses sueltos: 25 × 12 = 300).
+// acceso"): Gratuito 0 Bs, Mensual 50 Bs, Anual 550 Bs (ahorro de 50 Bs frente
+// a pagar 12 meses sueltos: 50 × 12 = 600).
 
 export type PlanPeriodo = 'ninguno' | 'mensual' | 'anual'
 
@@ -28,7 +28,7 @@ export type Plan = {
 }
 
 // Versión del catálogo: subir si cambian precios/beneficios para invalidar caches.
-export const PLANES_VERSION = 1
+export const PLANES_VERSION = 2
 
 export const PLANES: Plan[] = [
   {
@@ -50,7 +50,7 @@ export const PLANES: Plan[] = [
   {
     codigo: 'mensual',
     nombre: 'Mensual',
-    precioBs: 25,
+    precioBs: 50,
     periodo: 'mensual',
     unidad: 'por mes',
     iaConsultasMes: null,
@@ -67,7 +67,7 @@ export const PLANES: Plan[] = [
   {
     codigo: 'anual',
     nombre: 'Anual',
-    precioBs: 270,
+    precioBs: 550,
     periodo: 'anual',
     unidad: 'al año',
     iaConsultasMes: null,
@@ -86,7 +86,7 @@ export function planPorCodigo(codigo: string): Plan | undefined {
   return PLANES.find(p => p.codigo === codigo)
 }
 
-// Formatea un precio en bolivianos sin decimales (estilo local: "Bs 25").
+// Formatea un precio en bolivianos sin decimales (estilo local: "Bs 50").
 export function formatoBs(monto: number): string {
   return `Bs ${Math.round(monto)}`
 }
