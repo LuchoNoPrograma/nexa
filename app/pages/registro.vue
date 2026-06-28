@@ -67,7 +67,9 @@ async function onSubmit() {
     await navigateTo('/pos/inicio')
   } catch (error: any) {
     errorMessage.value = error?.data?.statusMessage
+      || error?.data?.message
       || error?.statusMessage
+      || error?.message
       || 'No se pudo crear la tienda. Revisa los datos e intenta de nuevo.'
   } finally {
     loading.value = false

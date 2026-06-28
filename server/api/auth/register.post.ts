@@ -84,9 +84,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'La contraseña debe tener al menos 6 caracteres.' })
   }
 
-  const existingPhone = await pool.query('select 1 from usuario where telefono = $1 limit 1', [phone])
+  const existingPhone = await pool.query<{ nombre: string; created_at: Date }>(
+    'select nombre, created_at from usuario where telefono = $1 limit 1',
+    [phone],
+  )
   if (existingPhone.rowCount) {
-    throw createError({ statusCode: 409, statusMessage: 'Ya existe una cuenta con ese celular.' })
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Ese celular ya tiene una cuenta en NEXA. Inicia sesion con ese celular o usa otro numero.',
+      data: {
+        reason: 'phone_already_registered',
+      },
+    })
   }
 
   const passwordHash = await hashPassword(password)
@@ -202,7 +211,36 @@ export default defineEventHandler(async (event) => {
     await client.query('rollback')
 
     if (typeof error === 'object' && error && 'code' in error && error.code === '23505') {
-      throw createError({ statusCode: 409, statusMessage: 'Ese celular o nombre de tienda ya esta registrado.' })
+      const constraint = 'constraint' in error && typeof error.constraint === 'string' ? error.constraint : ''
+
+      if (constraint === 'usuario_telefono_unique') {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'Ese celular ya tiene una cuenta en NEXA. Inicia sesion con ese celular o usa otro numero.',
+          data: {
+            reason: 'phone_already_registered',
+          },
+        })
+      }
+
+      if (constraint === 'tienda_slug_key') {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'Ese nombre de negocio ya esta registrado. Cambia el nombre visible de la tienda e intenta nuevamente.',
+          data: {
+            reason: 'store_name_already_registered',
+          },
+        })
+      }
+
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'No se pudo crear la cuenta porque uno de los datos ya esta registrado.',
+        data: {
+          reason: 'unique_constraint',
+          constraint,
+        },
+      })
     }
 
     throw error
