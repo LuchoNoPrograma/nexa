@@ -35,6 +35,12 @@ type ProductForm = {
 }
 
 type ChipKey = 'todos' | 'productos' | 'insumos' | 'servicios' | 'stockBajo' | 'combos'
+type CategoryFilterOption = {
+  id: string
+  name: string
+  count: number | null
+  action?: 'create'
+}
 
 type StockMovement = {
   id: string
@@ -70,7 +76,9 @@ const internalItemMode = ref(false)
 
 const searchTerm = ref('')
 const activeChip = ref<ChipKey>('todos')
-const selectedCategoryId = ref<string | null>(null)
+const allCategoryFilterId = '__all_categories__'
+const createCategoryFilterId = '__create_category__'
+const selectedCategoryId = ref(allCategoryFilterId)
 const stockProduct = ref<CatalogProduct | null>(null)
 const stockMode = ref<'sumar' | 'restar' | 'fijar'>('sumar')
 const stockAmount = ref(0)
@@ -218,7 +226,6 @@ const productFilters: { key: ChipKey; label: string }[] = [
   { key: 'stockBajo', label: 'Stock bajo' },
   { key: 'combos', label: 'Combos' },
 ]
-
 const form = reactive<ProductForm>(emptyProductForm())
 
 // Emoji libre fuera del catálogo: refleja form.icon cuando no es uno de los predefinidos
@@ -258,26 +265,26 @@ const categoryOptions = computed(() => [
     .map((category) => ({ label: category.name, value: category.id })),
 ])
 
-const chipCounts = computed(() => {
-  const counts = {} as Record<ChipKey, number>
-  for (const filter of productFilters) {
-    counts[filter.key] = products.value
-      .filter((product) => matchesCategory(product))
-      .filter((product) => matchesChip(product, filter.key)).length
-  }
-  return counts
-})
-
-const categoryFilters = computed(() => [
-  { id: null, name: 'Todas', count: products.value.length },
-  ...categories.value
+const categoryFilters = computed<CategoryFilterOption[]>(() => {
+  const activeCategories = categories.value
     .filter((category) => category.active)
-    .map((category) => ({
+    .map<CategoryFilterOption>((category) => ({
       id: category.id,
       name: category.name,
       count: products.value.filter((product) => product.categoryId === category.id).length,
-    })),
-])
+    }))
+
+  return [
+    { id: allCategoryFilterId, name: 'Todas', count: products.value.length },
+    ...activeCategories,
+    {
+      id: createCategoryFilterId,
+      name: activeCategories.length ? 'Crear nueva categoría' : 'No hay categorías. Crear una categoría',
+      count: null,
+      action: 'create',
+    },
+  ]
+})
 
 const filteredProducts = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
@@ -301,6 +308,21 @@ const filteredProducts = computed(() => {
 const statsLine = computed(() => {
   const shown = filteredProducts.value.length
   return `${shown} de ${products.value.length} ítems visibles`
+})
+
+function clearCatalogFilters() {
+  searchTerm.value = ''
+  activeChip.value = 'todos'
+  selectedCategoryId.value = allCategoryFilterId
+}
+
+watch(selectedCategoryId, (categoryId) => {
+  if (categoryId !== createCategoryFilterId) {
+    return
+  }
+
+  selectedCategoryId.value = allCategoryFilterId
+  openCreateCategory()
 })
 
 const productDialogTitle = computed(() => {
@@ -385,7 +407,9 @@ function matchesChip(product: CatalogProduct, key: ChipKey) {
 }
 
 function matchesCategory(product: CatalogProduct) {
-  return selectedCategoryId.value === null || product.categoryId === selectedCategoryId.value
+  return selectedCategoryId.value === allCategoryFilterId
+    || selectedCategoryId.value === createCategoryFilterId
+    || product.categoryId === selectedCategoryId.value
 }
 
 function emptyProductForm(): ProductForm {
@@ -1138,31 +1162,6 @@ async function openStockHistory(product: CatalogProduct | null) {
       </article>
     </section>
 
-    <section class="category-strip" aria-label="Categorías">
-      <div class="category-strip__list">
-        <button
-          v-for="category in categoryFilters"
-          :key="category.id ?? 'all'"
-          type="button"
-          class="category-pill"
-          :class="{ 'is-active': selectedCategoryId === category.id }"
-          @click="selectedCategoryId = category.id"
-        >
-          <span>{{ category.name }}</span>
-          <small>{{ category.count }}</small>
-        </button>
-      </div>
-      <Button
-        type="button"
-        text
-        size="small"
-        icon="pi pi-tags"
-        label="Nueva categoría"
-        :disabled="!canManageProducts"
-        @click="openCreateCategory()"
-      />
-    </section>
-
     <section class="catalog-toolbar" aria-label="Búsqueda y filtros">
       <IconField class="catalog-search">
         <InputIcon>
@@ -1171,20 +1170,53 @@ async function openStockHistory(product: CatalogProduct | null) {
         <InputText v-model="searchTerm" placeholder="Buscar producto, SKU o código de barras" />
       </IconField>
 
-      <div class="catalog-chips" role="tablist" aria-label="Filtros rápidos">
-        <button
-          v-for="chip in productFilters"
-          :key="chip.key"
-          type="button"
-          class="chip"
-          :class="{ 'is-active': activeChip === chip.key }"
-          role="tab"
-          :aria-selected="activeChip === chip.key"
-          @click="activeChip = chip.key"
-        >
-          {{ chip.label }}
-          <span class="chip__count">{{ chipCounts[chip.key] }}</span>
-        </button>
+      <div class="filter-composer">
+        <div class="filter-composer__main">
+          <Select
+            v-model="activeChip"
+            :options="productFilters"
+            optionLabel="label"
+            optionValue="key"
+            class="filter-type-select"
+            aria-label="Filtrar por tipo"
+          />
+          <Select
+            v-model="selectedCategoryId"
+            :options="categoryFilters"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            class="filter-category-select"
+            aria-label="Filtrar por categoría"
+          >
+            <template #option="{ option }">
+              <div class="filter-option" :class="{ 'is-action': option.action === 'create' }">
+                <i :class="option.action === 'create' ? 'pi pi-plus' : 'pi pi-folder'" aria-hidden="true" />
+                <span>{{ option.name }}</span>
+                <small v-if="option.count !== null">{{ option.count }}</small>
+              </div>
+            </template>
+            <template #emptyfilter>
+              <button
+                type="button"
+                class="filter-empty-action"
+                :disabled="!canManageProducts"
+                @click.stop.prevent="openCreateCategory()"
+              >
+                <i class="pi pi-plus" aria-hidden="true" />
+                <span>No se encontraron categorías. Crear categoría</span>
+              </button>
+            </template>
+          </Select>
+          <Button
+            type="button"
+            icon="pi pi-filter-slash"
+            label="Limpiar filtros"
+            outlined
+            severity="secondary"
+            @click="clearCatalogFilters"
+          />
+        </div>
       </div>
     </section>
 
@@ -2041,9 +2073,9 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .catalog-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 460px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
   gap: 12px;
-  align-items: center;
+  align-items: start;
 }
 
 .catalog-search :deep(.p-inputtext) {
@@ -2053,70 +2085,112 @@ async function openStockHistory(product: CatalogProduct | null) {
   font-weight: 650;
 }
 
-.catalog-chips,
-.category-strip__list {
+.filter-composer {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.filter-composer__main {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.5fr) minmax(220px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-type-select,
+.filter-type-select :deep(.p-select),
+.filter-category-select,
+.filter-category-select :deep(.p-select) {
+  width: 100%;
+}
+
+.filter-type-select :deep(.p-select),
+.filter-category-select :deep(.p-select) {
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.filter-type-select :deep(.p-select-label),
+.filter-category-select :deep(.p-select-label) {
   display: flex;
   align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  color: #0b1f3a;
+  font-size: 0.9rem;
 }
 
-.chip,
-.category-pill {
-  display: inline-flex;
+.filter-type-select :deep(.p-select-dropdown),
+.filter-category-select :deep(.p-select-dropdown) {
+  width: 2.75rem;
+  color: #41617f;
+}
+
+.filter-option {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
+  gap: 9px;
+}
+
+.filter-option i {
+  color: #0a6f1f;
+  font-size: 0.9rem;
+}
+
+.filter-option span {
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 850;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid #dfe7e2;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #475569;
-  font-size: 0.82rem;
+}
+
+.filter-option small {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 0.72rem;
   font-weight: 800;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
 }
 
-.chip {
-  padding: 8px 13px;
-}
-
-.category-pill {
-  padding: 7px 12px;
-}
-
-.chip:hover,
-.category-pill:hover {
-  border-color: #b9d9c2;
-  background: #f5fbf6;
-}
-
-.chip.is-active,
-.category-pill.is-active {
-  border-color: var(--catalog-accent);
-  background: var(--catalog-accent);
-  color: #ffffff;
-}
-
-.chip__count,
-.category-pill small {
-  display: inline-grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #eef2f6;
-  color: #475569;
-  font-size: 0.7rem;
+.filter-option.is-action {
+  color: #0a6f1f;
   font-weight: 900;
 }
 
-.chip.is-active .chip__count,
-.category-pill.is-active small {
-  background: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
+.filter-option.is-action span {
+  color: #0a6f1f;
+}
+
+.filter-empty-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  color: #0a6f1f;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  text-align: left;
+}
+
+.filter-empty-action i {
+  font-size: 0.9rem;
+}
+
+.filter-empty-action span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-empty-action:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
 .catalog-summary {
@@ -2150,13 +2224,6 @@ async function openStockHistory(product: CatalogProduct | null) {
 
 .catalog-summary .is-danger {
   color: #b45309;
-}
-
-.category-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
 }
 
 .product-list-panel {
@@ -3380,14 +3447,6 @@ async function openStockHistory(product: CatalogProduct | null) {
   .catalog-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .category-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .category-strip :deep(.p-button) {
-    justify-self: start;
-  }
 }
 
 @media (max-width: 720px) {
@@ -3421,6 +3480,15 @@ async function openStockHistory(product: CatalogProduct | null) {
 
   .catalog-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-composer__main {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-composer__main :deep(.p-button) {
+    width: 100%;
+    justify-content: center;
   }
 
   .product-list-head {
