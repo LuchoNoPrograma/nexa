@@ -73,6 +73,13 @@ function limpiarTexto(value: unknown, max: number): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
+function formatPrecio(value: number): string {
+  return new Intl.NumberFormat('es-BO', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 function normalizarHashtags(value: unknown): string[] {
   const lista = Array.isArray(value) ? value : []
   return lista
@@ -199,12 +206,12 @@ function buildPrompt(modo: Modo, productos: ProductoContexto[], tienda: TiendaCo
     const total = productos.reduce((sum, p) => sum + p.precio, 0)
     const sugerido = Math.max(1, Math.round(total * 0.9))
     const precioEspecial = total > 0
-      ? `Precio sumado: Bs ${total}. Puedes sugerir un precio especial alrededor de Bs ${sugerido}, dejando claro que es una sugerencia.`
+      ? `Precio sumado: Bs ${formatPrecio(total)}. Puedes sugerir un precio especial alrededor de Bs ${formatPrecio(sugerido)}, dejando claro que es una sugerencia.`
       : 'No hay precio válido registrado para todos los productos; no inventes precio del combo.'
     return [
       cabecera,
       'Quiero armar un combo o promoción juntando estos productos:',
-      ...productos.map((p) => `- ${p.nombre}${p.precio > 0 ? ` (Bs ${p.precio})` : ' (sin precio registrado)'}${p.categoria ? ` · ${p.categoria}` : ''}${p.stock > 0 ? ` · stock: ${p.stock}` : ''}`),
+      ...productos.map((p) => `- ${p.nombre}${p.precio > 0 ? ` (Bs ${formatPrecio(p.precio)})` : ' (sin precio registrado)'}${p.categoria ? ` · ${p.categoria}` : ''}${p.stock > 0 ? ` · stock: ${p.stock}` : ''}`),
       precioEspecial,
       'Ponle un nombre llamativo al combo y, en el texto, deja claro por qué estos productos combinan bien juntos (se complementan, son perfectos para una ocasión o momento del día).',
       'Anímalos a llevar todo junto resaltando el ahorro frente a comprarlos por separado.',
@@ -219,7 +226,7 @@ function buildPrompt(modo: Modo, productos: ProductoContexto[], tienda: TiendaCo
     cabecera,
     `Producto a promocionar: ${producto.nombre}.`,
     producto.categoria ? `Categoría: ${producto.categoria}.` : '',
-    producto.precio > 0 ? `Precio: Bs ${producto.precio}.` : 'Precio: no registrado; no menciones precio.',
+    producto.precio > 0 ? `Precio: Bs ${formatPrecio(producto.precio)}.` : 'Precio: no registrado; no menciones precio.',
     producto.stock > 0 ? `Stock disponible según inventario: ${producto.stock}.` : 'Stock: sin stock positivo registrado; no digas que hay pocas o muchas unidades.',
     producto.descripcion ? `Descripción: ${producto.descripcion}.` : '',
     pistaModo(modo),
@@ -262,7 +269,7 @@ function buildDemoPost(modo: Modo, productos: ProductoContexto[], tienda: Tienda
     const total = productos.reduce((sum, p) => sum + p.precio, 0)
     const sugerido = Math.max(1, Math.round(total * 0.9))
     const nombres = productos.map((p) => p.nombre).join(' + ')
-    const precio = total > 0 ? ` por solo Bs ${sugerido}` : ''
+    const precio = total > 0 ? ` por Bs ${formatPrecio(sugerido)}` : ''
     return {
       titulo: 'Combo especial',
       texto: `🎉 ¡Combo especial! Llévate ${nombres} junto${precio}. Escríbenos y aprovecha hoy.`,
@@ -277,10 +284,10 @@ function buildDemoPost(modo: Modo, productos: ProductoContexto[], tienda: Tienda
 
   const p = productos[0]!
   if (modo === 'sobrante') {
-    const precio = p.precio > 0 ? ` de Bs ${p.precio}` : ''
+    const precio = p.precio > 0 ? `: Bs ${formatPrecio(p.precio)}` : ''
     return {
       titulo: p.nombre,
-      texto: `🔥 ¡Oferta en ${p.nombre}! Aprovecha el precio especial${precio}. Escríbenos o pásate hoy.`,
+      texto: `🔥 ${p.nombre}${precio}. Consulta esta opción y haz tu pedido directamente con ${tienda.nombre}.`,
       hashtags: hashtagsDemo(modo, productos, tienda),
       ideaVideo: `Graba un video corto mostrando tu ${p.nombre} con el cartel de oferta.`,
       mejorHora: '19:00',
@@ -290,12 +297,12 @@ function buildDemoPost(modo: Modo, productos: ProductoContexto[], tienda: Tienda
     }
   }
 
-  const precio = p.precio > 0 ? ` Precio: Bs ${p.precio}.` : ''
+  const precio = p.precio > 0 ? ` Precio: Bs ${formatPrecio(p.precio)}.` : ''
   return {
     titulo: p.nombre,
-    texto: `¡${p.nombre} disponible hoy! 😋 Pásate y pídelo, te va a encantar.${precio}`,
+    texto: `${p.nombre}.${precio} Consulta más información o haz tu pedido directamente con ${tienda.nombre}.`,
     hashtags: hashtagsDemo(modo, productos, tienda),
-    ideaVideo: `Graba un video corto mostrando tu ${p.nombre} de cerca, que se vea apetitoso.`,
+    ideaVideo: `Graba un video corto mostrando ${p.nombre} de cerca y enseña claramente su presentación.`,
     mejorHora: '19:00',
     audiencia: 'Clientes cercanos a tu negocio',
     objetivo: 'Atraer más clientes',
@@ -320,6 +327,9 @@ async function generarConGemini(prompt: string): Promise<PostGenerado | null> {
     'El texto debe ser breve y fácil de leer (entre 140 y 280 caracteres) y usar 1 o 2 emojis que peguen con el producto, no de relleno.',
     'Regla crítica de verdad de datos: usa solo nombre, categoría, precio, stock, descripción, negocio, ciudad y nota entregados por el usuario. Todo viene de la base de datos o del dueño.',
     'No inventes productos, marcas, beneficios, sabores, materiales, disponibilidad, descuentos, precios, stock, ubicación exacta, delivery, horarios ni formas de pago.',
+    'No uses afirmaciones subjetivas sin respaldo como "te va a encantar", "delicioso", "ideal", "casero" o similares, salvo que aparezcan literalmente en la descripción o nota del dueño.',
+    'No digas "disponible hoy": tener stock registrado no confirma disponibilidad para una fecha concreta.',
+    'Escribe precios con formato boliviano: Bs 15 o Bs 15,50; nunca Bs 15.5.',
     'Si un dato no está presente o dice "no registrado", omítelo con naturalidad. Nunca escribas "según la base de datos" en la publicación.',
     'Si el precio no está registrado, no menciones precio. Si el stock no está registrado o no es positivo, no digas "pocas unidades", "mucho stock" ni "últimas unidades".',
     'HASHTAGS (importante): devuelve de 3 a 5, cada uno con UNA sola idea y en PascalCase. Nunca pegues dos conceptos en una misma etiqueta (MAL: #NavidadCobija, #AbarrotesCobija; BIEN: #Navidad #Cobija #Abarrotes).',
@@ -411,9 +421,22 @@ export default defineEventHandler(async (event) => {
   await ensureDatabase()
 
   const body = await readBody<GenerarBody | null>(event)
-  const modo: Modo = MODOS_VALIDOS.includes(body?.modo as Modo) ? (body!.modo as Modo) : 'clientes'
+  if (!MODOS_VALIDOS.includes(body?.modo as Modo)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Elige qué quieres lograr antes de crear la publicación.',
+    })
+  }
+  const modo = body!.modo as Modo
   const productoIds = Array.isArray(body?.productoIds) ? body!.productoIds!.map(String) : []
   const nota = String(body?.nota ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
+
+  if (nota.length < 5) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Escribe qué quieres comunicar antes de crear la publicación.',
+    })
+  }
 
   // El combo necesita al menos 2 productos elegidos por el usuario.
   if (modo === 'combo' && productoIds.filter(Boolean).length < 2) {

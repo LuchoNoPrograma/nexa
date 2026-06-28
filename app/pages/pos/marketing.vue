@@ -119,22 +119,6 @@ const OBJETIVOS: Objetivo[] = [
   },
 ]
 
-// Guía de video: estructura probada para reels/TikTok (gancho → muestra → convence → invita).
-// Es la misma para cualquier publicación, por eso vive en el front y no la genera la IA.
-const VIDEO_PASOS = [
-  { n: 1, titulo: 'Engancha', desc: 'En los primeros 3 segundos di algo llamativo o una pregunta, para que no sigan de largo.' },
-  { n: 2, titulo: 'Muestra', desc: 'Enseña el producto de cerca, que se vea bien y dé ganas de comprarlo.' },
-  { n: 3, titulo: 'Convence', desc: 'Di el precio o el beneficio: “solo Bs X”, “alcanza para toda la familia”.' },
-  { n: 4, titulo: 'Invita', desc: 'Cierra pidiendo la acción: “escríbenos”, “pásate hoy”, “pídelo ya”.' },
-]
-
-const VIDEO_TIPS = [
-  { icon: 'fluent-emoji:mobile-phone', texto: 'Graba con el celular parado (vertical)' },
-  { icon: 'fluent-emoji:stopwatch', texto: 'Que dure entre 15 y 30 segundos' },
-  { icon: 'fluent-emoji:sun', texto: 'Busca buena luz, de preferencia natural' },
-  { icon: 'fluent-emoji:musical-notes', texto: 'Acompáñalo con una canción de moda' },
-]
-
 type ProductoOpcion = { id: string; name: string; category: string | null; kind: string }
 
 // Muestra el selector de objetivo al entrar o al pedir "otra idea".
@@ -146,6 +130,18 @@ const modoActual = computed<Modo | null>(() => objetivoSel.value?.id ?? null)
 
 // Indicación libre del usuario para orientar la publicación.
 const nota = ref('')
+const notaValida = computed(() => nota.value.trim().length >= 5)
+const notaPlaceholder = computed(() => {
+  const placeholders: Partial<Record<Modo, string>> = {
+    clientes: 'Ej: quiero atraer estudiantes con una publicación alegre para el fin de semana',
+    sobrante: 'Ej: quiero venderlo esta semana, sin inventar descuentos',
+    combo: 'Ej: preséntalo como una opción para compartir en familia',
+    producto: 'Ej: destaca el precio y que pueden pedirlo por WhatsApp',
+  }
+  return modoActual.value
+    ? placeholders[modoActual.value]!
+    : 'Primero elige una opción arriba y luego escribe qué quieres comunicar'
+})
 
 // Productos para combo / producto específico.
 const productos = ref<ProductoOpcion[]>([])
@@ -269,7 +265,7 @@ watch(modoActual, (modo) => {
 })
 
 const puedeCrear = computed(() => {
-  if (!modoActual.value) {
+  if (!modoActual.value || !notaValida.value) {
     return false
   }
   if (modoActual.value === 'combo') {
@@ -303,6 +299,10 @@ function crear() {
     mostrarErrorHaru('Elige qué quieres lograr antes de pedirle ayuda a Haru.', 'Selecciona una de las tarjetas: atraer clientes, vender sobrante, armar combo u ofrecer producto.')
     return
   }
+  if (!notaValida.value) {
+    mostrarErrorHaru('Cuéntale a Haru qué quieres comunicar.', 'Escribe una indicación breve de al menos 5 caracteres. Haru no generará contenido sin una instrucción tuya.')
+    return
+  }
   if (modo === 'combo' && comboIds.value.length < 2) {
     mostrarErrorHaru('Haru necesita al menos 2 productos para armar un combo.', 'Elige productos activos de tu inventario para que el combo tenga sentido comercial.')
     return
@@ -318,6 +318,7 @@ const generando = ref(false)
 const flashMsg = ref('')
 let flashTimer: ReturnType<typeof setTimeout> | undefined
 let haruDialogTimer: ReturnType<typeof setTimeout> | undefined
+let haruThinkingTimer: ReturnType<typeof setInterval> | undefined
 
 type HaruDialogState = 'loading' | 'success' | 'error'
 
@@ -326,6 +327,7 @@ const haruDialogState = ref<HaruDialogState>('loading')
 const haruDialogTitle = ref('')
 const haruDialogText = ref('')
 const haruDialogDetail = ref('')
+const haruThinkingStep = ref(0)
 const haruDialogCanClose = computed(() => haruDialogState.value !== 'loading')
 const haruDialogShowInventory = computed(() => {
   const text = `${haruDialogText.value} ${haruDialogDetail.value}`.toLowerCase()
@@ -349,7 +351,17 @@ onBeforeUnmount(() => {
   if (haruDialogTimer) {
     clearTimeout(haruDialogTimer)
   }
+  if (haruThinkingTimer) {
+    clearInterval(haruThinkingTimer)
+  }
 })
+
+function detenerPensamientoHaru() {
+  if (haruThinkingTimer) {
+    clearInterval(haruThinkingTimer)
+    haruThinkingTimer = undefined
+  }
+}
 
 function abrirDialogHaru(modo: Modo) {
   if (haruDialogTimer) {
@@ -357,14 +369,47 @@ function abrirDialogHaru(modo: Modo) {
   }
 
   const objetivo = OBJETIVOS.find((obj) => obj.id === modo)?.titulo ?? 'tu publicación'
+  const etapas = [
+    {
+      text: `Estoy revisando los datos reales de ${objetivo.toLowerCase()}.`,
+      detail: 'Verifico producto, precio, stock y categoría para trabajar con información real.',
+    },
+    {
+      text: 'Ahora estoy interpretando lo que quieres comunicar.',
+      detail: 'Relaciono tu indicación con el objetivo elegido y el contexto de tu negocio.',
+    },
+    {
+      text: 'Estoy buscando el enfoque más atractivo para tus clientes.',
+      detail: 'Organizo la idea para que sea clara, útil y fácil de publicar.',
+    },
+    {
+      text: 'Ya estoy redactando la propuesta de publicación.',
+      detail: 'Cuido el tono, el llamado a la acción y los datos que no deben inventarse.',
+    },
+    {
+      text: 'Estoy dando una última revisión antes de mostrártela.',
+      detail: 'Compruebo que el texto sea coherente con tu producto y tu objetivo.',
+    },
+  ]
+
+  detenerPensamientoHaru()
   haruDialogState.value = 'loading'
   haruDialogTitle.value = 'Haru está preparando tu publicación'
-  haruDialogText.value = `Estoy revisando los datos reales de ${objetivo.toLowerCase()}.`
-  haruDialogDetail.value = 'Primero verifico producto, precio, stock y categoría. Si falta algo importante, te aviso en vez de inventarlo.'
+  haruThinkingStep.value = 0
+  haruDialogText.value = etapas[0]!.text
+  haruDialogDetail.value = etapas[0]!.detail
   haruDialogVisible.value = true
+
+  haruThinkingTimer = setInterval(() => {
+    haruThinkingStep.value = (haruThinkingStep.value + 1) % etapas.length
+    const etapa = etapas[haruThinkingStep.value]!
+    haruDialogText.value = etapa.text
+    haruDialogDetail.value = etapa.detail
+  }, 5000)
 }
 
 function mostrarExitoHaru() {
+  detenerPensamientoHaru()
   haruDialogState.value = 'success'
   haruDialogTitle.value = 'Publicación preparada'
   haruDialogText.value = 'Haru encontró datos suficientes y armó una idea lista para revisar.'
@@ -375,6 +420,7 @@ function mostrarExitoHaru() {
 }
 
 function mostrarErrorHaru(message: string, detail?: string) {
+  detenerPensamientoHaru()
   if (haruDialogTimer) {
     clearTimeout(haruDialogTimer)
   }
@@ -584,6 +630,7 @@ async function generar(modo: Modo) {
       flash(message)
     }
   } finally {
+    detenerPensamientoHaru()
     generando.value = false
   }
 }
@@ -664,8 +711,9 @@ function aplicarReco(reco: Recomendacion) {
     <section v-else-if="!post || mostrarSelector" class="selector">
       <div class="selector__head">
         <div>
+          <span class="selector__step">Paso 1 · Elige una opción</span>
           <h2>¿Qué quieres lograr hoy?</h2>
-          <p>Arma una publicación con los productos de tu negocio.</p>
+          <p>Toca una tarjeta para indicarle a Haru qué publicación debe preparar.</p>
         </div>
         <button v-if="post" type="button" class="btn-ghost" :disabled="generando" @click="cerrarSelector">
           <i class="pi pi-arrow-left" aria-hidden="true" />Volver
@@ -674,7 +722,7 @@ function aplicarReco(reco: Recomendacion) {
 
       <div class="form">
         <!-- Objetivo: cuadritos seleccionables -->
-        <div class="obj-grid">
+        <div class="obj-grid mb-4">
           <button
             v-for="obj in OBJETIVOS"
             :key="obj.id"
@@ -682,6 +730,7 @@ function aplicarReco(reco: Recomendacion) {
             class="obj"
             :class="[`is-${obj.tone}`, { 'is-active': modoActual === obj.id }]"
             :disabled="generando"
+            :aria-pressed="modoActual === obj.id"
             @click="objetivoSel = obj"
           >
             <span class="obj__art">
@@ -696,6 +745,10 @@ function aplicarReco(reco: Recomendacion) {
               <span class="obj__action">{{ obj.accion }}</span>
               <strong>{{ obj.titulo }}</strong>
               <small>{{ obj.desc }}</small>
+              <span class="obj__choice">
+                <i :class="modoActual === obj.id ? 'pi pi-check' : 'pi pi-arrow-right'" aria-hidden="true" />
+                {{ modoActual === obj.id ? 'Opción seleccionada' : 'Elegir esta opción' }}
+              </span>
             </span>
             <i class="pi pi-check-circle obj__check" aria-hidden="true" />
           </button>
@@ -733,21 +786,29 @@ function aplicarReco(reco: Recomendacion) {
             />
           </div>
 
-          <!-- Indicación extra del usuario -->
+          <!-- La instrucción es obligatoria: evita generar contenido sin intención del usuario. -->
           <div class="field">
-            <span class="field__label">¿Algo más que debamos saber? <small>(opcional)</small></span>
+            <span class="field__step">Paso 2 · Escribe tu indicación</span>
+            <span class="field__label">¿Qué quieres que diga la publicación?</span>
             <Textarea
               v-model="nota"
               rows="2"
               auto-resize
               fluid
-              placeholder="Ej: es para el fin de semana, resáltalo como casero, apunta a estudiantes…"
+              maxlength="240"
+              :disabled="!modoActual || generando"
+              :invalid="nota.length > 0 && !notaValida"
+              :placeholder="notaPlaceholder"
             />
+            <span class="field__help" :class="{ 'is-ready': notaValida }">
+              <i :class="notaValida ? 'pi pi-check-circle' : modoActual ? 'pi pi-info-circle' : 'pi pi-lock'" aria-hidden="true" />
+              {{ notaValida ? 'Indicación lista' : modoActual ? 'Obligatorio: Haru no publicará nada sin una instrucción tuya.' : 'Elige una opción para habilitar este campo.' }}
+            </span>
           </div>
 
           <button type="button" class="btn-primary" :disabled="generando || !puedeCrear" @click="crear">
             <i :class="generando ? 'pi pi-spin pi-spinner' : 'pi pi-sparkles'" aria-hidden="true" />
-            {{ generando ? 'Creando publicación…' : 'Crear publicación' }}
+            {{ generando ? 'Creando publicación…' : !modoActual ? 'Primero elige una opción' : !notaValida ? 'Escribe una indicación para continuar' : 'Crear publicación' }}
           </button>
         </div>
       </div>
@@ -908,51 +969,8 @@ function aplicarReco(reco: Recomendacion) {
           </div>
         </section>
 
-        <!-- Columna derecha: idea de video + cuadro de marketing personalizado -->
+        <!-- Columna secundaria: apoyo para crear la imagen de la publicación -->
         <div class="layout__side">
-        <!-- Tarjeta 2: idea de video + guía para grabar -->
-        <section class="card video">
-          <div class="video__lead">
-            <span class="video__icon"><Icon name="fluent-emoji:clapper-board" aria-hidden="true" /></span>
-            <div>
-              <strong>Idea de video</strong>
-              <p v-if="post.ideaVideo">{{ post.ideaVideo }}</p>
-            </div>
-          </div>
-
-          <div class="video__guide">
-            <span class="video__sub">Cómo grabarlo, paso a paso</span>
-            <ol class="steps">
-              <li v-for="paso in VIDEO_PASOS" :key="paso.n" class="step">
-                <span class="step__n">{{ paso.n }}</span>
-                <span class="step__txt">
-                  <strong>{{ paso.titulo }}</strong>
-                  <small>{{ paso.desc }}</small>
-                </span>
-              </li>
-            </ol>
-          </div>
-
-          <ul class="video__tips">
-            <li v-for="tip in VIDEO_TIPS" :key="tip.texto">
-              <Icon :name="tip.icon" class="tip-ic" aria-hidden="true" />{{ tip.texto }}
-            </li>
-          </ul>
-        </section>
-
-          <!-- Cuadro: marketing personalizado por WhatsApp -->
-          <section class="contacto">
-            <div class="contacto__body">
-              <span class="contacto__icon"><Icon name="fluent-emoji:speech-balloon" aria-hidden="true" /></span>
-              <strong>¿Quieres algo más personalizado?</strong>
-              <p>Cuéntanos qué necesitas y armamos una estrategia de marketing a la medida de tu negocio.</p>
-              <a class="contacto__btn" :href="whatsappUrl" target="_blank" rel="noopener">
-                <i class="pi pi-whatsapp" aria-hidden="true" />
-                Enviar mensaje
-              </a>
-            </div>
-          </section>
-
           <section class="image-ai">
             <span class="image-ai__icon"><i class="pi pi-sparkles" aria-hidden="true" /></span>
             <div>
@@ -962,6 +980,17 @@ function aplicarReco(reco: Recomendacion) {
                 <i class="pi pi-external-link" aria-hidden="true" />
                 Abrir ChatGPT
               </button>
+            </div>
+          </section>
+          <section class="contacto">
+            <div class="contacto__body">
+              <span class="contacto__icon"><Icon name="fluent-emoji:speech-balloon" aria-hidden="true" /></span>
+              <strong>¿Quieres algo más personalizado?</strong>
+              <p>Cuéntanos qué necesitas y armamos una estrategia para tu negocio.</p>
+              <a class="contacto__btn" :href="whatsappUrl" target="_blank" rel="noopener">
+                <i class="pi pi-whatsapp" aria-hidden="true" />
+                Hablar con Haru
+              </a>
             </div>
           </section>
         </div>
@@ -983,11 +1012,13 @@ function aplicarReco(reco: Recomendacion) {
           <i v-else class="pi pi-exclamation-triangle" />
         </div>
 
-        <div class="haru-feedback__copy">
+        <div class="haru-feedback__copy" aria-live="polite">
           <span class="haru-feedback__kicker">Haru Marketing</span>
           <h2>{{ haruDialogTitle }}</h2>
-          <p>{{ haruDialogText }}</p>
-          <small>{{ haruDialogDetail }}</small>
+          <div :key="haruDialogState === 'loading' ? haruThinkingStep : haruDialogState" class="haru-feedback__thought">
+            <p>{{ haruDialogText }}</p>
+            <small>{{ haruDialogDetail }}</small>
+          </div>
         </div>
 
         <div v-if="haruDialogCanClose" class="haru-feedback__actions">
@@ -1076,15 +1107,15 @@ function aplicarReco(reco: Recomendacion) {
     </Transition>
     </div>
 
-    <!-- Recomendaciones de Haru: a la derecha en desktop, al fondo en mobile -->
-    <PosRecomendacionesHaru
-      v-if="!sinProductos"
-      class="mkt-reco"
-      :items="recomendaciones"
-      titulos-mayuscula
-      @accion="aplicarReco"
-      @principal="abrirHaru"
-    />
+    <!-- Riel de Haru: recomendaciones y contacto personalizado. -->
+    <aside v-if="!sinProductos" class="mkt-rail">
+      <PosRecomendacionesHaru
+        :items="recomendaciones"
+        titulos-mayuscula
+        @accion="aplicarReco"
+        @principal="abrirHaru"
+      />
+    </aside>
   </div>
 </template>
 
@@ -1114,10 +1145,16 @@ function aplicarReco(reco: Recomendacion) {
     max-width: 1400px;
   }
 
-  .mkt-reco {
+  .mkt-rail {
     position: sticky;
     top: 16px;
   }
+}
+
+.mkt-rail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
 }
 
 /* --- Encabezado --- */
@@ -1276,6 +1313,14 @@ function aplicarReco(reco: Recomendacion) {
   gap: 7px;
 }
 
+.haru-feedback__thought {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 67px;
+  animation: haru-thought-in 0.32s ease both;
+}
+
 .haru-feedback__kicker {
   font-size: 0.72rem;
   font-weight: 900;
@@ -1328,6 +1373,17 @@ function aplicarReco(reco: Recomendacion) {
 @keyframes haru-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes haru-thought-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -1490,6 +1546,16 @@ function aplicarReco(reco: Recomendacion) {
   font-weight: 900;
 }
 
+.selector__step {
+  display: block;
+  margin-bottom: 5px;
+  color: #0b6f38;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .selector__head p {
   margin: 0;
   font-size: 0.82rem;
@@ -1505,7 +1571,7 @@ function aplicarReco(reco: Recomendacion) {
 .form__rest {
   display: grid;
   gap: 16px;
-  max-width: 560px;
+  width: 100%;
 }
 
 .form .field {
@@ -1524,9 +1590,35 @@ function aplicarReco(reco: Recomendacion) {
   color: #8a978c;
 }
 
+.field__step {
+  color: #0b6f38;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.field__help {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #7a6550;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.field__help.is-ready {
+  color: #08752d;
+}
+
 .form .btn-primary {
   justify-content: center;
+  width: 100%;
   margin-top: 2px;
+}
+
+.form :deep(.p-textarea) {
+  width: 100%;
 }
 
 /* Objetivos con Haru como señal visual principal */
@@ -1577,15 +1669,21 @@ function aplicarReco(reco: Recomendacion) {
 }
 
 .obj:hover:not(:disabled) {
-  transform: translateY(-3px);
-  border-color: var(--brand-soft-line);
-  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+  transform: translateY(-5px);
+  border-color: #2a9147;
+  box-shadow: 0 16px 30px rgba(11, 111, 56, 0.15);
+}
+
+.obj:focus-visible {
+  outline: 3px solid rgba(11, 111, 56, 0.25);
+  outline-offset: 3px;
 }
 
 .obj.is-active {
-  border-color: #0b6f38;
-  background: #f1f8ed;
-  box-shadow: 0 10px 22px rgba(14, 111, 32, 0.14);
+  transform: translateY(-3px);
+  border-color: #08752d;
+  background: linear-gradient(180deg, #ffffff 0%, #eaf7e9 100%);
+  box-shadow: 0 0 0 2px #08752d, 0 16px 30px rgba(14, 111, 32, 0.18);
 }
 
 .obj:disabled {
@@ -1674,6 +1772,38 @@ function aplicarReco(reco: Recomendacion) {
   font-weight: 600;
   color: #6b7a6f;
   line-height: 1.4;
+}
+
+.obj__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  margin-top: 5px;
+  color: #0b6f38;
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.obj__choice i {
+  font-size: 0.68rem;
+  transition: transform 0.15s ease;
+}
+
+.obj:hover:not(:disabled) .obj__choice i {
+  transform: translateX(3px);
+}
+
+.obj.is-active .obj__choice {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #08752d;
+  color: #fff;
+}
+
+.obj.is-active .obj__choice i {
+  transform: none;
 }
 
 .obj__check {
@@ -2195,126 +2325,6 @@ function aplicarReco(reco: Recomendacion) {
   border-color: #9fd391;
 }
 
-/* --- Idea de video (tarjeta aparte) --- */
-.video {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-  background: var(--brand-soft);
-  border-color: var(--brand-soft-line);
-}
-
-.video__lead {
-  display: flex;
-  gap: 12px;
-}
-
-.video__icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 auto;
-  border-radius: 12px;
-  background: var(--brand-soft-2);
-  color: var(--brand-accent);
-  font-size: 2.1rem;
-}
-
-.video__lead strong {
-  font-size: 0.95rem;
-  font-weight: 900;
-  color: var(--brand-deep);
-}
-
-.video__lead p {
-  margin: 3px 0 0;
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: var(--brand-text-soft);
-  line-height: 1.5;
-}
-
-.video__sub {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 0.82rem;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--brand-accent);
-}
-
-.steps {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: none;
-}
-
-.step {
-  display: flex;
-  gap: 11px;
-  align-items: flex-start;
-}
-
-.step__n {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--brand-fill);
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 900;
-}
-
-.step__txt {
-  display: grid;
-  gap: 1px;
-}
-
-.step__txt strong {
-  font-size: 0.92rem;
-  font-weight: 900;
-  color: var(--brand-deepest);
-}
-
-.step__txt small {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--brand-text-soft);
-  line-height: 1.5;
-}
-
-.video__tips {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 14px;
-  margin: 0;
-  padding: 14px 0 0;
-  list-style: none;
-  border-top: 1px dashed var(--brand-soft-divider);
-}
-
-.video__tips li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: var(--brand-text-soft);
-}
-
-.video__tips .tip-ic {
-  flex: 0 0 auto;
-  font-size: 1.45rem;
-}
-
 /* --- Publicar --- */
 .publish-btn {
   justify-content: center;
@@ -2447,7 +2457,7 @@ function aplicarReco(reco: Recomendacion) {
   transform: translate(-50%, 10px);
 }
 
-/* --- Columna derecha (bento: video + cuadro personalizado) --- */
+/* --- Columna secundaria de la publicación --- */
 .layout__side {
   display: grid;
   gap: 16px;
@@ -2650,10 +2660,6 @@ function aplicarReco(reco: Recomendacion) {
     font-size: 0.72rem;
   }
 
-  .video__tips {
-    grid-template-columns: 1fr;
-  }
-
   /* En móvil los iconos vuelven a su tamaño compacto (no agrandados). */
   .empty__icon {
     width: 60px;
@@ -2673,20 +2679,11 @@ function aplicarReco(reco: Recomendacion) {
     font-size: 1.4rem;
   }
 
-  .video__icon {
-    width: 40px;
-    height: 40px;
-    font-size: 1.5rem;
-  }
-
   .contacto__icon {
     width: 46px;
     height: 46px;
     font-size: 1.7rem;
   }
 
-  .video__tips .tip-ic {
-    font-size: 1.15rem;
-  }
 }
 </style>
