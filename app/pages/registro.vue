@@ -37,6 +37,10 @@ const canSubmit = computed(() =>
 )
 
 async function onSubmit() {
+  if (loading.value) {
+    return
+  }
+
   errorMessage.value = ''
 
   if (form.password !== form.confirmPassword) {
@@ -62,7 +66,9 @@ async function onSubmit() {
     await useSessionStore().load({ force: true })
     await navigateTo('/pos/inicio')
   } catch (error: any) {
-    errorMessage.value = error?.statusMessage || 'No se pudo crear la tienda. Revisa los datos e intenta de nuevo.'
+    errorMessage.value = error?.data?.statusMessage
+      || error?.statusMessage
+      || 'No se pudo crear la tienda. Revisa los datos e intenta de nuevo.'
   } finally {
     loading.value = false
   }
@@ -206,7 +212,7 @@ async function onSubmit() {
           <span>{{ errorMessage }}</span>
         </p>
 
-        <Button type="submit" class="register-submit" :loading="loading" :disabled="!canSubmit">
+        <Button type="submit" class="register-submit" :loading="loading" :disabled="loading || !canSubmit">
           Crear mi tienda
           <i class="pi pi-arrow-right" aria-hidden="true" />
         </Button>

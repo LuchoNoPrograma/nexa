@@ -1,4 +1,4 @@
-import { createError, getRequestHeader } from 'h3'
+import { createError, getRequestHeader, setResponseHeader } from 'h3'
 import type { H3Event } from 'h3'
 
 type RateLimitOptions = {
@@ -40,9 +40,15 @@ export function assertRateLimit(event: H3Event, options: RateLimitOptions) {
   }
 
   if (current.count >= options.maxRequests) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000))
+    setResponseHeader(event, 'Retry-After', String(retryAfterSeconds))
+
     throw createError({
       statusCode: 429,
       statusMessage: options.message ?? 'Demasiadas solicitudes. Intenta de nuevo en unos minutos.',
+      data: {
+        retryAfterSeconds,
+      },
     })
   }
 

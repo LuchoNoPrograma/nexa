@@ -1,7 +1,6 @@
 import { createError, getRequestHeader, readBody, setCookie } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { createSessionToken, hashPassword, hashSessionToken } from '../../utils/password'
-import { assertRateLimit } from '../../utils/rateLimit'
 
 type RegisterBody = {
   fullName?: string
@@ -84,14 +83,6 @@ export default defineEventHandler(async (event) => {
   if (password.length < 6) {
     throw createError({ statusCode: 400, statusMessage: 'La contraseña debe tener al menos 6 caracteres.' })
   }
-
-  assertRateLimit(event, {
-    namespace: 'registro',
-    maxRequests: 3,
-    windowMs: 60 * 60 * 1000,
-    keyParts: [phone],
-    message: 'Demasiados intentos de registro. Intenta de nuevo mas tarde.',
-  })
 
   const existingPhone = await pool.query('select 1 from usuario where telefono = $1 limit 1', [phone])
   if (existingPhone.rowCount) {
