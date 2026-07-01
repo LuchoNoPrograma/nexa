@@ -22,6 +22,7 @@ interface MetricCard {
 }
 
 interface SaleRow {
+  movementId: string | null
   time: string
   product: string
   category: string
@@ -67,6 +68,10 @@ const periodOptions = [
 const activePeriod = ref<PeriodKey>('today')
 const searchTerm = ref('')
 const exportDialogVisible = ref(false)
+const session = usePosSession()
+const cashMovementVoidDialog = useCashMovementVoidDialog()
+const voidingMovementId = ref('')
+const canVoidMovements = computed(() => session.value?.roles.includes('propietario') ?? false)
 
 // Datos REALES del negocio. Una sola lectura: el usuario alterna Hoy/Semana/Mes
 // sin volver a pedir al servidor (todo viene en la misma respuesta).
@@ -212,6 +217,30 @@ function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
   }
 }
 
+async function voidIngreso(row: SaleRow) {
+  if (!row.movementId || !canVoidMovements.value || voidingMovementId.value) {
+    return
+  }
+
+  const reason = await cashMovementVoidDialog.requestReason('Ingreso')
+  if (!reason) return
+
+  voidingMovementId.value = row.movementId
+  try {
+    await $fetch(`/api/pos/cash/movements/${row.movementId}/void`, {
+      method: 'POST',
+      body: { reason },
+    })
+    await refresh()
+    await cashMovementVoidDialog.success('Ingreso')
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    await cashMovementVoidDialog.error(dataError?.statusMessage ?? 'Intenta nuevamente.')
+  } finally {
+    voidingMovementId.value = ''
+  }
+}
+
 // --- Registrar ingreso ---
 // "Venta" se registra en el POS y "Inventario" (mercadería que entra) en el catálogo;
 // aquí solo se guarda un "otro ingreso" (reembolso, aporte, interés) en caja_movimiento.
@@ -353,6 +382,22 @@ async function saveIngreso() {
                 <i :class="data.method === 'Efectivo' ? 'pi pi-money-bill' : data.method === 'QR' ? 'pi pi-qrcode' : 'pi pi-credit-card'" aria-hidden="true" />
                 {{ data.method }}
               </span>
+            </template>
+          </Column>
+          <Column v-if="canVoidMovements" header="Acción">
+            <template #body="{ data }">
+              <Button
+                v-if="data.movementId"
+                type="button"
+                icon="pi pi-ban"
+                label="Anular"
+                size="small"
+                severity="danger"
+                text
+                :loading="voidingMovementId === data.movementId"
+                :disabled="Boolean(voidingMovementId)"
+                @click="voidIngreso(data)"
+              />
             </template>
           </Column>
         </DataTable>

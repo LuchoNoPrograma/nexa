@@ -465,38 +465,15 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
     return
   }
 
-  const frameId = `print-${name}`
-  document.getElementById(frameId)?.remove()
+  const reportWindow = window.open('', name, 'width=420,height=720')
 
-  const printFrame = document.createElement('iframe')
-  printFrame.id = frameId
-  printFrame.title = `Impresión: ${title}`
-  printFrame.setAttribute('aria-hidden', 'true')
-  printFrame.style.position = 'fixed'
-  printFrame.style.left = '-10000px'
-  printFrame.style.width = '1px'
-  printFrame.style.height = '1px'
-  printFrame.style.border = '0'
-  printFrame.style.pointerEvents = 'none'
-
-  const removeFrame = () => {
-    window.setTimeout(() => printFrame.remove(), 500)
+  if (!reportWindow) {
+    window.print()
+    return
   }
 
-  printFrame.onload = () => {
-    const printWindow = printFrame.contentWindow
-
-    if (!printWindow) {
-      removeFrame()
-      return
-    }
-
-    printWindow.addEventListener('afterprint', removeFrame, { once: true })
-    printWindow.focus()
-    printWindow.print()
-  }
-
-  printFrame.srcdoc = `<!doctype html>
+  reportWindow.document.open()
+  reportWindow.document.write(`<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -506,9 +483,13 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
 <body>
   <main class="ticket">${bodyHtml}</main>
 </body>
-</html>`
-
-  document.body.appendChild(printFrame)
+</html>`)
+  reportWindow.document.close()
+  reportWindow.focus()
+  reportWindow.setTimeout(() => {
+    reportWindow.focus()
+    reportWindow.print()
+  }, 180)
 }
 
 async function downloadThermalReport(type: 'arqueo' | 'cierre' | 'producto', reportDocument: CashReportDocument) {

@@ -18,6 +18,7 @@ type Method = 'Efectivo' | 'QR' | 'Transferencia'
 type KindFilter = 'todos' | ExpenseKind
 
 interface ExpenseRow {
+  id: string
   date: string
   concept: string
   category: string
@@ -100,6 +101,10 @@ const kindFilter = ref<KindFilter>('todos')
 const searchTerm = ref('')
 const registerDialogVisible = ref(false)
 const exportDialogVisible = ref(false)
+const session = usePosSession()
+const cashMovementVoidDialog = useCashMovementVoidDialog()
+const voidingMovementId = ref('')
+const canVoidMovements = computed(() => session.value?.roles.includes('propietario') ?? false)
 
 const currentCopy = computed(() => periodCopy[activePeriod.value])
 
@@ -133,6 +138,7 @@ function formatExpenseDate(iso: string) {
 const rows = computed<ExpenseRow[]>(() => (gastosData.value?.gastos ?? []).map((g) => {
   const meta = categoryMeta(g.categoria)
   return {
+    id: g.id,
     date: formatExpenseDate(g.fecha),
     concept: g.concepto,
     category: meta.label,
@@ -274,6 +280,30 @@ async function saveExpense() {
     registerError.value = error instanceof Error ? error.message : 'No se pudo guardar el gasto.'
   } finally {
     savingExpense.value = false
+  }
+}
+
+async function voidExpense(row: ExpenseRow) {
+  if (!canVoidMovements.value || voidingMovementId.value) {
+    return
+  }
+
+  const reason = await cashMovementVoidDialog.requestReason('Egreso')
+  if (!reason) return
+
+  voidingMovementId.value = row.id
+  try {
+    await $fetch(`/api/pos/cash/movements/${row.id}/void`, {
+      method: 'POST',
+      body: { reason },
+    })
+    await refreshGastos()
+    await cashMovementVoidDialog.success('Egreso')
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    await cashMovementVoidDialog.error(dataError?.statusMessage ?? 'Intenta nuevamente.')
+  } finally {
+    voidingMovementId.value = ''
   }
 }
 
@@ -492,6 +522,18 @@ function methodIcon(method: Method) {
               {{ row.method }}
             </span>
             <strong class="expense-amount">- {{ money(row.amount) }}</strong>
+            <Button
+              v-if="canVoidMovements"
+              type="button"
+              icon="pi pi-ban"
+              label="Anular"
+              size="small"
+              severity="danger"
+              text
+              :loading="voidingMovementId === row.id"
+              :disabled="Boolean(voidingMovementId)"
+              @click="voidExpense(row)"
+            />
           </li>
           <li v-if="!visibleRows.length" class="expense-empty">
             No hay gastos que coincidan con el filtro.

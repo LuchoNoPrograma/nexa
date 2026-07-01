@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 409, statusMessage: 'Este movimiento ya fue anulado.' })
     }
 
-    if (movement.cashSessionStatus !== 'abierta') {
+    if (movement.cashSessionStatus && movement.cashSessionStatus !== 'abierta') {
       throw createError({ statusCode: 409, statusMessage: 'No se puede anular un movimiento de una caja cerrada.' })
     }
 

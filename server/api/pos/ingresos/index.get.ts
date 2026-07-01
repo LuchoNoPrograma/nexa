@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
   const [ingresosHoy, dias, diasMes, meses, topProducto, escalares] = await Promise.all([
     // Detalle de los ingresos de hoy: productos vendidos + otros ingresos registrados.
     pool.query<{
+      movementId: string | null
       time: string
       product: string
       category: string
@@ -49,9 +50,10 @@ export default defineEventHandler(async (event) => {
       method: string
     }>(
       `
-        select time, product, category, qty, "unitPrice", total, method
+        select "movementId", time, product, category, qty, "unitPrice", total, method
         from (
           select
+            null::uuid as "movementId",
             to_char(v.fecha, 'HH24:MI') as time,
             vi.nombre_producto as product,
             coalesce(c.nombre, 'General') as category,
@@ -72,6 +74,7 @@ export default defineEventHandler(async (event) => {
             and v.fecha >= date_trunc('day', now())
           union all
           select
+            cm.id as "movementId",
             to_char(cm.fecha, 'HH24:MI') as time,
             cm.concepto as product,
             'Otro ingreso' as category,
