@@ -22,6 +22,7 @@ const props = withDefaults(defineProps<{
   autocomplete?: string
   required?: boolean
   disabled?: boolean
+  readonly?: boolean
 }>(), {
   modelValue: undefined,
   countryDialCode: undefined,
@@ -31,6 +32,7 @@ const props = withDefaults(defineProps<{
   autocomplete: 'tel',
   required: false,
   disabled: false,
+  readonly: false,
 })
 
 const emit = defineEmits<{
@@ -124,7 +126,7 @@ function updatePhone(event: Event) {
 </script>
 
 <template>
-  <div class="phone-country-input">
+  <div class="phone-country-input" :class="{ 'is-readonly': readonly }">
     <div class="phone-country-input__prefix">
       <Select
         v-model="dialCodeModel"
@@ -133,7 +135,7 @@ function updatePhone(event: Event) {
         option-value="dialCode"
         aria-label="Codigo de pais"
         class="phone-country-input__select"
-        :disabled="disabled"
+        :disabled="disabled || readonly"
       >
         <template #value="{ value }">
           <span class="phone-country-input__value">
@@ -163,6 +165,7 @@ function updatePhone(event: Event) {
       :autocomplete="autocomplete"
       :required="required"
       :disabled="disabled"
+      :readonly="readonly"
       @input="updatePhone"
     />
   </div>
@@ -263,5 +266,25 @@ function updatePhone(event: Event) {
   border-color: #0b982f;
   box-shadow: 0 0 0 4px rgba(11, 152, 47, 0.12);
   transform: translateY(-1px);
+}
+
+.phone-country-input.is-readonly {
+  border-color: #d8e3dc;
+  background: #f8faf9;
+  box-shadow: none;
+  transform: none;
+}
+
+.phone-country-input.is-readonly .phone-country-input__prefix,
+.phone-country-input.is-readonly .phone-country-input__number {
+  background: #f8faf9 !important;
+}
+
+.phone-country-input.is-readonly .phone-country-input__select :deep(.p-disabled) {
+  opacity: 1;
+}
+
+.phone-country-input.is-readonly .phone-country-input__number {
+  cursor: default;
 }
 </style>

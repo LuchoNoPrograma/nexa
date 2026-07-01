@@ -397,7 +397,7 @@ async function sendMessage(content = draft.value) {
     const pendingMessage = messages.value.find((item) => item.id === pendingId)
 
     if (pendingMessage) {
-      pendingMessage.content = 'No pude conectar con el servicio de IA en este momento. Contactate con soporte técnico 70707070.'
+      pendingMessage.content = 'No pude conectar con el servicio de IA en este momento. Contacta con soporte técnico al 71117696.'
       pendingMessage.pending = false
     }
   } finally {

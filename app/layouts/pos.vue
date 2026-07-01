@@ -11,6 +11,7 @@ const isReady = ref(false)
 const isRouteLoading = ref(false)
 const mobileMenuOpen = ref(false)
 const moreMenuOpen = ref(false)
+const supportDialogOpen = ref(false)
 const sidebarCollapsed = ref(false)
 const sidebarWidth = ref(250)
 const isResizingSidebar = ref(false)
@@ -23,6 +24,9 @@ const SIDEBAR_MAX_WIDTH = 360
 const SIDEBAR_COLLAPSED_WIDTH = 76
 const SIDEBAR_KEYBOARD_STEP = 12
 const ROUTE_LOADING_MIN_MS = 240
+const SUPPORT_COUNTRY_DIAL_CODE = '+591'
+const SUPPORT_PHONE = '71117696'
+const SUPPORT_WHATSAPP_URL = `https://wa.me/591${SUPPORT_PHONE}`
 
 let routeLoadingStartedAt = 0
 let routeLoadingTimer: ReturnType<typeof setTimeout> | undefined
@@ -69,6 +73,12 @@ function toggleMenu() {
 
 function openBusinessProfile() {
   window.dispatchEvent(new CustomEvent('nexa:open-business-profile'))
+}
+
+function openSupport() {
+  mobileMenuOpen.value = false
+  moreMenuOpen.value = false
+  supportDialogOpen.value = true
 }
 
 function restoreSidebarWidth() {
@@ -454,6 +464,17 @@ function selectModule(to?: string) {
           />
         </template>
       </nav>
+
+      <div class="drawer-support">
+        <Button
+          type="button"
+          text
+          severity="secondary"
+          icon="pi pi-headphones"
+          label="Soporte técnico"
+          @click="openSupport"
+        />
+      </div>
     </Drawer>
 
     <aside class="app-sidebar" aria-label="Navegación principal">
@@ -521,6 +542,7 @@ function selectModule(to?: string) {
           class="sidebar-support-item"
           icon="pi pi-headphones"
           :label="sidebarCollapsed ? undefined : 'Contactar soporte'"
+          @click="openSupport"
         />
       </div>
     </aside>
@@ -692,6 +714,54 @@ function selectModule(to?: string) {
         </button>
       </div>
     </Drawer>
+
+    <Dialog
+      v-model:visible="supportDialogOpen"
+      modal
+      dismissable-mask
+      :draggable="false"
+      class="support-dialog"
+      :style="{ width: 'min(92vw, 430px)' }"
+    >
+      <template #header>
+        <div class="support-dialog__header">
+          <span class="support-dialog__icon" aria-hidden="true">
+            <i class="pi pi-headphones" />
+          </span>
+          <div>
+            <span>Estamos para ayudarte</span>
+            <h2>Soporte técnico NEXA</h2>
+          </div>
+        </div>
+      </template>
+
+      <div class="support-dialog__content">
+        <p>¿Tienes alguna duda o inconveniente? Escríbenos por WhatsApp y te ayudaremos con tu cuenta o el uso de la plataforma.</p>
+
+        <div class="support-dialog__phone">
+          <label for="support-phone">Número de atención</label>
+          <PhoneCountryInput
+            :country-dial-code="SUPPORT_COUNTRY_DIAL_CODE"
+            :phone="SUPPORT_PHONE"
+            input-id="support-phone"
+            name="support-phone"
+            readonly
+          />
+          <small><i class="pi pi-clock" aria-hidden="true" /> Atención directa por WhatsApp</small>
+        </div>
+
+        <a
+          :href="SUPPORT_WHATSAPP_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="support-dialog__action"
+        >
+          <i class="pi pi-whatsapp" aria-hidden="true" />
+          Escribir a soporte
+          <i class="pi pi-arrow-up-right" aria-hidden="true" />
+        </a>
+      </div>
+    </Dialog>
   </main>
 
   <main v-if="!isReady" class="pos-loading">
@@ -1090,6 +1160,140 @@ function selectModule(to?: string) {
 
 .sidebar-support-item {
   min-height: 38px !important;
+}
+
+.sidebar-support-item:hover {
+  color: #ffffff !important;
+  background: rgba(242, 194, 0, 0.14) !important;
+}
+
+.drawer-support {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e4e9e6;
+}
+
+.drawer-support :deep(.p-button) {
+  width: 100%;
+  justify-content: flex-start;
+  color: #0b1f3a;
+}
+
+:global(.support-dialog.p-dialog) {
+  overflow: hidden;
+  border: 1px solid rgba(11, 31, 58, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 26px 70px rgba(6, 25, 15, 0.24);
+}
+
+:global(.support-dialog .p-dialog-header) {
+  padding: 24px 24px 14px;
+  background: linear-gradient(145deg, #f7fbf8 0%, #ffffff 72%);
+}
+
+:global(.support-dialog .p-dialog-content) {
+  padding: 0 24px 24px;
+  background: #ffffff;
+}
+
+.support-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.support-dialog__icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 16px;
+  color: #ffffff;
+  background: linear-gradient(145deg, #0b982f, #086b24);
+  box-shadow: 0 10px 24px rgba(11, 152, 47, 0.23);
+  font-size: 1.2rem;
+}
+
+.support-dialog__header span:not(.support-dialog__icon) {
+  display: block;
+  margin-bottom: 3px;
+  color: #6d7b72;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.support-dialog__header h2 {
+  margin: 0;
+  color: #0b1f3a;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.support-dialog__content > p {
+  margin: 0 0 20px;
+  color: #526057;
+  line-height: 1.65;
+}
+
+.support-dialog__phone label {
+  display: block;
+  margin-bottom: 8px;
+  color: #25372c;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.support-dialog__phone small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #748077;
+  font-size: 0.76rem;
+}
+
+.support-dialog__action {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+  border-radius: 14px;
+  color: #ffffff;
+  background: #087a28;
+  box-shadow: 0 10px 22px rgba(8, 122, 40, 0.2);
+  font-weight: 850;
+  text-decoration: none;
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.support-dialog__action .pi-arrow-up-right {
+  margin-left: auto;
+  margin-right: 16px;
+  font-size: 0.78rem;
+  opacity: 0.74;
+}
+
+.support-dialog__action .pi-whatsapp {
+  margin-left: auto;
+  font-size: 1.1rem;
+}
+
+.support-dialog__action:hover {
+  color: #ffffff;
+  background: #096b26;
+  box-shadow: 0 14px 28px rgba(8, 122, 40, 0.25);
+  transform: translateY(-1px);
+}
+
+.support-dialog__action:focus-visible {
+  outline: 3px solid rgba(242, 194, 0, 0.55);
+  outline-offset: 3px;
 }
 
 .is-collapsed .sidebar-foot {
