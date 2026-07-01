@@ -25,6 +25,7 @@ const cashRegister = usePosCashRegister()
 const session = usePosSession()
 const catalogStore = useCatalogStore()
 const saleVoidDialog = useSaleVoidDialog()
+const cashMovementVoidDialog = useCashMovementVoidDialog()
 const cashStatus = cashRegister.cashStatus
 const movements = cashRegister.movements
 const productSales = cashRegister.productSales
@@ -46,6 +47,7 @@ const arqueoDialogVisible = ref(false)
 const productDialogVisible = ref(false)
 const closeDialogVisible = ref(false)
 const voidingSaleId = ref('')
+const voidingMovementId = ref('')
 
 type CashReportCell = {
   text: string
@@ -353,6 +355,29 @@ async function voidSaleFromMovement(movement: CashMovement) {
   }
 }
 
+async function voidManualMovement(movement: CashMovement) {
+  if (movement.source !== 'manual' || voidingMovementId.value) {
+    return
+  }
+
+  const reason = await cashMovementVoidDialog.requestReason(movement.type)
+
+  if (!reason) {
+    return
+  }
+
+  voidingMovementId.value = movement.id
+  try {
+    await cashRegister.voidManualMovement(movement.id, reason)
+    await cashMovementVoidDialog.success(movement.type)
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    await cashMovementVoidDialog.error(dataError?.statusMessage ?? 'Intenta nuevamente.')
+  } finally {
+    voidingMovementId.value = ''
+  }
+}
+
 async function closeCashSession(printAfterClose = false) {
   await cashRegister.closeTurn(Number(countedCash.value || 0), closingNote.value)
   closedAt.value = currentTime.value
@@ -440,40 +465,50 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
     return
   }
 
-  const reportWindow = window.open('', name, 'width=420,height=720')
+  const frameId = `print-${name}`
+  document.getElementById(frameId)?.remove()
 
-  if (!reportWindow) {
-    window.print()
-    return
+  const printFrame = document.createElement('iframe')
+  printFrame.id = frameId
+  printFrame.title = `Impresión: ${title}`
+  printFrame.setAttribute('aria-hidden', 'true')
+  printFrame.style.position = 'fixed'
+  printFrame.style.left = '-10000px'
+  printFrame.style.width = '1px'
+  printFrame.style.height = '1px'
+  printFrame.style.border = '0'
+  printFrame.style.pointerEvents = 'none'
+
+  const removeFrame = () => {
+    window.setTimeout(() => printFrame.remove(), 500)
   }
 
-  // document.open() reinicia el documento: si la ventana (por su nombre) ya
-  // existía de una impresión previa, sin esto el evento load no vuelve a
-  // dispararse y no se imprime.
-  reportWindow.document.open()
-  reportWindow.document.write(`<!doctype html>
+  printFrame.onload = () => {
+    const printWindow = printFrame.contentWindow
+
+    if (!printWindow) {
+      removeFrame()
+      return
+    }
+
+    printWindow.addEventListener('afterprint', removeFrame, { once: true })
+    printWindow.focus()
+    printWindow.print()
+  }
+
+  printFrame.srcdoc = `<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
-  <style>${thermalCss()}</style>
+  <style>${thermalCss(false)}</style>
 </head>
 <body>
   <main class="ticket">${bodyHtml}</main>
 </body>
-</html>`)
-  reportWindow.document.close()
-  reportWindow.focus()
+</html>`
 
-  // Imprimimos desde la ventana padre (no desde un script inline) para que
-  // funcione también cuando la ventana se reutiliza entre impresiones.
-  setTimeout(() => {
-    try {
-      reportWindow.print()
-    } catch {
-      reportWindow.focus()
-    }
-  }, 300)
+  document.body.appendChild(printFrame)
 }
 
 async function downloadThermalReport(type: 'arqueo' | 'cierre' | 'producto', reportDocument: CashReportDocument) {
@@ -957,6 +992,18 @@ async function downloadProductReport() {
             :loading="voidingSaleId === movement.saleId"
             :disabled="Boolean(voidingSaleId)"
             @click="voidSaleFromMovement(movement)"
+          />
+          <Button
+            v-else-if="canVoidSales && movement.source === 'manual' && cashStatus === 'abierta'"
+            type="button"
+            icon="pi pi-ban"
+            label="Anular"
+            size="small"
+            severity="danger"
+            text
+            :loading="voidingMovementId === movement.id"
+            :disabled="Boolean(voidingMovementId)"
+            @click="voidManualMovement(movement)"
           />
         </li>
         <li v-if="!movements.length" class="move-empty">Aún no hay movimientos en este turno.</li>

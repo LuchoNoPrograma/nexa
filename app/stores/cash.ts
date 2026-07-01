@@ -184,6 +184,13 @@ export const useCashStore = defineStore('cash', () => {
     }))
   }
 
+  async function voidManualMovement(movementId: string, reason: string) {
+    applyOverview(await $fetch<CashOverviewPayload>(`/api/pos/cash/movements/${movementId}/void`, {
+      method: 'POST',
+      body: { reason },
+    }))
+  }
+
   async function closeTurn(countedCash: number, notes?: string) {
     applyOverview(await $fetch<CashOverviewPayload>('/api/pos/cash/close', {
       method: 'POST',
@@ -221,6 +228,7 @@ export const useCashStore = defineStore('cash', () => {
     addManualMovement,
     registerSale,
     voidSale,
+    voidManualMovement,
     closeTurn,
     openTurn,
     clear,

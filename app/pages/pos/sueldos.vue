@@ -147,8 +147,32 @@ function aEmpleado(row: any): Empleado {
 let jss: any = null
 const instancias = new Map<string, any>()
 const gridEls = new Map<string, HTMLElement>()
+const horariosEnEdicion = reactive(new Set<string>())
+const horariosGuardando = reactive(new Set<string>())
+const horariosOriginales = new Map<string, Set<string>>()
 let activeGridId: string | null = null
 let dragStart: { empId: string; x: number; y: number; borrar: boolean } | null = null
+
+function horarioEnEdicion(empId: string) {
+  return horariosEnEdicion.has(empId)
+}
+
+function habilitarEdicionHorario(emp: Empleado) {
+  horariosOriginales.set(emp.id, new Set(emp.slots))
+  horariosEnEdicion.add(emp.id)
+}
+
+function cancelarEdicionHorario(emp: Empleado) {
+  const original = horariosOriginales.get(emp.id)
+  if (original) {
+    emp.slots.clear()
+    original.forEach(slot => emp.slots.add(slot))
+    repintar(emp)
+  }
+  horariosOriginales.delete(emp.id)
+  horariosEnEdicion.delete(emp.id)
+  limpiarPreview(emp.id)
+}
 
 function setGridEl(id: string, el: any) {
   if (el) {
@@ -231,6 +255,10 @@ function destruirGrid(id: string) {
 }
 
 function aplicarRango(emp: Empleado, fromX: number, fromY: number, toX: number, toY: number, borrar: boolean) {
+  if (!horarioEnEdicion(emp.id)) {
+    return
+  }
+
   const x1 = Math.max(1, Math.min(fromX, toX))
   const x2 = Math.min(DIAS_SEMANA.length, Math.max(fromX, toX))
   const y1 = Math.max(0, Math.min(fromY, toY))
@@ -252,7 +280,6 @@ function aplicarRango(emp: Empleado, fromX: number, fromY: number, toX: number, 
 
   instancias.get(emp.id)?.resetSelection?.()
   repintar(emp)
-  void guardarHorario(emp)
 }
 
 function limpiarPreview(empId?: string) {
@@ -286,6 +313,10 @@ function previsualizarRango(emp: Empleado, fromX: number, fromY: number, toX: nu
 // Fallback para selecciones hechas por jspreadsheet cuando no tenemos una
 // celda inicial capturada, por ejemplo interacciones raras del navegador.
 function aplicarSeleccion(emp: Empleado) {
+  if (!horarioEnEdicion(emp.id)) {
+    return
+  }
+
   const ws = instancias.get(emp.id)
   if (!ws) {
     return
@@ -345,7 +376,8 @@ function onDocPointerDown(e: PointerEvent) {
   }
 
   const emp = empleados.value.find(x => x.id === activeGridId)
-  if (!emp) {
+  if (!emp || !horarioEnEdicion(emp.id)) {
+    activeGridId = null
     return
   }
 
@@ -388,7 +420,7 @@ function onDocPointerUp(e: PointerEvent) {
   }
 
   const emp = empleados.value.find(x => x.id === empId)
-  if (!emp) {
+  if (!emp || !horarioEnEdicion(emp.id)) {
     dragStart = null
     limpiarPreview(empId)
     return
@@ -534,7 +566,25 @@ async function guardarHorario(emp: Empleado) {
     const [dia, hora] = key.split('-').map(Number)
     return { dia, hora }
   })
-  await $fetch(`/api/pos/nomina/empleados/${emp.id}/horario`, { method: 'PUT', body: { slots } }).catch(() => null)
+  await $fetch(`/api/pos/nomina/empleados/${emp.id}/horario`, { method: 'PUT', body: { slots } })
+}
+
+async function confirmarHorario(emp: Empleado) {
+  if (horariosGuardando.has(emp.id)) {
+    return
+  }
+
+  horariosGuardando.add(emp.id)
+  try {
+    await guardarHorario(emp)
+    horariosOriginales.delete(emp.id)
+    horariosEnEdicion.delete(emp.id)
+    flash('Horario guardado')
+  } catch {
+    flash('No se pudo guardar el horario')
+  } finally {
+    horariosGuardando.delete(emp.id)
+  }
 }
 
 async function guardarPago(emp: Empleado) {
@@ -580,10 +630,13 @@ function marcarRango(emp: Empleado, dias: number[], inicio: number, finExclusivo
     })
   })
   repintar(emp)
-  void guardarHorario(emp)
 }
 
 function aplicarHorarioRapido(emp: Empleado, tipo: 'manana' | 'dia' | 'sabado') {
+  if (!horarioEnEdicion(emp.id)) {
+    return
+  }
+
   emp.slots.clear()
   if (tipo === 'manana') {
     marcarRango(emp, [1, 2, 3, 4, 5], 8, 12)
@@ -592,7 +645,7 @@ function aplicarHorarioRapido(emp: Empleado, tipo: 'manana' | 'dia' | 'sabado') 
   } else {
     marcarRango(emp, [6, 0], 8, 14)
   }
-  flash('Horario aplicado')
+  flash('Horario ajustado. Presiona Guardar para confirmar.')
 }
 
 const nombreTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -671,6 +724,9 @@ async function eliminarEmpleado(emp: Empleado) {
     return
   }
   destruirGrid(emp.id)
+  horariosEnEdicion.delete(emp.id)
+  horariosGuardando.delete(emp.id)
+  horariosOriginales.delete(emp.id)
   await $fetch(`/api/pos/nomina/empleados/${emp.id}`, { method: 'DELETE' }).catch(() => null)
   if (import.meta.client) {
     const prefs = readPagoPrefs()
@@ -972,13 +1028,50 @@ function flash(msg: string) {
             <section class="su-quick">
               <span>Horarios rápidos</span>
               <div>
-                <button type="button" @click="aplicarHorarioRapido(emp, 'manana')">Lun-Vie mañana</button>
-                <button type="button" @click="aplicarHorarioRapido(emp, 'dia')">Lun-Sáb día</button>
-                <button type="button" @click="aplicarHorarioRapido(emp, 'sabado')">Fin de semana</button>
+                <button type="button" :disabled="!horarioEnEdicion(emp.id)" @click="aplicarHorarioRapido(emp, 'manana')">Lun-Vie mañana</button>
+                <button type="button" :disabled="!horarioEnEdicion(emp.id)" @click="aplicarHorarioRapido(emp, 'dia')">Lun-Sáb día</button>
+                <button type="button" :disabled="!horarioEnEdicion(emp.id)" @click="aplicarHorarioRapido(emp, 'sabado')">Fin de semana</button>
               </div>
             </section>
 
-            <div class="su-jss-wrap">
+            <div class="su-schedule-head">
+              <span>
+                <i :class="horarioEnEdicion(emp.id) ? 'pi pi-pencil' : 'pi pi-lock'" />
+                {{ horarioEnEdicion(emp.id) ? 'Editando horario' : 'Horario protegido' }}
+              </span>
+              <div>
+                <Button
+                  v-if="!horarioEnEdicion(emp.id)"
+                  type="button"
+                  label="Editar horario"
+                  icon="pi pi-pencil"
+                  size="small"
+                  outlined
+                  @click="habilitarEdicionHorario(emp)"
+                />
+                <template v-else>
+                  <Button
+                    type="button"
+                    label="Cancelar"
+                    size="small"
+                    severity="secondary"
+                    text
+                    :disabled="horariosGuardando.has(emp.id)"
+                    @click="cancelarEdicionHorario(emp)"
+                  />
+                  <Button
+                    type="button"
+                    label="Guardar"
+                    icon="pi pi-save"
+                    size="small"
+                    :loading="horariosGuardando.has(emp.id)"
+                    @click="confirmarHorario(emp)"
+                  />
+                </template>
+              </div>
+            </div>
+
+            <div class="su-jss-wrap" :class="{ 'is-editing': horarioEnEdicion(emp.id) }">
               <div :ref="el => setGridEl(emp.id, el)" class="su-jss" />
             </div>
 
@@ -1002,7 +1095,7 @@ function flash(msg: string) {
           </button>
         </div>
 
-        <p class="su-hint"><i class="pi pi-info-circle" /> Selecciona una celda o arrastra un rango sobre la hoja para marcar o borrar horas planificadas.</p>
+        <p class="su-hint"><i class="pi pi-info-circle" /> Presiona «Editar horario» antes de marcar celdas. En modo protegido puedes desplazarte sin cambiar la planilla.</p>
       </section>
 
       <!-- 2. Resumen -->
@@ -1050,9 +1143,8 @@ function flash(msg: string) {
         </div>
       </section>
 
-      <!-- Nota: los cambios se guardan automáticamente; el resumen es en vivo. -->
       <p class="su-note">
-        <i class="pi pi-lightbulb" /> Los cambios se guardan solos y el resumen se actualiza al instante.
+        <i class="pi pi-lightbulb" /> Los pagos se actualizan al instante; los horarios se confirman con el botón Guardar.
         Los cálculos son aproximados: no reemplazan una planilla legal de nómina.
       </p>
     </template>
@@ -1552,6 +1644,11 @@ function flash(msg: string) {
   background: #f1f8ef;
 }
 
+.su-quick button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .su-quick button.is-danger {
   color: #b91c1c;
   border-color: #f4c7c7;
@@ -1706,11 +1803,50 @@ function flash(msg: string) {
 .su-jss-wrap {
   overflow-x: auto;
   padding: 12px 14px;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.su-schedule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px 0;
+}
+
+.su-schedule-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5d6b61;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.su-schedule-head > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.su-jss-wrap:not(.is-editing) .su-jss {
+  pointer-events: none;
+  opacity: 0.78;
 }
 
 /* Ajustes finos sobre el tema base de jspreadsheet. */
 .su-jss :deep(.jss_worksheet) {
   font-family: inherit;
+  font-size: 0.68rem;
+}
+
+.su-jss :deep(.jss_container),
+.su-jss :deep(.jss_content) {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* La tabla llena el ancho de la tarjeta (HORA fija, días repartidos). */
@@ -1730,6 +1866,7 @@ function flash(msg: string) {
 .su-jss :deep(thead td) {
   background: #f3faf2;
   color: #41617f;
+  font-size: 0.64rem;
   font-weight: 800;
   text-align: center;
 }
@@ -2020,6 +2157,33 @@ function flash(msg: string) {
 
   .su-quick button {
     flex: 1 1 45%;
+  }
+
+  .su-schedule-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .su-schedule-head > div {
+    justify-content: stretch;
+  }
+
+  .su-schedule-head :deep(.p-button) {
+    flex: 1;
+  }
+
+  .su-jss-wrap {
+    padding: 10px 6px;
+  }
+
+  .su-jss :deep(col:first-child) {
+    width: 42px !important;
+  }
+
+  .su-jss :deep(thead td),
+  .su-jss :deep(tbody td) {
+    padding-inline: 2px;
+    font-size: 0.6rem;
   }
 }
 

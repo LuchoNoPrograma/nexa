@@ -16,6 +16,7 @@ export function usePosCashRegister() {
     addManualMovement: store.addManualMovement,
     registerSale: store.registerSale,
     voidSale: store.voidSale,
+    voidManualMovement: store.voidManualMovement,
     closeTurn: store.closeTurn,
     openTurn: store.openTurn,
   }
