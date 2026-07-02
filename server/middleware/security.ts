@@ -15,7 +15,9 @@ export default defineEventHandler((event) => {
   setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
   setResponseHeader(event, 'X-Frame-Options', 'DENY')
   setResponseHeader(event, 'Referrer-Policy', 'strict-origin-when-cross-origin')
-  setResponseHeader(event, 'Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  // La navegación por voz necesita micrófono en el propio origen. Cámara y
+  // geolocalización continúan bloqueadas y ningún iframe externo recibe acceso.
+  setResponseHeader(event, 'Permissions-Policy', 'camera=(), microphone=(self), geolocation=()')
   setResponseHeader(event, 'Cross-Origin-Opener-Policy', 'same-origin')
 
   if (process.env.NODE_ENV === 'production') {

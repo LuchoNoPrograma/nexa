@@ -152,35 +152,248 @@ interface SidebarItem {
   icon: string
   to?: string
   acceso?: string
+  aliases?: string[]
   activePaths?: string[]
   children?: SidebarItem[]
 }
 
 const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio' },
-  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA' },
-  { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER' },
-  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
-  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO' },
+  { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio', aliases: ['principal', 'portada', 'comenzar'] },
+  { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA', aliases: ['cobrar', 'cobro', 'movimientos de caja'] },
+  { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER', aliases: ['venta', 'vender', 'nueva venta', 'realizar venta', 'hacer venta'] },
+  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG', aliases: ['publicidad', 'promocion', 'redes sociales'] },
+  { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO', aliases: ['producto', 'productos', 'stock', 'catalogo', 'existencias'] },
   {
     label: 'Finanzas',
     icon: 'pi pi-chart-pie',
     acceso: 'REPORTE',
     children: [
-      { label: 'Resumen financiero', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
-      { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE' },
-      { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE' },
+      { label: 'Resumen financiero', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE', aliases: ['finanzas', 'resumen', 'resumen de finanzas'] },
+      { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE', aliases: ['ingreso', 'entrada de dinero', 'ganancias'] },
+      { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE', aliases: ['gasto', 'egreso', 'egresos', 'salida de dinero', 'registrar gasto'] },
     ],
   },
-  { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG' },
+  { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG', aliases: ['sueldo', 'sueldos', 'empleado', 'empleados', 'personal'] },
   { label: 'Reportes', icon: 'pi pi-chart-bar', acceso: 'REPORTE' },
-  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG' },
-  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes', acceso: 'CONFIG' },
-  { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', acceso: 'CONFIG', activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
+  { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG', aliases: ['diagnostico empresarial', 'evaluacion', 'evaluar negocio'] },
+  { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes', acceso: 'CONFIG', aliases: ['plan', 'suscripcion', 'membresia'] },
+  { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', acceso: 'CONFIG', aliases: ['config', 'configurar', 'ajustes', 'mi negocio', 'usuarios'], activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
 ]
 
 // Módulos visibles según el rol/permiso de la sesión.
 const visibleSidebarItems = computed(() => sidebarItems.filter(item => puede(item.acceso)))
+
+const navigationQuery = ref('')
+const navigationSearchFocused = ref(false)
+const navigationMessage = ref('')
+const isListening = ref(false)
+
+interface SpeechRecognitionResultEventLike {
+  results: ArrayLike<{ 0: { transcript: string } }>
+}
+
+interface SpeechRecognitionErrorEventLike {
+  error: string
+}
+
+interface SpeechRecognitionLike {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  start: () => void
+  stop: () => void
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null
+  onend: (() => void) | null
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+
+let activeRecognition: SpeechRecognitionLike | undefined
+
+const searchableSidebarItems = computed(() => visibleSidebarItems.value.flatMap((item) => {
+  if (item.children) {
+    return item.children.filter(child => puede(child.acceso) && child.to)
+  }
+
+  return item.to ? [item] : []
+}))
+
+function normalizeNavigationText(value: string) {
+  return value
+    .toLocaleLowerCase('es')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(?:quiero|quisiera|necesito|puedes|podrias|por favor|llevame|llevarme|mandame|mandar|mostrar|muestra|abrir|abre|entrar|entra|navegar|dirigirme|ir|voy|vamos|hacia|hasta|a|al|el|la|los|las|un|una|de|del|seccion|modulo|pagina)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function navigationScore(item: SidebarItem, query: string) {
+  const normalizedQuery = normalizeNavigationText(query)
+  if (!normalizedQuery) {
+    return 0
+  }
+
+  const terms = [item.label, ...(item.aliases ?? [])].map(normalizeNavigationText)
+  let bestScore = 0
+
+  for (const term of terms) {
+    if (term === normalizedQuery) {
+      bestScore = Math.max(bestScore, 100)
+    } else if (normalizedQuery.includes(term)) {
+      bestScore = Math.max(bestScore, 80 + Math.min(term.length, 15))
+    } else if (term.includes(normalizedQuery)) {
+      bestScore = Math.max(bestScore, 60)
+    } else {
+      const queryWords = normalizedQuery.split(' ')
+      const termWords = term.split(' ')
+      const matches = queryWords.filter(word => termWords.some(termWord => termWord.startsWith(word) || word.startsWith(termWord)))
+      if (matches.length) {
+        bestScore = Math.max(bestScore, 30 + matches.length * 10)
+      }
+    }
+  }
+
+  return bestScore
+}
+
+const navigationMatches = computed(() => {
+  if (!normalizeNavigationText(navigationQuery.value)) {
+    return []
+  }
+
+  return searchableSidebarItems.value
+    .map(item => ({ item, score: navigationScore(item, navigationQuery.value) }))
+    .filter(match => match.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map(match => match.item)
+})
+
+const showNavigationResults = computed(() => navigationSearchFocused.value && Boolean(navigationQuery.value.trim()))
+
+function goToNavigationItem(item: SidebarItem) {
+  if (!item.to) {
+    return
+  }
+
+  navigationQuery.value = ''
+  navigationMessage.value = ''
+  navigationSearchFocused.value = false
+  selectModule(item.to)
+}
+
+function submitNavigationQuery() {
+  const [firstMatch] = navigationMatches.value
+  if (firstMatch) {
+    goToNavigationItem(firstMatch)
+    return
+  }
+
+  navigationMessage.value = 'No encontré ese módulo'
+}
+
+function closeNavigationResults() {
+  window.setTimeout(() => {
+    navigationSearchFocused.value = false
+  }, 140)
+}
+
+function stopListening() {
+  activeRecognition?.stop()
+}
+
+async function requestMicrophonePermission() {
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    navigationMessage.value = 'El micrófono requiere HTTPS o localhost'
+    return false
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    })
+    stream.getTracks().forEach(track => track.stop())
+    return true
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) {
+      navigationMessage.value = 'Micrófono bloqueado. Habilítalo en el candado de la barra de direcciones'
+    } else if (error instanceof DOMException && error.name === 'NotFoundError') {
+      navigationMessage.value = 'No encontré un micrófono conectado'
+    } else {
+      navigationMessage.value = 'No pude acceder al micrófono'
+    }
+    return false
+  }
+}
+
+async function toggleVoiceNavigation() {
+  if (!import.meta.client) {
+    return
+  }
+
+  if (isListening.value) {
+    stopListening()
+    return
+  }
+
+  const speechWindow = window as typeof window & {
+    SpeechRecognition?: SpeechRecognitionConstructor
+    webkitSpeechRecognition?: SpeechRecognitionConstructor
+  }
+  const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
+
+  if (!Recognition) {
+    navigationMessage.value = 'Voz no disponible aquí; usa Chrome/Edge o escribe el módulo'
+    return
+  }
+
+  navigationMessage.value = 'Solicitando acceso al micrófono…'
+  const hasMicrophonePermission = await requestMicrophonePermission()
+  if (!hasMicrophonePermission) {
+    return
+  }
+
+  navigationMessage.value = 'Escuchando…'
+  const recognition = new Recognition()
+  activeRecognition = recognition
+  recognition.lang = 'es-BO'
+  recognition.continuous = false
+  recognition.interimResults = false
+  recognition.onresult = (event) => {
+    const transcript = event.results[0]?.[0]?.transcript?.trim() ?? ''
+    navigationQuery.value = transcript
+    navigationSearchFocused.value = true
+    navigationMessage.value = transcript ? `Escuché: “${transcript}”` : 'No pude entenderte'
+    nextTick(() => submitNavigationQuery())
+  }
+  recognition.onerror = (event) => {
+    navigationMessage.value = event.error === 'not-allowed'
+      ? 'Necesito permiso para usar el micrófono'
+      : 'No pude escuchar. Intenta nuevamente'
+  }
+  recognition.onend = () => {
+    isListening.value = false
+    activeRecognition = undefined
+    if (navigationMessage.value === 'Escuchando…') {
+      navigationMessage.value = 'No pude escuchar. Intenta nuevamente'
+    }
+  }
+
+  isListening.value = true
+  try {
+    recognition.start()
+  } catch {
+    isListening.value = false
+    activeRecognition = undefined
+    navigationMessage.value = 'No pude activar el micrófono'
+  }
+}
 
 // Bottom nav móvil: Inicio · Caja · [Ventas FAB] · Inventario · Más.
 // Ventas es la acción principal, va en el FAB central elevado.
@@ -355,6 +568,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  activeRecognition?.stop()
+
   if (routeLoadingTimer) {
     clearTimeout(routeLoadingTimer)
   }
@@ -441,6 +656,47 @@ function selectModule(to?: string) {
       </template>
 
       <nav class="drawer-nav" aria-label="Navegación móvil del POS">
+        <form class="navigation-command navigation-command--drawer" role="search" @submit.prevent="submitNavigationQuery">
+          <div class="navigation-command__control">
+            <i class="pi pi-search navigation-command__search-icon" aria-hidden="true" />
+            <input
+              v-model="navigationQuery"
+              type="search"
+              inputmode="search"
+              autocomplete="off"
+              placeholder="Ir a ventas, gastos..."
+              aria-label="Buscar un módulo"
+              @focus="navigationSearchFocused = true"
+              @blur="closeNavigationResults"
+              @input="navigationMessage = ''"
+              @keydown.esc="navigationSearchFocused = false"
+            >
+            <button
+              type="button"
+              class="navigation-command__voice"
+              :class="{ 'is-listening': isListening }"
+              :aria-label="isListening ? 'Detener micrófono' : 'Buscar por voz'"
+              :aria-pressed="isListening"
+              @click="toggleVoiceNavigation"
+            >
+              <i :class="isListening ? 'pi pi-stop-circle' : 'pi pi-microphone'" aria-hidden="true" />
+            </button>
+          </div>
+          <div v-if="showNavigationResults" class="navigation-command__results">
+            <button
+              v-for="match in navigationMatches"
+              :key="match.to"
+              type="button"
+              @mousedown.prevent="goToNavigationItem(match)"
+            >
+              <i :class="match.icon" aria-hidden="true" />
+              <span>{{ match.label }}</span>
+            </button>
+            <p v-if="!navigationMatches.length">No encontré ese módulo</p>
+          </div>
+          <small v-if="navigationMessage" class="navigation-command__message" role="status">{{ navigationMessage }}</small>
+        </form>
+
         <template v-for="item in visibleSidebarItems" :key="item.label">
           <!-- Grupo desplegable (Finanzas: Resumen / Ingresos / Gastos) -->
           <PanelMenu
@@ -496,6 +752,61 @@ function selectModule(to?: string) {
       </div>
 
       <nav class="sidebar-nav">
+        <form class="navigation-command" role="search" @submit.prevent="submitNavigationQuery">
+          <template v-if="!sidebarCollapsed">
+            <div class="navigation-command__control">
+              <i class="pi pi-search navigation-command__search-icon" aria-hidden="true" />
+              <input
+                v-model="navigationQuery"
+                type="search"
+                inputmode="search"
+                autocomplete="off"
+                placeholder="Ir a ventas, gastos..."
+                aria-label="Buscar un módulo"
+                @focus="navigationSearchFocused = true"
+                @blur="closeNavigationResults"
+                @input="navigationMessage = ''"
+                @keydown.esc="navigationSearchFocused = false"
+              >
+              <button
+                type="button"
+                class="navigation-command__voice"
+                :class="{ 'is-listening': isListening }"
+                :aria-label="isListening ? 'Detener micrófono' : 'Buscar por voz'"
+                :aria-pressed="isListening"
+                @click="toggleVoiceNavigation"
+              >
+                <i :class="isListening ? 'pi pi-stop-circle' : 'pi pi-microphone'" aria-hidden="true" />
+              </button>
+            </div>
+            <div v-if="showNavigationResults" class="navigation-command__results">
+              <button
+                v-for="match in navigationMatches"
+                :key="match.to"
+                type="button"
+                @mousedown.prevent="goToNavigationItem(match)"
+              >
+                <i :class="match.icon" aria-hidden="true" />
+                <span>{{ match.label }}</span>
+              </button>
+              <p v-if="!navigationMatches.length">No encontré ese módulo</p>
+            </div>
+            <small v-if="navigationMessage" class="navigation-command__message" role="status">{{ navigationMessage }}</small>
+          </template>
+          <button
+            v-else
+            type="button"
+            class="navigation-command__collapsed-voice"
+            :class="{ 'is-listening': isListening }"
+            v-tooltip.right="isListening ? 'Detener micrófono' : 'Ir a un módulo por voz'"
+            :aria-label="isListening ? 'Detener micrófono' : 'Ir a un módulo por voz'"
+            :aria-pressed="isListening"
+            @click="toggleVoiceNavigation"
+          >
+            <i :class="isListening ? 'pi pi-stop-circle' : 'pi pi-microphone'" aria-hidden="true" />
+          </button>
+        </form>
+
         <template v-for="item in visibleSidebarItems" :key="item.label">
           <!-- Grupo desplegable (Finanzas: Resumen / Ingresos / Gastos) -->
           <!-- Replegado: un solo ícono que lleva al primer hijo -->
@@ -932,6 +1243,201 @@ function selectModule(to?: string) {
   min-height: 0;
   padding-right: 2px;
   overflow-y: auto;
+}
+
+.navigation-command {
+  position: relative;
+  width: 100%;
+  margin-bottom: 7px;
+}
+
+.navigation-command__control {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 34px;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.navigation-command__control:focus-within {
+  border-color: rgba(110, 231, 183, 0.72);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(18, 184, 134, 0.14);
+}
+
+.navigation-command__search-icon {
+  padding-left: 8px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.72rem;
+}
+
+.navigation-command input {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+
+.navigation-command input::placeholder {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.navigation-command input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.navigation-command__voice,
+.navigation-command__collapsed-voice {
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: rgba(255, 255, 255, 0.84);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.navigation-command__voice {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.navigation-command__voice:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.navigation-command__voice:focus-visible,
+.navigation-command__collapsed-voice:focus-visible {
+  outline: 2px solid #6ee7b7;
+  outline-offset: 2px;
+}
+
+.navigation-command__voice.is-listening,
+.navigation-command__collapsed-voice.is-listening {
+  color: #ffffff;
+  background: #e53e3e;
+  animation: navigation-listening-pulse 1.25s ease-in-out infinite;
+}
+
+.navigation-command__results {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 50;
+  display: grid;
+  width: 100%;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.25);
+}
+
+.navigation-command__results button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  color: #163424;
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navigation-command__results button:hover,
+.navigation-command__results button:focus-visible {
+  outline: 0;
+  color: #075c28;
+  background: #edfdf5;
+}
+
+.navigation-command__results p {
+  margin: 0;
+  padding: 9px;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.navigation-command__message {
+  display: block;
+  padding: 5px 4px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
+.navigation-command__collapsed-voice {
+  width: 42px;
+  height: 38px;
+  margin: 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.navigation-command__collapsed-voice:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.navigation-command--drawer {
+  margin-bottom: 12px;
+}
+
+.navigation-command--drawer .navigation-command__control {
+  border-color: #d7e2da;
+  background: #f5f8f6;
+}
+
+.navigation-command--drawer .navigation-command__control:focus-within {
+  border-color: var(--primary-500);
+  background: #ffffff;
+}
+
+.navigation-command--drawer .navigation-command__search-icon,
+.navigation-command--drawer input::placeholder {
+  color: #718078;
+}
+
+.navigation-command--drawer input {
+  color: #163424;
+}
+
+.navigation-command--drawer .navigation-command__voice {
+  color: #385647;
+}
+
+.navigation-command--drawer .navigation-command__voice:hover {
+  color: var(--primary-700);
+  background: #e7f8ee;
+}
+
+.navigation-command--drawer .navigation-command__message {
+  color: #64748b;
+}
+
+@keyframes navigation-listening-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(229, 62, 62, 0); }
 }
 
 .sidebar-nav :deep(.p-button),
