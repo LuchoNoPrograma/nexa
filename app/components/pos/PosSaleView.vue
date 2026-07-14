@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePosOfflineSales } from '~/composables/pos/offline/usePosOfflineSales'
 import type { PosSaleProduct as Product } from '~/stores/catalog'
+import { printHtmlDocument } from '~/utils/printHtmlDocument'
 
 type CartLine = Product & {
   quantity: number
@@ -576,7 +577,7 @@ function printReceipt() {
     return
   }
 
-  openReceiptWindow(lastReceipt.value, true)
+  printHtmlDocument(buildReceiptHtml(lastReceipt.value, false))
 }
 
 async function downloadReceiptPdf() {
@@ -661,18 +662,7 @@ function buildReceiptPdfDocument(receipt: SaleReceipt) {
   }
 }
 
-function openReceiptWindow(receipt: SaleReceipt, autoPrint = false, target = '_blank') {
-  const popup = window.open('', target, 'width=420,height=720')
-
-  if (!popup) {
-    return
-  }
-
-  popup.document.write(buildReceiptHtml(receipt, autoPrint))
-  popup.document.close()
-}
-
-function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false, screen = true) {
+function buildReceiptHtml(receipt: SaleReceipt, screen = true) {
   const styles = buildReceiptTicketStyles({ screen })
 
   return `<!doctype html>
@@ -684,7 +674,6 @@ function buildReceiptHtml(receipt: SaleReceipt, autoPrint = false, screen = true
 </head>
 <body>
   ${buildReceiptTicketMarkup(receipt)}
-  ${autoPrint ? '<script>window.addEventListener("load", () => setTimeout(() => window.print(), 120))<\\/script>' : ''}
 </body>
 </html>`
 }
@@ -745,7 +734,7 @@ function buildReceiptTicketStyles(options: { screen: boolean }) {
   return `
     @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
+    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 12px; }
     .ticket {
       width: 80mm;
       margin: 0 auto;
@@ -754,30 +743,30 @@ function buildReceiptTicketStyles(options: { screen: boolean }) {
       background: #fff;
       color: #000;
       font-family: Arial, sans-serif;
-      font-size: 10px;
-      line-height: 1.25;
+      font-size: 12px;
+      line-height: 1.35;
     }
     header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 7px; }
-    h1 { margin: 0; font-size: 14px; font-weight: 900; }
-    header p { margin: 2px 0 0; font-size: 9px; color: #000; }
+    h1 { margin: 0; font-size: 17px; font-weight: 900; }
+    header p { margin: 3px 0 0; font-size: 11px; color: #000; }
     .doc { margin: 8px 0; padding: 6px; border: 1px solid #000; text-align: center; }
-    .doc span { display: block; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
-    .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .doc small { color: #000; }
+    .doc span { display: block; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
+    .doc strong { display: block; margin-top: 3px; font: 900 14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .doc small { color: #000; font-size: 10px; }
     .meta { display: grid; gap: 3px; }
     .meta div, .summary div, .payment div, .item-main, .total { display: flex; justify-content: space-between; gap: 8px; }
-    .section-title { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; color: #000; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    .section-title { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: #000; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
     .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
-    .item { padding: 5px 0; border-bottom: 1px dashed #000; break-inside: avoid; }
+    .item { padding: 6px 0; border-bottom: 1px dashed #000; break-inside: avoid; }
     .item strong, .summary strong, .meta b { font-weight: 900; }
     .item-main strong { min-width: 0; padding-right: 6px; overflow-wrap: anywhere; }
-    .item b, .summary b, .payment b, .total b { font: 900 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
+    .item b, .summary b, .payment b, .total b { font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
     .item-meta, .meta, .payment, small { color: #000; }
     ul { margin: 2px 0 0 8px; padding-left: 8px; color: #000; }
     .summary, .payment { display: grid; gap: 3px; }
-    .total { margin-top: 7px; padding-top: 7px; border-top: 2px solid #000; align-items: baseline; font-size: 13px; font-weight: 900; text-transform: uppercase; }
-    .total b { font-size: 13px; }
-    footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 9px; }
+    .total { margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; align-items: baseline; font-size: 16px; font-weight: 900; text-transform: uppercase; }
+    .total b { font-size: 16px; }
+    footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 11px; }
     footer strong { display: block; margin-top: 3px; color: #000; }
     ${options.screen ? '@media screen { body { background: #f3f4f6; padding: 16px; } .ticket { box-shadow: 0 12px 30px rgba(0,0,0,.16); } }' : ''}
   `
@@ -1151,11 +1140,12 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
       <div class="catalog-scroll" :class="{ 'is-table': catalogView === 'table' }">
         <!-- Cargando catálogo -->
-        <div v-if="productsLoading" class="catalog-empty" role="status" aria-live="polite">
-          <span class="catalog-empty__icon"><i class="pi pi-spin pi-spinner" aria-hidden="true" /></span>
-          <h3>Cargando tu catálogo…</h3>
-          <p>Estamos trayendo tus productos.</p>
-        </div>
+        <PosLoadingState
+          v-if="productsLoading"
+          mode="section"
+          label="Cargando tu catálogo"
+          detail="Preparando productos y existencias"
+        />
 
         <!-- Sin productos en el inventario -->
         <div v-else-if="!products.length" class="catalog-empty">
@@ -3412,7 +3402,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   border: 1px solid #111111;
   background: #ffffff;
   color: #000000;
-  font-size: 10px;
+  font-size: 12px;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
 }
 
@@ -3424,14 +3414,14 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .thermal-ticket h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 900;
 }
 
 .thermal-ticket p {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: #000000;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .thermal-ticket__doc {
@@ -3446,22 +3436,23 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 .thermal-ticket__doc span,
 .thermal-ticket__title {
   color: #000000;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 900;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .thermal-ticket__doc strong {
   display: block;
-  margin-top: 2px;
+  margin-top: 3px;
   color: #000000;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .thermal-ticket__doc small {
   color: #000000;
+  font-size: 10px;
 }
 
 .thermal-ticket__meta {
@@ -3483,7 +3474,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 8px 0 4px;
+  margin: 10px 0 4px;
 }
 
 .thermal-ticket__title::before,
@@ -3495,7 +3486,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .thermal-ticket__item {
-  padding: 5px 0;
+  padding: 6px 0;
   border-bottom: 1px dashed #000000;
 }
 
@@ -3540,19 +3531,20 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .thermal-ticket__total {
   align-items: baseline;
-  margin-top: 7px;
-  padding-top: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 2px solid #000000;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .thermal-ticket footer {
-  margin-top: 10px;
+  margin-top: 12px;
   padding-top: 8px;
   border-top: 1px solid #000000;
   color: #000000;
+  font-size: 11px;
   text-align: center;
 }
 

@@ -4,6 +4,7 @@ import type {
   PosCashMovementType as MovementType,
   PosCashPaymentMethod as PaymentMethod,
 } from '~/stores/cash'
+import { printHtmlDocument } from '~/utils/printHtmlDocument'
 import { recomendacionesCaja } from '~~/shared/utils/recomendaciones/caja'
 import type { Recomendacion } from '~~/shared/utils/recomendaciones/tipos'
 
@@ -428,33 +429,33 @@ function thermalCss(screen = true) {
   return `
     @page { size: 80mm auto; margin: 4mm; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
-    .ticket { width: 72mm; margin: 0 auto; padding: 2mm 0; }
-    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 5px; }
-    h1 { margin: 0; font-size: 14px; font-weight: 900; }
-    header p { margin: 2px 0 0; font-size: 9px; }
-    .doc { margin: 6px 0; padding: 5px; border: 1px solid #000; text-align: center; }
-    .doc span { display: block; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-    .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, monospace; }
-    .doc small { display: block; margin-top: 2px; font-size: 8px; }
-    .section-title { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 12px; }
+    .ticket { width: 72mm; margin: 0 auto; padding: 2mm 0; line-height: 1.35; }
+    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 7px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 900; }
+    header p { margin: 3px 0 0; font-size: 11px; }
+    .doc { margin: 8px 0; padding: 6px; border: 1px solid #000; text-align: center; }
+    .doc span { display: block; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
+    .doc strong { display: block; margin-top: 3px; font: 900 14px ui-monospace, monospace; }
+    .doc small { display: block; margin-top: 3px; font-size: 10px; }
+    .section-title { display: flex; align-items: center; gap: 8px; margin: 10px 0 3px; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
     .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
     table.rpt { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    table.rpt td, table.rpt th { padding: 2px 0; font-size: 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-    table.rpt th { font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 3px; }
-    table.rpt td small, table.rpt .sub { display: block; font-size: 8px; }
-    table.rpt .amt { text-align: right; font: 900 10px ui-monospace, monospace; white-space: nowrap; width: 22mm; }
-    table.rpt th.amt { font-size: 8px; }
-    table.rpt .qty { text-align: right; font: 900 10px ui-monospace, monospace; width: 9mm; }
-    table.rpt .time { font: 900 9px ui-monospace, monospace; width: 13mm; }
+    table.rpt td, table.rpt th { padding: 4px 0; font-size: 12px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    table.rpt th { font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px; }
+    table.rpt td small, table.rpt .sub { display: block; font-size: 10px; }
+    table.rpt .amt { text-align: right; font: 900 12px ui-monospace, monospace; white-space: nowrap; width: 22mm; }
+    table.rpt th.amt { font-size: 10px; }
+    table.rpt .qty { text-align: right; font: 900 12px ui-monospace, monospace; width: 9mm; }
+    table.rpt .time { font: 900 11px ui-monospace, monospace; width: 13mm; }
     table.rpt tr.line td { border-bottom: 1px dashed #000; }
-    table.rpt tr.strong td { border-top: 1px solid #000; font-weight: 900; padding-top: 4px; }
-    table.rpt tr.strong .amt { font-size: 11px; }
-    .grand { margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 900; }
-    .grand b { font: 900 12px ui-monospace, monospace; }
+    table.rpt tr.strong td { border-top: 1px solid #000; font-weight: 900; padding-top: 6px; }
+    table.rpt tr.strong .amt { font-size: 13px; }
+    .grand { margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 14px; font-weight: 900; }
+    .grand b { font: 900 14px ui-monospace, monospace; white-space: nowrap; }
     .sign { margin-top: 24px; text-align: center; }
-    .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
-    footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #000; text-align: center; font-size: 9px; }
+    .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
+    footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; text-align: center; font-size: 11px; }
     footer strong { display: block; margin-top: 3px; }
     ${screen ? '@media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }' : ''}
   `
@@ -465,18 +466,11 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
     return
   }
 
-  const reportWindow = window.open('', name, 'width=420,height=720')
-
-  if (!reportWindow) {
-    window.print()
-    return
-  }
-
-  reportWindow.document.open()
-  reportWindow.document.write(`<!doctype html>
+  printHtmlDocument(`<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
+  <meta name="print-document" content="${escapeHtml(name)}">
   <title>${escapeHtml(title)}</title>
   <style>${thermalCss(false)}</style>
 </head>
@@ -484,12 +478,6 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
   <main class="ticket">${bodyHtml}</main>
 </body>
 </html>`)
-  reportWindow.document.close()
-  reportWindow.focus()
-  reportWindow.setTimeout(() => {
-    reportWindow.focus()
-    reportWindow.print()
-  }, 180)
 }
 
 async function downloadThermalReport(type: 'arqueo' | 'cierre' | 'producto', reportDocument: CashReportDocument) {
@@ -1567,7 +1555,7 @@ async function downloadProductReport() {
 }
 
 .report-totals small {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 800;
   color: #718074;
 }
@@ -1609,25 +1597,25 @@ async function downloadProductReport() {
 
 .product-main strong {
   display: block;
-  font-size: 0.84rem;
+  font-size: 0.94rem;
   font-weight: 800;
 }
 
 .product-main small {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #718074;
 }
 
 .product-total {
-  font-size: 0.88rem;
+  font-size: 1rem;
   font-weight: 900;
 }
 
 /* --- Arqueo / cierre --- */
 .arqueo-hint {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #5c6b60;
   line-height: 1.4;
@@ -1649,13 +1637,13 @@ async function downloadProductReport() {
 }
 
 .report-rows span {
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: #5c6b60;
 }
 
 .report-rows strong {
-  font-size: 0.84rem;
+  font-size: 0.95rem;
   font-weight: 900;
 }
 
