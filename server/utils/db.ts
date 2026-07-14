@@ -12,20 +12,30 @@ const seedDemo = process.env.NEXA_SEED_DEMO === 'true'
 const seedDemoProducts = process.env.NEXA_SEED_DEMO_PRODUCTS !== 'false'
 const resetDemoAdminPassword = process.env.NEXA_RESET_DEMO_ADMIN_PASSWORD === 'true'
 const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (isProduction ? 1 : 10))
+const isSupabaseConnection =
+  connectionString.includes('supabase.co')
+  || connectionString.includes('pooler.supabase.com')
 const useSsl =
   process.env.DATABASE_SSL !== 'false' && (
     process.env.DATABASE_SSL === 'true'
-  || connectionString.includes('supabase.co')
-  || connectionString.includes('pooler.supabase.com')
+  || isSupabaseConnection
   )
-const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false'
+const sslCa = process.env.DATABASE_SSL_CA?.replace(/\\n/g, '\n')
+const rejectUnauthorizedSetting = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED
+const rejectUnauthorized = rejectUnauthorizedSetting !== 'false'
+  && (!isSupabaseConnection || Boolean(sslCa))
 
 export const pool = new Pool({
   connectionString,
   max: Number.isFinite(poolMax) ? poolMax : 3,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
-  ssl: useSsl ? { rejectUnauthorized } : undefined,
+  ssl: useSsl
+    ? {
+        rejectUnauthorized,
+        ...(sslCa ? { ca: sslCa } : {}),
+      }
+    : undefined,
 })
 
 let ready: Promise<void> | null = null

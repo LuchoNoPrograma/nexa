@@ -38,7 +38,9 @@ NEXA_SUPER_ADMIN_EMAIL=admin@nexa.bo
 NEXA_SUPER_ADMIN_PASSWORD=pon-una-clave-larga
 NEXA_SEED_DEMO=false
 NEXA_RESET_DEMO_ADMIN_PASSWORD=false
-DATABASE_SSL_REJECT_UNAUTHORIZED=true
+DATABASE_SSL_REJECT_UNAUTHORIZED=false
+# Opcional para verificacion completa: certificado PEM descargado desde Supabase.
+DATABASE_SSL_CA=
 NEXA_PUBLIC_URL=https://tu-dominio.example
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3.5-flash
@@ -52,6 +54,7 @@ Notas:
 - El seed demo solo se ejecuta con `NEXA_SEED_DEMO=true`. Mantenlo desactivado en produccion normal.
 - El seed no reemplaza una clave existente salvo que actives temporalmente `NEXA_RESET_DEMO_ADMIN_PASSWORD=true`.
 - La conexion SSL y el pool pequeno para Vercel se detectan automaticamente cuando `DATABASE_URL` es de Supabase.
+- El pooler de Supabase puede requerir `DATABASE_SSL_REJECT_UNAUTHORIZED=false`; la conexion sigue cifrada. Para verificar tambien la identidad del servidor, configura `DATABASE_SSL_CA` con el certificado PEM de Supabase y cambia el valor a `true`.
 - Cambia `NEXA_SUPER_ADMIN_PASSWORD` antes de compartir la demo.
 
 ## 3. Primer acceso
