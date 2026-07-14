@@ -111,7 +111,13 @@ async function loadUsers() {
         </div>
       </template>
       <template #empty>No se encontraron usuarios.</template>
-      <template #loading>Cargando usuarios...</template>
+      <template #loading>
+        <PosLoadingState
+          mode="compact"
+          label="Cargando usuarios"
+          detail="Actualizando accesos y roles"
+        />
+      </template>
 
       <Column field="name" header="Usuario" sortable :showFilterMenu="false" style="min-width: 12rem">
         <template #filter="{ filterModel, filterCallback }">

@@ -105,7 +105,13 @@ async function loadStores() {
         </div>
       </template>
       <template #empty>No se encontraron tiendas.</template>
-      <template #loading>Cargando tiendas...</template>
+      <template #loading>
+        <PosLoadingState
+          mode="compact"
+          label="Cargando tiendas"
+          detail="Actualizando la administración"
+        />
+      </template>
 
       <Column field="name" header="Tienda" sortable :showFilterMenu="false" style="min-width: 12rem">
         <template #filter="{ filterModel, filterCallback }">

@@ -761,7 +761,8 @@ function aplicarReco(reco: Recomendacion) {
           </div>
 
           <button type="button" class="btn-primary" :disabled="generando || !puedeCrear" @click="crear">
-            <i :class="generando ? 'pi pi-spin pi-spinner' : 'pi pi-sparkles'" aria-hidden="true" />
+            <PosLoadingSpinner v-if="generando" size="small" inverse />
+            <i v-else class="pi pi-sparkles" aria-hidden="true" />
             {{ generando ? 'Creando publicación…' : !modoActual ? 'Primero elige una opción' : !notaValida ? 'Escribe una indicación para continuar' : 'Crear publicación' }}
           </button>
         </div>
@@ -961,7 +962,7 @@ function aplicarReco(reco: Recomendacion) {
     >
       <div class="haru-feedback" :class="`is-${haruDialogState}`">
         <div class="haru-feedback__visual" aria-hidden="true">
-          <span v-if="haruDialogState === 'loading'" class="haru-spinner" />
+          <PosLoadingSpinner v-if="haruDialogState === 'loading'" />
           <i v-else-if="haruDialogState === 'success'" class="pi pi-check-circle" />
           <i v-else class="pi pi-exclamation-triangle" />
         </div>
@@ -1190,15 +1191,6 @@ function aplicarReco(reco: Recomendacion) {
   color: #0a8f3a;
 }
 
-.haru-spinner {
-  width: 38px;
-  height: 38px;
-  border: 4px solid rgba(10, 111, 31, 0.18);
-  border-top-color: #0a6f1f;
-  border-radius: 50%;
-  animation: haru-spin 0.8s linear infinite;
-}
-
 .haru-feedback__copy {
   display: grid;
   gap: 7px;
@@ -1259,12 +1251,6 @@ function aplicarReco(reco: Recomendacion) {
 .haru-feedback__actions .btn-ghost {
   min-width: 146px;
   justify-content: center;
-}
-
-@keyframes haru-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes haru-thought-in {

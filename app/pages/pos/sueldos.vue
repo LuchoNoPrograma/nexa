@@ -913,9 +913,12 @@ function flash(msg: string) {
       </div>
     </header>
 
-    <div v-if="cargando" class="su-loading">
-      <span class="su-spinner" aria-hidden="true" /> Cargando…
-    </div>
+    <PosLoadingState
+      v-if="cargando"
+      mode="section"
+      label="Cargando personal"
+      detail="Preparando turnos y costos"
+    />
 
     <template v-else>
       <section class="su-overview" aria-label="Resumen de personal">
@@ -2094,30 +2097,6 @@ function flash(msg: string) {
   font-size: 1.05rem;
 }
 
-/* ---------- Loading ---------- */
-.su-loading {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 40px;
-  justify-content: center;
-  color: #6b7a6f;
-  font-weight: 700;
-}
-
-.su-spinner {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 3px solid #d9ead9;
-  border-top-color: #0b6f38;
-  animation: su-spin 0.8s linear infinite;
-}
-
-@keyframes su-spin {
-  to { transform: rotate(360deg); }
-}
-
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
   .su-grid,
@@ -2187,7 +2166,4 @@ function flash(msg: string) {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .su-spinner { animation: none; }
-}
 </style>

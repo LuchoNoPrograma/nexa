@@ -210,7 +210,7 @@ function onGoogleClick(event: MouseEvent) {
             :disabled="loading || googleLoading"
             class="btn-shine login-submit"
           >
-            <i v-if="loading" class="pi pi-spinner pi-spin" aria-hidden="true" />
+            <PosLoadingSpinner v-if="loading" size="small" inverse />
             <span>{{ loading ? 'Iniciando sesión…' : 'Iniciar sesión' }}</span>
             <svg v-if="!loading" class="login-paw" viewBox="0 0 24 24" aria-hidden="true">
               <ellipse cx="6.2" cy="10.2" rx="1.7" ry="2.3" />
@@ -236,7 +236,8 @@ function onGoogleClick(event: MouseEvent) {
               :aria-disabled="loading || googleLoading"
               @click="onGoogleClick"
             >
-              <i :class="googleLoading ? 'pi pi-spinner pi-spin' : 'pi pi-google'" aria-hidden="true" />
+              <PosLoadingSpinner v-if="googleLoading" size="small" />
+              <i v-else class="pi pi-google" aria-hidden="true" />
               <span>{{ googleLoading ? 'Conectando…' : 'Google' }}</span>
             </a>
           </div>

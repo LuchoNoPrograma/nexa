@@ -1280,11 +1280,11 @@ async function openStockHistory(product: CatalogProduct | null) {
           </div>
         </template>
         <template #loading>
-          <div class="table-loading-state">
-            <i class="pi pi-spin pi-spinner" aria-hidden="true" />
-            <strong>Cargando tabla</strong>
-            <span>Productos, insumos, costos y stock se están actualizando.</span>
-          </div>
+          <PosLoadingState
+            mode="compact"
+            label="Cargando tabla"
+            detail="Actualizando productos, costos y stock"
+          />
         </template>
 
         <Column header="Producto" style="min-width: 18rem">
@@ -1998,11 +1998,11 @@ async function openStockHistory(product: CatalogProduct | null) {
       <DataTable :value="historyRows" :loading="historyLoading" size="small" class="history-table">
         <template #empty>No hay movimientos registrados para este producto.</template>
         <template #loading>
-          <div class="table-loading-state is-compact">
-            <i class="pi pi-spin pi-spinner" aria-hidden="true" />
-            <strong>Cargando historial</strong>
-            <span>Estamos buscando los movimientos de stock.</span>
-          </div>
+          <PosLoadingState
+            mode="compact"
+            label="Cargando historial"
+            detail="Buscando movimientos de stock"
+          />
         </template>
         <Column header="Fecha" style="min-width: 9.5rem">
           <template #body="{ data }">
@@ -2467,37 +2467,6 @@ async function openStockHistory(product: CatalogProduct | null) {
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.table-loading-state {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  padding: 44px 16px;
-  color: #64748b;
-  text-align: center;
-}
-
-.table-loading-state.is-compact {
-  padding: 30px 16px;
-}
-
-.table-loading-state i {
-  color: var(--catalog-accent);
-  font-size: 1.65rem;
-}
-
-.table-loading-state strong {
-  color: #0f172a;
-  font-size: 0.95rem;
-  font-weight: 900;
-}
-
-.table-loading-state span {
-  max-width: 36ch;
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1.4;
 }
 
 /* Botones blancos nítidos (Escanear, Importar, Editar, Stock) como el mockup */

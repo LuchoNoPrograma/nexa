@@ -7,8 +7,12 @@ const session = usePosSession()
 const sessionStore = useSessionStore()
 const { puede } = useAcceso()
 const { open: openHaru } = useHaruChat()
-const isReady = ref(false)
-const isRouteLoading = ref(false)
+const { isLoading: isRouteLoading } = useLoadingIndicator({
+  duration: 1000,
+  throttle: 120,
+  hideDelay: 0,
+  resetDelay: 0,
+})
 const mobileMenuOpen = ref(false)
 const moreMenuOpen = ref(false)
 const supportDialogOpen = ref(false)
@@ -23,16 +27,11 @@ const SIDEBAR_MIN_WIDTH = 180
 const SIDEBAR_MAX_WIDTH = 360
 const SIDEBAR_COLLAPSED_WIDTH = 76
 const SIDEBAR_KEYBOARD_STEP = 12
-const ROUTE_LOADING_MIN_MS = 240
 const SUPPORT_COUNTRY_DIAL_CODE = '+591'
 const SUPPORT_PHONE = '71117696'
 const SUPPORT_WHATSAPP_URL = `https://wa.me/591${SUPPORT_PHONE}`
 
-let routeLoadingStartedAt = 0
-let routeLoadingTimer: ReturnType<typeof setTimeout> | undefined
 let removeRouteBeforeGuard: (() => void) | undefined
-let removeRouteAfterGuard: (() => void) | undefined
-let removeRouteErrorGuard: (() => void) | undefined
 
 const currentSidebarWidth = computed(() => sidebarCollapsed.value ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth.value)
 
@@ -475,31 +474,7 @@ const userInitials = computed(() => {
     .join('')
 })
 
-function startRouteLoading() {
-  if (routeLoadingTimer) {
-    clearTimeout(routeLoadingTimer)
-    routeLoadingTimer = undefined
-  }
-
-  routeLoadingStartedAt = Date.now()
-  isRouteLoading.value = true
-}
-
-function finishRouteLoading() {
-  const elapsed = Date.now() - routeLoadingStartedAt
-  const remaining = Math.max(0, ROUTE_LOADING_MIN_MS - elapsed)
-
-  if (routeLoadingTimer) {
-    clearTimeout(routeLoadingTimer)
-  }
-
-  routeLoadingTimer = setTimeout(() => {
-    isRouteLoading.value = false
-    routeLoadingTimer = undefined
-  }, remaining)
-}
-
-onMounted(async () => {
+onMounted(() => {
   if (import.meta.client) {
     sidebarCollapsed.value = localStorage.getItem(SIDEBAR_KEY) === '1'
     const storedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY)
@@ -509,7 +484,7 @@ onMounted(async () => {
       sidebarWidth.value = clampSidebarWidth(savedWidth)
     }
 
-    removeRouteBeforeGuard = router.beforeEach((to, from) => {
+    removeRouteBeforeGuard = router.beforeEach((to) => {
       // Bloqueo de onboarding: mientras el diagnóstico no esté completado, toda
       // la app queda bloqueada y se redirige al diagnóstico (obligatorio).
       if (
@@ -527,56 +502,14 @@ onMounted(async () => {
       if (session.value && to.path.startsWith('/pos') && !rutaPermitida(to.path)) {
         return '/pos/inicio'
       }
-
-      const isPosNavigation = to.path.startsWith('/pos') || from.path.startsWith('/pos')
-
-      if (isPosNavigation && to.fullPath !== from.fullPath) {
-        startRouteLoading()
-      }
     })
-
-    removeRouteAfterGuard = router.afterEach((to, from) => {
-      const isPosNavigation = to.path.startsWith('/pos') || from.path.startsWith('/pos')
-
-      if (isPosNavigation && to.fullPath !== from.fullPath) {
-        finishRouteLoading()
-      }
-    })
-
-    removeRouteErrorGuard = router.onError(() => {
-      finishRouteLoading()
-    })
-  }
-
-  try {
-    const user = await sessionStore.load()
-
-    // Onboarding obligatorio: hasta que el diagnóstico esté "completado",
-    // mandamos al diagnóstico y la app permanece bloqueada (ver beforeEach).
-    if (
-      user?.storeId
-      && user.onboardingDiagnostico !== 'completado'
-      && route.path !== '/pos/diagnostico'
-    ) {
-      await navigateTo('/pos/diagnostico')
-    }
-
-    isReady.value = true
-  } catch {
-    void navigateTo('/login')
   }
 })
 
 onBeforeUnmount(() => {
   activeRecognition?.stop()
 
-  if (routeLoadingTimer) {
-    clearTimeout(routeLoadingTimer)
-  }
-
   removeRouteBeforeGuard?.()
-  removeRouteAfterGuard?.()
-  removeRouteErrorGuard?.()
 })
 
 async function logout() {
@@ -642,10 +575,12 @@ function selectModule(to?: string) {
 
 <template>
   <main
-    v-show="isReady"
     class="pos-page"
     :class="{ 'is-collapsed': sidebarCollapsed, 'is-resizing-sidebar': isResizingSidebar }"
-    :style="{ '--sidebar-w': `${currentSidebarWidth}px` }"
+    :style="{
+      '--sidebar-w': `${currentSidebarWidth}px`,
+      '--sidebar-center-offset': `${currentSidebarWidth / 2}px`,
+    }"
   >
     <Drawer v-model:visible="mobileMenuOpen" position="left" class="pos-drawer">
       <template #header>
@@ -913,18 +848,17 @@ function selectModule(to?: string) {
         </div>
       </header>
 
-      <div class="pos-content-shell" :class="{ 'is-loading': isRouteLoading }">
+      <div
+        class="pos-content-shell"
+        :aria-busy="isRouteLoading ? 'true' : 'false'"
+      >
         <slot />
-        <Transition name="pos-route-feedback">
-          <div v-if="isRouteLoading" class="pos-route-feedback" role="status" aria-live="polite" aria-label="Cargando sección">
-            <div class="pos-route-feedback__panel">
-              <span class="pos-route-feedback__spinner" aria-hidden="true">
-                <img src="/nexa-logo-color.webp" alt="">
-              </span>
-              <span class="pos-route-feedback__copy">Cargando sección</span>
-            </div>
-          </div>
-        </Transition>
+        <PosLoadingState
+          :visible="isRouteLoading"
+          mode="overlay"
+          label="Cargando sección"
+          detail="Preparando la vista"
+        />
       </div>
     </section>
 
@@ -1075,20 +1009,6 @@ function selectModule(to?: string) {
     </Dialog>
   </main>
 
-  <main v-if="!isReady" class="pos-loading">
-    <div class="pos-loading__card" role="status" aria-live="polite" aria-label="Abriendo punto de venta">
-      <div class="pos-loading__spinner" aria-hidden="true">
-        <span class="pos-loading__ring pos-loading__ring--outer" />
-        <span class="pos-loading__mark">
-          <img src="/nexa-logo-color.webp" alt="">
-        </span>
-      </div>
-      <p class="pos-loading__text">
-        Abriendo punto de venta<span class="pos-loading__dots"><span>.</span><span>.</span><span>.</span></span>
-      </p>
-      <span class="pos-loading__bar" aria-hidden="true" />
-    </div>
-  </main>
 </template>
 
 <style scoped>
@@ -1858,84 +1778,6 @@ function selectModule(to?: string) {
   min-height: calc(100dvh - 122px);
 }
 
-.pos-content-shell.is-loading {
-  overflow: hidden;
-}
-
-.pos-route-feedback {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  display: grid;
-  place-items: center;
-  min-height: 220px;
-  padding: 24px;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(15, 158, 46, 0.12), rgba(255, 255, 255, 0) 34%),
-    rgba(243, 244, 246, 0.72);
-  backdrop-filter: blur(3px);
-}
-
-.pos-route-feedback__panel {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px 16px 10px 12px;
-  border: 1px solid rgba(11, 31, 58, 0.1);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #0b1f3a;
-  box-shadow: 0 14px 32px rgba(11, 31, 58, 0.12);
-}
-
-.pos-route-feedback__spinner {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid rgba(11, 31, 58, 0.1);
-}
-
-.pos-route-feedback__spinner::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  border: 2px solid rgba(11, 31, 58, 0.1);
-  border-top-color: #0b1f3a;
-  border-right-color: #16a34a;
-  animation: pos-route-feedback-spin 0.9s linear infinite;
-}
-
-.pos-route-feedback__spinner img {
-  position: relative;
-  z-index: 1;
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-}
-
-.pos-route-feedback__copy {
-  font-size: 0.9rem;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.pos-route-feedback-enter-active,
-.pos-route-feedback-leave-active {
-  transition: opacity 0.14s ease;
-}
-
-.pos-route-feedback-enter-from,
-.pos-route-feedback-leave-to {
-  opacity: 0;
-}
-
 .pos-topbar > div,
 .drawer-brand {
   display: inline-flex;
@@ -2093,157 +1935,7 @@ function selectModule(to?: string) {
   padding-top: 10px;
 }
 
-.pos-loading {
-  min-height: 100dvh;
-  display: grid;
-  place-content: center;
-  place-items: center;
-  padding: 24px;
-  background: #f5f7fb;
-  color: var(--brand-700);
-  font-weight: 800;
-}
-
-.pos-loading__card {
-  display: grid;
-  justify-items: center;
-  gap: 16px;
-  width: min(100%, 280px);
-  padding: 28px 26px 24px;
-  border: 1px solid rgba(11, 31, 58, 0.1);
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 18px 48px rgba(11, 31, 58, 0.1);
-}
-
-.pos-loading__spinner {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 88px;
-  height: 88px;
-}
-
-.pos-loading__ring {
-  position: absolute;
-  border-radius: 999px;
-  pointer-events: none;
-}
-
-.pos-loading__ring--outer {
-  inset: 0;
-  border-radius: 50%;
-  border: 3px solid rgba(11, 31, 58, 0.1);
-  border-top-color: #0b1f3a;
-  border-right-color: #16a34a;
-  animation: pos-loading-spin 1.05s linear infinite;
-}
-
-.pos-loading__mark {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 12px;
-  background: #ffffff;
-  border: 1px solid rgba(11, 31, 58, 0.08);
-  box-shadow: 0 10px 24px rgba(11, 31, 58, 0.1);
-}
-
-.pos-loading__mark img {
-  width: 38px;
-  height: 38px;
-  object-fit: contain;
-}
-
-.pos-loading__text {
-  margin: 0;
-  color: #0b1f3a;
-  font-size: 0.96rem;
-  letter-spacing: 0;
-  text-align: center;
-}
-
-.pos-loading__bar {
-  position: relative;
-  width: min(100%, 190px);
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(11, 31, 58, 0.1);
-}
-
-.pos-loading__bar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: 40%;
-  border-radius: inherit;
-  background: #0b1f3a;
-  animation: pos-loading-bar 1.35s ease-in-out infinite;
-}
-
-.pos-loading__dots span {
-  display: inline-block;
-  animation: pos-loading-dots 1.4s ease-in-out infinite;
-}
-
-.pos-loading__dots span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.pos-loading__dots span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes pos-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes pos-loading-dots {
-  0%,
-  100% {
-    opacity: 0.25;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-
-@keyframes pos-loading-bar {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(230%);
-  }
-}
-
-@keyframes pos-route-feedback-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .pos-loading__ring,
-  .pos-loading__bar::before,
-  .pos-loading__dots span,
-  .pos-route-feedback__spinner::before {
-    animation: none;
-  }
-
-  .pos-route-feedback-enter-active,
-  .pos-route-feedback-leave-active {
-    transition: none;
-  }
-
   .bottom-nav-fab,
   .bottom-nav-fab i {
     transition: none;

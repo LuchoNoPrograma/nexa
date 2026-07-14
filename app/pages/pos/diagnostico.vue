@@ -305,10 +305,12 @@ function areaScore(key: keyof AreaScores) {
     </header>
 
     <!-- ====================== Cargando ====================== -->
-    <div v-if="cargando" class="diag-loading">
-      <span class="diag-spinner" aria-hidden="true" />
-      <p>Preparando tu diagnóstico…</p>
-    </div>
+    <PosLoadingState
+      v-if="cargando"
+      :mode="pantallaCompleta ? 'viewport' : 'section'"
+      label="Preparando tu diagnóstico"
+      detail="Estamos organizando tus respuestas"
+    />
 
     <!-- ====================== Intro ====================== -->
     <Transition name="diag-fade" mode="out-in">
@@ -404,7 +406,7 @@ function areaScore(key: keyof AreaScores) {
           >
             <template v-if="esUltima">
               <i v-if="!enviando" class="pi pi-sparkles" />
-              <span v-if="enviando" class="diag-spinner diag-spinner--sm" />
+              <PosLoadingSpinner v-if="enviando" size="small" inverse />
               {{ enviando ? 'Calculando…' : 'Ver mi diagnóstico' }}
             </template>
             <template v-else>
@@ -620,7 +622,7 @@ function areaScore(key: keyof AreaScores) {
               :disabled="reiniciando"
               @click="rehacer"
             >
-              <span v-if="reiniciando" class="diag-spinner diag-spinner--sm" />
+              <PosLoadingSpinner v-if="reiniciando" size="small" />
               <i v-else class="pi pi-refresh" /> Reiniciar diagnóstico
             </button>
             <NuxtLink to="/pos/inicio" class="diag-btn diag-btn--primary">
@@ -680,37 +682,6 @@ function areaScore(key: keyof AreaScores) {
   border-radius: 18px;
   background: #fff;
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
-}
-
-/* ---------- Loading ---------- */
-.diag-loading {
-  display: grid;
-  place-items: center;
-  gap: 14px;
-  min-height: 320px;
-  color: #6b7a6f;
-  font-weight: 700;
-}
-
-.diag-spinner {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 4px solid #d9ead9;
-  border-top-color: #0b6f38;
-  animation: diag-spin 0.8s linear infinite;
-}
-
-.diag-spinner--sm {
-  width: 18px;
-  height: 18px;
-  border-width: 3px;
-  border-color: rgba(255, 255, 255, 0.5);
-  border-top-color: #fff;
-}
-
-@keyframes diag-spin {
-  to { transform: rotate(360deg); }
 }
 
 /* ---------- Intro ---------- */

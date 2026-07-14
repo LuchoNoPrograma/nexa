@@ -470,6 +470,8 @@ export default defineNuxtConfig({
         { name: 'theme-color', content: '#0b982f' },
       ],
       link: [
+        { rel: 'icon', type: 'image/webp', href: '/nexa-logo-color.webp' },
+        { rel: 'shortcut icon', type: 'image/webp', href: '/nexa-logo-color.webp' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
