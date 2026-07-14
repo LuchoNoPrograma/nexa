@@ -1,6 +1,6 @@
 import { deleteCookie, getCookie, getQuery, sendRedirect } from 'h3'
 import { ensureDatabase } from '../../../../utils/db'
-import { getGoogleClient, issueOAuthSession, resolveGoogleUser } from '../../../../utils/oauth'
+import { completeCurrentUserGoogleLink, getGoogleClient, issueOAuthSession, prepareOAuthPasswordSetup, resolveGoogleUser } from '../../../../utils/oauth'
 import type { GoogleProfile } from '../../../../utils/oauth'
 
 type GoogleUserInfo = {
@@ -23,19 +23,26 @@ export default defineEventHandler(async (event) => {
   const state = typeof query.state === 'string' ? query.state : ''
   const storedState = getCookie(event, 'google_oauth_state')
   const codeVerifier = getCookie(event, 'google_oauth_verifier')
+  const oauthIntent = getCookie(event, 'google_oauth_intent')
 
   // Las cookies del roundtrip ya cumplieron su funcion: se limpian siempre.
   deleteCookie(event, 'google_oauth_state', { path: '/' })
   deleteCookie(event, 'google_oauth_verifier', { path: '/' })
+  deleteCookie(event, 'google_oauth_intent', { path: '/' })
 
   // El usuario cancelo el consentimiento en Google.
   if (typeof query.error === 'string') {
-    return sendRedirect(event, '/login?oauth=cancelado')
+    deleteCookie(event, 'nexa_oauth_connect_token', { path: '/' })
+    return sendRedirect(event, oauthIntent === 'set_password' || oauthIntent === 'link_google'
+      ? '/pos/inicio?security=cancelado'
+      : '/login?oauth=cancelado')
   }
 
   // Validacion anti-CSRF: el state de la URL debe coincidir con el de la cookie.
   if (!code || !state || !storedState || !codeVerifier || state !== storedState) {
-    return sendRedirect(event, '/login?oauth=error')
+    return sendRedirect(event, oauthIntent === 'set_password' || oauthIntent === 'link_google'
+      ? '/pos/inicio?security=error'
+      : '/login?oauth=error')
   }
 
   let profile: GoogleProfile
@@ -49,7 +56,9 @@ export default defineEventHandler(async (event) => {
     })
 
     if (!info?.sub) {
-      return sendRedirect(event, '/login?oauth=error')
+      return sendRedirect(event, oauthIntent === 'set_password' || oauthIntent === 'link_google'
+        ? '/pos/inicio?security=error'
+        : '/login?oauth=error')
     }
 
     profile = {
@@ -60,11 +69,46 @@ export default defineEventHandler(async (event) => {
       picture: info.picture ?? null,
     }
   } catch {
-    return sendRedirect(event, '/login?oauth=error')
+    return sendRedirect(event, oauthIntent === 'set_password' || oauthIntent === 'link_google'
+      ? '/pos/inicio?security=error'
+      : '/login?oauth=error')
   }
 
-  const userId = await resolveGoogleUser(profile)
-  await issueOAuthSession(event, userId)
+  if (oauthIntent === 'link_google') {
+    try {
+      const userId = await completeCurrentUserGoogleLink(event, profile)
+      await issueOAuthSession(event, userId)
+      return sendRedirect(event, '/pos/inicio?security=google')
+    } catch {
+      return sendRedirect(event, '/pos/inicio?security=error')
+    }
+  }
+
+  if (oauthIntent === 'set_password') {
+    try {
+      const session = await prepareOAuthPasswordSetup(event, profile)
+      const destination = session.storeId && session.onboardingDiagnostico !== 'completado'
+        ? '/pos/diagnostico'
+        : '/pos/inicio'
+      return sendRedirect(event, `${destination}?security=password`)
+    } catch {
+      return sendRedirect(event, '/pos/inicio?security=error')
+    }
+  }
+
+  try {
+    const resolution = await resolveGoogleUser(event, profile)
+    if (resolution.status === 'link_required') {
+      return sendRedirect(event, '/login?oauth=vincular')
+    }
+    if (resolution.status === 'conflict') {
+      return sendRedirect(event, '/login?oauth=conflicto')
+    }
+
+    await issueOAuthSession(event, resolution.userId)
+  } catch {
+    return sendRedirect(event, '/login?oauth=error')
+  }
 
   return sendRedirect(event, '/pos/inicio')
 })

@@ -74,6 +74,11 @@ function openBusinessProfile() {
   window.dispatchEvent(new CustomEvent('nexa:open-business-profile'))
 }
 
+function openAccountSecurity() {
+  moreMenuOpen.value = false
+  window.dispatchEvent(new CustomEvent('nexa:open-account-security'))
+}
+
 function openSupport() {
   mobileMenuOpen.value = false
   moreMenuOpen.value = false
@@ -837,6 +842,7 @@ function selectModule(to?: string) {
           </span>
           <Button type="button" text rounded icon="pi pi-bell" class="topbar-icon-btn" v-tooltip.bottom="{ value: 'Notificaciones', showDelay: 150 }" aria-label="Notificaciones" />
           <Button type="button" text rounded icon="pi pi-question-circle" class="topbar-icon-btn" v-tooltip.bottom="{ value: 'Ayuda', showDelay: 150 }" aria-label="Ayuda" />
+          <Button type="button" text rounded icon="pi pi-shield" class="topbar-icon-btn" v-tooltip.bottom="{ value: 'Seguridad de la cuenta', showDelay: 150 }" aria-label="Seguridad de la cuenta" @click="openAccountSecurity" />
           <button type="button" class="user-chip" title="Configurar perfil del negocio" @click="openBusinessProfile">
             <span class="user-chip__avatar">{{ userInitials }}</span>
             <span class="user-chip__meta">
@@ -863,6 +869,7 @@ function selectModule(to?: string) {
     </section>
 
     <PosBusinessProfileDialog />
+    <PosAccountSecurityDialog />
 
     <!-- Bottom navigation (mobile only): Inicio · Caja · [Ventas] · Inventario · Más -->
     <nav class="pos-bottom-nav" aria-label="Accesos rápidos">
@@ -949,6 +956,16 @@ function selectModule(to?: string) {
         </button>
         <button
           type="button"
+          class="more-drawer-item"
+          @click="openAccountSecurity"
+        >
+          <span class="more-drawer-icon">
+            <i class="pi pi-shield" aria-hidden="true" />
+          </span>
+          <span class="more-drawer-label">Seguridad</span>
+        </button>
+        <button
+          type="button"
           class="more-drawer-item more-drawer-item--logout"
           @click="logout"
         >
@@ -985,7 +1002,7 @@ function selectModule(to?: string) {
 
         <div class="support-dialog__phone">
           <label for="support-phone">Número de atención</label>
-          <PhoneCountryInput
+          <SharedPhoneCountryInput
             :country-dial-code="SUPPORT_COUNTRY_DIAL_CODE"
             :phone="SUPPORT_PHONE"
             input-id="support-phone"

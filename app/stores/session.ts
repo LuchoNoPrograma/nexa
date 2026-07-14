@@ -12,6 +12,8 @@ export type PosSession = {
   onboardingDiagnostico: 'pendiente' | 'completado' | 'omitido' | null
   tipoNegocio: 'produccion' | 'comercial' | 'servicios' | null
   perfilNegocioConfirmado: boolean
+  hasPassword: boolean
+  hasGoogle: boolean
   roles: string[]
   permisos: string[]
 }

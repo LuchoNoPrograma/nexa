@@ -1,6 +1,7 @@
 import { createError, getRequestHeader, readBody, setCookie } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { assertLoginAllowed, clearLoginFailures, getLoginRateLimitKey, recordLoginFailure } from '../../utils/loginRateLimit'
+import { completePendingOAuthLink } from '../../utils/oauth'
 import { createSessionToken, hashSessionToken, verifyPassword } from '../../utils/password'
 
 const SESSION_DAYS = {
@@ -81,6 +82,7 @@ export default defineEventHandler(async (event) => {
   }
 
   clearLoginFailures(rateLimitKey)
+  const oauthLinked = await completePendingOAuthLink(event, user.id)
 
   const token = createSessionToken()
   const maxAge = (body.remember ? SESSION_DAYS.remembered : SESSION_DAYS.normal) * 24 * 60 * 60
@@ -117,5 +119,6 @@ export default defineEventHandler(async (event) => {
       email: user.email,
       name: user.name,
     },
+    oauthLinked,
   }
 })

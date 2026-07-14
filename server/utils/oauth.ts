@@ -1,13 +1,18 @@
 import process from 'node:process'
 import { Google } from 'arctic'
-import { createError, getRequestHeader, getRequestURL, setCookie } from 'h3'
+import { createError, deleteCookie, getCookie, getRequestHeader, getRequestURL, setCookie } from 'h3'
 import type { H3Event } from 'h3'
 import { pool } from './db'
 import { createSessionToken, hashSessionToken } from './password'
+import { requireSession } from './session'
 
 // Sesion larga para OAuth: la experiencia "iniciar con Google" se asume como
 // dispositivo de confianza, igual que el registro (90 dias).
 const OAUTH_SESSION_DAYS = 90
+const AUTH_INTENT_MINUTES = 10
+const OAUTH_LINK_COOKIE = 'nexa_oauth_link_token'
+const OAUTH_CONNECT_COOKIE = 'nexa_oauth_connect_token'
+const PASSWORD_SETUP_COOKIE = 'nexa_password_setup_token'
 
 // URI de retorno: se deriva del request para ser portable (funciona igual en
 // Vercel y en un VPS sin tocar codigo). Si hay un proxy que oculta el host real
@@ -39,6 +44,84 @@ export type GoogleProfile = {
   emailVerified: boolean
   name: string
   picture: string | null
+}
+
+type GoogleResolution =
+  | { status: 'authenticated' | 'created', userId: string }
+  | { status: 'link_required' | 'conflict' }
+
+function authIntentCookieOptions(maxAge = AUTH_INTENT_MINUTES * 60, sameSite: 'strict' | 'lax' = 'strict') {
+  return {
+    httpOnly: true,
+    sameSite,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge,
+  }
+}
+
+async function clearExpiredAuthIntents() {
+  await pool.query(`delete from auth_intent where expires_at <= now() or consumed_at is not null`)
+}
+
+async function createAuthIntent(input: {
+  type: 'link_oauth' | 'connect_oauth' | 'set_password'
+  userId: string
+  provider?: string
+  providerSub?: string
+  email?: string | null
+  avatarUrl?: string | null
+}) {
+  await clearExpiredAuthIntents()
+
+  const token = createSessionToken()
+  const expiresAt = new Date(Date.now() + AUTH_INTENT_MINUTES * 60 * 1000)
+  await pool.query(
+    `
+      insert into auth_intent (
+        token_hash, tipo, usuario_id, provider, provider_sub, email, avatar_url, expires_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+    `,
+    [
+      hashSessionToken(token),
+      input.type,
+      input.userId,
+      input.provider ?? null,
+      input.providerSub ?? null,
+      input.email ?? null,
+      input.avatarUrl ?? null,
+      expiresAt,
+    ],
+  )
+
+  return token
+}
+
+async function beginGoogleAccountLink(event: H3Event, userId: string, profile: GoogleProfile) {
+  await pool.query(
+    `delete from auth_intent where tipo = 'link_oauth' and usuario_id = $1`,
+    [userId],
+  )
+  const token = await createAuthIntent({
+    type: 'link_oauth',
+    userId,
+    provider: 'google',
+    providerSub: profile.sub,
+    email: profile.email,
+    avatarUrl: profile.picture,
+  })
+
+  setCookie(event, OAUTH_LINK_COOKIE, token, authIntentCookieOptions())
+}
+
+export async function prepareCurrentUserGoogleLink(event: H3Event, userId: string) {
+  await pool.query(`delete from auth_intent where tipo = 'connect_oauth' and usuario_id = $1`, [userId])
+  const token = await createAuthIntent({ type: 'connect_oauth', userId, provider: 'google' })
+
+  // Esta cookie debe volver en la navegacion GET desde Google. El token es opaco,
+  // de un solo uso y solo su hash existe en la base de datos.
+  setCookie(event, OAUTH_CONNECT_COOKIE, token, authIntentCookieOptions(AUTH_INTENT_MINUTES * 60, 'lax'))
 }
 
 // Emite la sesion exactamente como login/register: token aleatorio opaco,
@@ -103,46 +186,251 @@ async function uniqueStoreSlug(client: { query: typeof pool.query }, baseName: s
   return `${base.slice(0, 45)}-${Date.now().toString(36)}`
 }
 
-// Resuelve el usuario detras de un perfil de Google y devuelve su id, creando lo
-// minimo necesario. Orden de resolucion:
-//   1. Ya vinculado por (google, sub)  -> login directo.
-//   2. Existe un usuario con ese correo verificado -> se vincula (no se duplica).
-//   3. Usuario nuevo -> se crea usuario + tienda demo, igual que el registro.
-export async function resolveGoogleUser(profile: GoogleProfile): Promise<string> {
+// Resuelve el usuario detras de un perfil de Google. Un correo coincidente solo
+// propone la vinculacion: no concede acceso hasta que el usuario autentique
+// tambien la cuenta local.
+export async function resolveGoogleUser(event: H3Event, profile: GoogleProfile): Promise<GoogleResolution> {
   const linked = await pool.query<{ id: string }>(
     `select id from usuario where oauth_provider = 'google' and oauth_sub = $1 limit 1`,
     [profile.sub],
   )
 
   if (linked.rows[0]) {
-    return linked.rows[0].id
+    return { status: 'authenticated', userId: linked.rows[0].id }
   }
 
   if (profile.email && profile.emailVerified) {
-    const existing = await pool.query<{ id: string }>(
-      `select id from usuario where lower(email) = $1 and estado <> 'bloqueado' limit 1`,
+    const existing = await pool.query<{ id: string; password_hash: string | null }>(
+      `select id, password_hash from usuario where lower(email) = $1 and estado <> 'bloqueado' limit 1`,
       [profile.email],
     )
 
     if (existing.rows[0]) {
-      await pool.query(
-        `
-          update usuario
-          set oauth_provider = 'google',
-              oauth_sub = $2,
-              avatar_url = coalesce(avatar_url, $3),
-              estado = 'activo',
-              updated_at = now()
-          where id = $1
-        `,
-        [existing.rows[0].id, profile.sub, profile.picture],
-      )
+      if (!existing.rows[0].password_hash) {
+        return { status: 'conflict' }
+      }
 
-      return existing.rows[0].id
+      await beginGoogleAccountLink(event, existing.rows[0].id, profile)
+      return { status: 'link_required' }
     }
   }
 
-  return createGoogleUserWithStore(profile)
+  const userId = await createGoogleUserWithStore(profile)
+  return { status: 'created', userId }
+}
+
+export async function completePendingOAuthLink(event: H3Event, authenticatedUserId: string) {
+  const token = getCookie(event, OAUTH_LINK_COOKIE)
+  if (!token) {
+    return false
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query('begin')
+    const intentResult = await client.query<{
+      id: string
+      user_id: string
+      provider: string
+      provider_sub: string
+      avatar_url: string | null
+    }>(
+      `
+        select id, usuario_id as user_id, provider, provider_sub, avatar_url
+        from auth_intent
+        where token_hash = $1
+          and tipo = 'link_oauth'
+          and consumed_at is null
+          and expires_at > now()
+        for update
+      `,
+      [hashSessionToken(token)],
+    )
+    const intent = intentResult.rows[0]
+
+    if (!intent || intent.user_id !== authenticatedUserId) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'No se pudo confirmar la vinculacion con Google. Inicia el proceso nuevamente.',
+      })
+    }
+
+    const owner = await client.query<{ id: string }>(
+      `select id from usuario where oauth_provider = $1 and oauth_sub = $2 limit 1`,
+      [intent.provider, intent.provider_sub],
+    )
+    if (owner.rows[0] && owner.rows[0].id !== authenticatedUserId) {
+      throw createError({ statusCode: 409, statusMessage: 'Esta cuenta de Google ya esta vinculada.' })
+    }
+
+    const updated = await client.query(
+      `
+        update usuario
+        set oauth_provider = $2,
+            oauth_sub = $3,
+            avatar_url = coalesce(avatar_url, $4),
+            updated_at = now()
+        where id = $1
+          and (oauth_provider is null or (oauth_provider = $2 and oauth_sub = $3))
+      `,
+      [authenticatedUserId, intent.provider, intent.provider_sub, intent.avatar_url],
+    )
+    if (updated.rowCount !== 1) {
+      throw createError({ statusCode: 409, statusMessage: 'La cuenta ya tiene otro acceso externo vinculado.' })
+    }
+
+    await client.query(`update auth_intent set consumed_at = now() where id = $1`, [intent.id])
+    await client.query('commit')
+    deleteCookie(event, OAUTH_LINK_COOKIE, { path: '/' })
+    return true
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function completeCurrentUserGoogleLink(event: H3Event, profile: GoogleProfile) {
+  const token = getCookie(event, OAUTH_CONNECT_COOKIE)
+  if (!token) {
+    throw createError({ statusCode: 403, statusMessage: 'La vinculacion vencio. Intenta nuevamente.' })
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query('begin')
+    const intentResult = await client.query<{ id: string; user_id: string; provider: string }>(
+      `
+        select id, usuario_id as user_id, provider
+        from auth_intent
+        where token_hash = $1
+          and tipo = 'connect_oauth'
+          and consumed_at is null
+          and expires_at > now()
+        for update
+      `,
+      [hashSessionToken(token)],
+    )
+    const intent = intentResult.rows[0]
+
+    if (!intent || intent.provider !== 'google') {
+      throw createError({ statusCode: 403, statusMessage: 'La vinculacion vencio. Intenta nuevamente.' })
+    }
+
+    const owner = await client.query<{ id: string }>(
+      `select id from usuario where oauth_provider = 'google' and oauth_sub = $1 limit 1`,
+      [profile.sub],
+    )
+    if (owner.rows[0] && owner.rows[0].id !== intent.user_id) {
+      throw createError({ statusCode: 409, statusMessage: 'Esta cuenta de Google ya esta vinculada.' })
+    }
+
+    const updated = await client.query(
+      `
+        update usuario
+        set oauth_provider = 'google',
+            oauth_sub = $2,
+            avatar_url = coalesce(avatar_url, $3),
+            updated_at = now()
+        where id = $1
+          and (oauth_provider is null or (oauth_provider = 'google' and oauth_sub = $2))
+      `,
+      [intent.user_id, profile.sub, profile.picture],
+    )
+    if (updated.rowCount !== 1) {
+      throw createError({ statusCode: 409, statusMessage: 'La cuenta ya tiene otro acceso externo vinculado.' })
+    }
+
+    await client.query(`update auth_intent set consumed_at = now() where id = $1`, [intent.id])
+    await client.query('commit')
+    deleteCookie(event, OAUTH_CONNECT_COOKIE, { path: '/' })
+    return intent.user_id
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function prepareOAuthPasswordSetup(event: H3Event, profile: GoogleProfile) {
+  const session = await requireSession(event)
+  const user = await pool.query<{ id: string }>(
+    `
+      select id
+      from usuario
+      where id = $1
+        and oauth_provider = 'google'
+        and oauth_sub = $2
+        and password_hash is null
+        and estado = 'activo'
+      limit 1
+    `,
+    [session.id, profile.sub],
+  )
+
+  if (!user.rows[0]) {
+    throw createError({ statusCode: 403, statusMessage: 'No se pudo verificar el acceso con Google.' })
+  }
+
+  await pool.query(`delete from auth_intent where tipo = 'set_password' and usuario_id = $1`, [session.id])
+  const token = await createAuthIntent({ type: 'set_password', userId: session.id })
+  setCookie(event, PASSWORD_SETUP_COOKIE, token, authIntentCookieOptions())
+  return session
+}
+
+export async function completeOAuthPasswordSetup(event: H3Event, userId: string, passwordHash: string) {
+  const token = getCookie(event, PASSWORD_SETUP_COOKIE)
+  if (!token) {
+    throw createError({ statusCode: 403, statusMessage: 'Vuelve a verificar tu cuenta con Google.' })
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query('begin')
+    const intentResult = await client.query<{ id: string; user_id: string }>(
+      `
+        select id, usuario_id as user_id
+        from auth_intent
+        where token_hash = $1
+          and tipo = 'set_password'
+          and consumed_at is null
+          and expires_at > now()
+        for update
+      `,
+      [hashSessionToken(token)],
+    )
+    const intent = intentResult.rows[0]
+
+    if (!intent || intent.user_id !== userId) {
+      throw createError({ statusCode: 403, statusMessage: 'La verificacion vencio. Intenta nuevamente.' })
+    }
+
+    const updated = await client.query(
+      `
+        update usuario
+        set password_hash = $2, updated_at = now()
+        where id = $1
+          and password_hash is null
+          and oauth_provider is not null
+          and oauth_sub is not null
+      `,
+      [userId, passwordHash],
+    )
+    if (updated.rowCount !== 1) {
+      throw createError({ statusCode: 409, statusMessage: 'La cuenta ya tiene una contrasena configurada.' })
+    }
+
+    await client.query(`update auth_intent set consumed_at = now() where id = $1`, [intent.id])
+    await client.query('commit')
+    deleteCookie(event, PASSWORD_SETUP_COOKIE, { path: '/' })
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 // Alta de un usuario nuevo via Google + su tienda demo. Replica el aprovisionamiento

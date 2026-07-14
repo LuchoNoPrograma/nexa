@@ -19,6 +19,7 @@ const showPassword = ref(false)
 const loading = ref(false)
 const googleLoading = ref(false)
 const authError = ref('')
+const authNotice = ref('')
 const authErrorKind = ref<'not_found' | 'credentials' | ''>('')
 const REMEMBER_KEY = 'nexa-login-remember'
 const sessionStore = useSessionStore()
@@ -36,6 +37,11 @@ onMounted(async () => {
   } else if (oauthStatus === 'cancelado') {
     authErrorKind.value = 'credentials'
     authError.value = 'Cancelaste el inicio con Google.'
+  } else if (oauthStatus === 'vincular') {
+    authNotice.value = 'Ese correo ya pertenece a una cuenta NEXA. Inicia sesión con su contraseña para conectar Google.'
+  } else if (oauthStatus === 'conflicto') {
+    authErrorKind.value = 'credentials'
+    authError.value = 'No se pudo vincular esa cuenta de Google. Usa el método que ya tenías configurado.'
   }
 
   if (await sessionStore.load().catch(() => null)) {
@@ -142,6 +148,11 @@ function onGoogleClick(event: MouseEvent) {
         </div>
 
         <form class="login-form" :aria-busy="loading || googleLoading" @submit.prevent="onSubmit">
+          <p v-if="authNotice" class="login-notice" role="status">
+            <i class="pi pi-link" aria-hidden="true" />
+            <span>{{ authNotice }}</span>
+          </p>
+
           <div class="login-field">
             <label for="identificador">Correo, CI o celular</label>
             <span class="login-input">
@@ -557,6 +568,25 @@ function onGoogleClick(event: MouseEvent) {
   background: #fff1f2;
   font-size: 0.9rem;
   font-weight: 700;
+}
+
+.login-notice {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #c8dfcf;
+  border-radius: 12px;
+  color: #175c2b;
+  background: #f1f8f3;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.login-notice i {
+  margin-top: 2px;
 }
 
 .login-error--action {
