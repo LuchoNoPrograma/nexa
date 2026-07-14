@@ -156,10 +156,13 @@ interface SidebarItem {
   icon: string
   to?: string
   acceso?: string
+  superAdminOnly?: boolean
   aliases?: string[]
   activePaths?: string[]
   children?: SidebarItem[]
 }
+
+const isSuperAdmin = computed(() => session.value?.role === 'super_admin')
 
 const sidebarItems: SidebarItem[] = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio', aliases: ['principal', 'portada', 'comenzar'] },
@@ -181,11 +184,13 @@ const sidebarItems: SidebarItem[] = [
   { label: 'Reportes', icon: 'pi pi-chart-bar', acceso: 'REPORTE' },
   { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG', aliases: ['diagnostico empresarial', 'evaluacion', 'evaluar negocio'] },
   { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes', acceso: 'CONFIG', aliases: ['plan', 'suscripcion', 'membresia'] },
-  { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', acceso: 'CONFIG', aliases: ['config', 'configurar', 'ajustes', 'mi negocio', 'usuarios'], activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
+  { label: 'Administración', icon: 'pi pi-shield', to: '/pos/admin/usuarios', acceso: 'CONFIG', superAdminOnly: true, aliases: ['administrar', 'usuarios', 'tiendas', 'soporte'], activePaths: ['/pos/admin/tiendas', '/pos/admin/usuarios'] },
 ]
 
 // Módulos visibles según el rol/permiso de la sesión.
-const visibleSidebarItems = computed(() => sidebarItems.filter(item => puede(item.acceso)))
+const visibleSidebarItems = computed(() => sidebarItems.filter(item =>
+  puede(item.acceso) && (!item.superAdminOnly || isSuperAdmin.value),
+))
 
 const navigationQuery = ref('')
 const navigationSearchFocused = ref(false)
@@ -416,16 +421,18 @@ const bottomNavRight = computed(() =>
 
 const canSell = computed(() => puede('VENDER'))
 
-const moreNavItems = computed(() =>
-  [
+const moreNavItems = computed(() => {
+  const items: SidebarItem[] = [
     { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
     { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
     { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG' },
     { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG' },
     { label: 'Planes', icon: 'pi pi-bolt', to: '/pos/planes', acceso: 'CONFIG' },
-    { label: 'Configuración', icon: 'pi pi-cog', to: '/pos/admin/tiendas', acceso: 'CONFIG' },
-  ].filter(item => puede(item.acceso))
-)
+    { label: 'Administración', icon: 'pi pi-shield', to: '/pos/admin/usuarios', acceso: 'CONFIG', superAdminOnly: true },
+  ]
+
+  return items.filter(item => puede(item.acceso) && (!item.superAdminOnly || isSuperAdmin.value))
+})
 
 function isBottomNavActive(item: { to: string }) {
   if (item.to === '/pos/finanzas') {
@@ -452,6 +459,10 @@ for (const item of sidebarItems) {
 }
 
 function rutaPermitida(path: string) {
+  if (path.startsWith('/pos/admin') && !isSuperAdmin.value) {
+    return false
+  }
+
   if (
     path === '/pos/diagnostico'
     && session.value?.storeId
@@ -490,6 +501,10 @@ onMounted(() => {
     }
 
     removeRouteBeforeGuard = router.beforeEach((to) => {
+      if (to.path.startsWith('/pos/admin')) {
+        return isSuperAdmin.value ? undefined : '/pos/inicio'
+      }
+
       // Bloqueo de onboarding: mientras el diagnóstico no esté completado, toda
       // la app queda bloqueada y se redirige al diagnóstico (obligatorio).
       if (

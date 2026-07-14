@@ -2,7 +2,7 @@ import { ensureDatabase, pool } from '../../utils/db'
 import { requireSuperAdmin } from '../../utils/session'
 
 export default defineEventHandler(async (event) => {
-  await requireSuperAdmin(event)
+  const session = await requireSuperAdmin(event)
   await ensureDatabase()
 
   const result = await pool.query(
@@ -14,19 +14,45 @@ export default defineEventHandler(async (event) => {
         u.ci,
         u.telefono as phone,
         coalesce(u.email, u.ci, u.telefono, 'Sin identificador') as access,
-        coalesce(string_agg(distinct t.nombre, ', ') filter (where t.id is not null), 'Plataforma') as store,
-        coalesce(platform_role.codigo, max(store_role.codigo), 'usuario') as role,
-        u.estado as status
+        coalesce((
+          select string_agg(distinct t.nombre, ', ' order by t.nombre)
+          from tienda_usuario tu
+          join tienda t on t.id = tu.tienda_id
+          where tu.usuario_id = u.id
+        ), 'Plataforma') as store,
+        coalesce((
+          select r.codigo
+          from usuario_rol ur
+          join rol r on r.id = ur.rol_id
+          where ur.usuario_id = u.id
+          order by
+            case r.codigo
+              when 'super_admin' then 1
+              when 'propietario' then 2
+              when 'administrador' then 3
+              when 'cajero' then 4
+              else 5
+            end,
+            r.codigo
+          limit 1
+        ), 'usuario') as role,
+        u.estado as status,
+        (u.password_hash is not null) as "hasPassword",
+        (u.oauth_provider = 'google' and u.oauth_sub is not null) as "hasGoogle",
+        u.created_at as "createdAt",
+        u.ultimo_acceso_at as "lastAccessAt",
+        (
+          select count(*)::integer
+          from sesion s
+          where s.usuario_id = u.id
+            and s.revoked_at is null
+            and s.expires_at > now()
+        ) as "activeSessions",
+        (u.id = $1) as "isCurrentUser"
       from usuario u
-      left join usuario_rol platform_user_role on platform_user_role.usuario_id = u.id and platform_user_role.tienda_id is null
-      left join rol platform_role on platform_role.id = platform_user_role.rol_id and platform_role.alcance = 'plataforma'
-      left join tienda_usuario tu on tu.usuario_id = u.id
-      left join tienda t on t.id = tu.tienda_id
-      left join usuario_rol store_user_role on store_user_role.usuario_id = u.id and store_user_role.tienda_id = t.id
-      left join rol store_role on store_role.id = store_user_role.rol_id and store_role.alcance = 'tienda'
-      group by u.id, platform_role.codigo
-      order by u.created_at asc
+      order by u.created_at desc
     `,
+    [session.id],
   )
 
   return { users: result.rows }

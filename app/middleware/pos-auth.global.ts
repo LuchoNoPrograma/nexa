@@ -20,6 +20,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
 
     const session = sessionStore.session
+    if (to.path.startsWith('/pos/admin')) {
+      return session?.role === 'super_admin'
+        ? undefined
+        : navigateTo('/pos/inicio')
+    }
+
     if (
       session?.storeId
       && session.onboardingDiagnostico !== 'completado'
