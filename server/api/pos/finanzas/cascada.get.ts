@@ -1,6 +1,6 @@
 import { getQuery } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 import { calcularFinanzas, grupoContable, type FinanzasInput } from '~~/shared/utils/finanzas'
 
 // Cascada de Utilidad Neta calculada de datos REALES del negocio:
@@ -11,15 +11,19 @@ import { calcularFinanzas, grupoContable, type FinanzasInput } from '~~/shared/u
 type Periodo = 'este' | 'pasado'
 
 function rangoMes(periodo: Periodo): { desde: string, hasta: string } {
-  // Límites del mes en SQL (se calculan en la consulta con date_trunc), aquí solo
-  // devolvemos el offset de meses hacia atrás.
   return periodo === 'pasado'
-    ? { desde: "date_trunc('month', now()) - interval '1 month'", hasta: "date_trunc('month', now())" }
-    : { desde: "date_trunc('month', now())", hasta: "date_trunc('month', now()) + interval '1 month'" }
+    ? {
+        desde: "(date_trunc('month', now() at time zone 'America/La_Paz') - interval '1 month') at time zone 'America/La_Paz'",
+        hasta: "date_trunc('month', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'",
+      }
+    : {
+        desde: "date_trunc('month', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'",
+        hasta: "(date_trunc('month', now() at time zone 'America/La_Paz') + interval '1 month') at time zone 'America/La_Paz'",
+      }
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'reporte.ver')
   await ensureDatabase()
 
   const query = getQuery(event)

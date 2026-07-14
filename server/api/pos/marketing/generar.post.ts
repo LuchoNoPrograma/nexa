@@ -2,6 +2,7 @@ import process from 'node:process'
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { requireStoreAccess } from '../../../utils/posCatalog'
+import { assertRateLimit } from '../../../utils/rateLimit'
 import type { MarketingPublicacion } from '~~/shared/utils/marketing'
 
 // Objetivo elegido por el usuario antes de generar. Cada modo decide qué
@@ -363,6 +364,7 @@ async function generarConGemini(prompt: string): Promise<PostGenerado | null> {
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig,
         }),
+        signal: AbortSignal.timeout(25_000),
       },
     )
 
@@ -373,7 +375,6 @@ async function generarConGemini(prompt: string): Promise<PostGenerado | null> {
       }
       console.error('[marketing:gemini:error]', {
         status: response.status,
-        bodyPreview: (await response.text().catch(() => '')).slice(0, 400),
       })
       return null
     }
@@ -419,6 +420,14 @@ async function generarConGemini(prompt: string): Promise<PostGenerado | null> {
 export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
+
+  await assertRateLimit(event, {
+    namespace: 'haru-marketing',
+    maxRequests: 20,
+    windowMs: 60 * 60 * 1000,
+    keyParts: [session.storeId, session.id],
+    message: 'Alcanzaste el limite temporal de publicaciones. Intenta nuevamente mas tarde.',
+  })
 
   const body = await readBody<GenerarBody | null>(event)
   if (!MODOS_VALIDOS.includes(body?.modo as Modo)) {

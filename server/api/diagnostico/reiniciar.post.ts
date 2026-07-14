@@ -1,13 +1,13 @@
 import { createError } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
-import { requireStoreSession } from '../../utils/posCatalog'
+import { requireStoreAccess } from '../../utils/posCatalog'
 
 // Rehacer diagnóstico: borra los diagnósticos de la tienda y deja el onboarding
 // como "pendiente" para volver a tomarlo desde cero.
 // - En desarrollo siempre está disponible.
 // - En producción se permite solo a super_admin (para reiniciar la demo).
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
 
   if (!import.meta.dev && session.role !== 'super_admin') {
     throw createError({ statusCode: 403, statusMessage: 'No autorizado para reiniciar el diagnóstico.' })

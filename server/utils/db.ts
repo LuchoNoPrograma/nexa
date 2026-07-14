@@ -8,9 +8,9 @@ const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:post
 const isProduction = process.env.NODE_ENV === 'production'
 const superAdminEmail = process.env.NEXA_SUPER_ADMIN_EMAIL
 const superAdminPassword = process.env.NEXA_SUPER_ADMIN_PASSWORD
-const hasAdminCredentials = Boolean(superAdminEmail && superAdminPassword)
-const seedDemo = isProduction ? hasAdminCredentials : true
+const seedDemo = process.env.NEXA_SEED_DEMO === 'true'
 const seedDemoProducts = process.env.NEXA_SEED_DEMO_PRODUCTS !== 'false'
+const resetDemoAdminPassword = process.env.NEXA_RESET_DEMO_ADMIN_PASSWORD === 'true'
 const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (isProduction ? 1 : 10))
 const useSsl =
   process.env.DATABASE_SSL !== 'false' && (
@@ -18,13 +18,14 @@ const useSsl =
   || connectionString.includes('supabase.co')
   || connectionString.includes('pooler.supabase.com')
   )
+const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false'
 
 export const pool = new Pool({
   connectionString,
   max: Number.isFinite(poolMax) ? poolMax : 3,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
-  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+  ssl: useSsl ? { rejectUnauthorized } : undefined,
 })
 
 let ready: Promise<void> | null = null
@@ -41,8 +42,8 @@ async function prepareDatabase() {
 }
 
 async function seedLocalData() {
-  const email = superAdminEmail ?? (isProduction ? undefined : 'admin@nexa.bo')
-  const password = superAdminPassword ?? (isProduction ? undefined : 'NexaAdmin2026!')
+  const email = superAdminEmail
+  const password = superAdminPassword
 
   if (!email || !password) {
     throw new Error('Configura NEXA_SUPER_ADMIN_EMAIL/NEXA_SUPER_ADMIN_PASSWORD para crear la demo inicial.')
@@ -57,12 +58,12 @@ async function seedLocalData() {
       on conflict (email) do update
       set
         nombre = excluded.nombre,
-        password_hash = excluded.password_hash,
+        password_hash = case when $3::boolean then excluded.password_hash else usuario.password_hash end,
         estado = 'activo',
         updated_at = now()
       returning id
     `,
-    [email, passwordHash],
+    [email, passwordHash, resetDemoAdminPassword],
   )
 
   const userId = userResult.rows[0]?.id

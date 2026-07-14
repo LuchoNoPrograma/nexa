@@ -72,41 +72,24 @@ function categoryMeta(value: string) {
   }
 }
 
-const periodCopy: Record<PeriodKey, { subtitle: string, advice: string[] }> = {
-  today: {
-    subtitle: 'Gastos realizados hoy · Lunes, 15 de junio de 2026',
-    advice: [
-      'Separa la compra de fruta como inversión de inventario, no como gasto perdido.',
-      'Transporte y publicidad son pequeños, pero repetidos. Ponles un límite diario.',
-    ],
-  },
-  week: {
-    subtitle: 'Semana actual · 9 al 15 de junio de 2026',
-    advice: [
-      'Las compras de inventario están dentro de una reposición normal; compáralas con ventas antes de recortar.',
-      'Publicidad debe medirse por pedidos generados. Si no trae ventas, baja el monto la próxima semana.',
-    ],
-  },
-  month: {
-    subtitle: 'Mes actual · Junio 2026',
-    advice: [
-      'Inventario no es pérdida inmediata: revisa si esa mercadería rota antes de volver a comprar.',
-      'Sueldos deben leerse contra ventas del mes. Si ventas bajan, ajusta turnos antes que calidad.',
-    ],
-  },
-}
-
 const activePeriod = ref<PeriodKey>('month')
 const kindFilter = ref<KindFilter>('todos')
 const searchTerm = ref('')
 const registerDialogVisible = ref(false)
-const exportDialogVisible = ref(false)
 const session = usePosSession()
 const cashMovementVoidDialog = useCashMovementVoidDialog()
 const voidingMovementId = ref('')
 const canVoidMovements = computed(() => session.value?.roles.includes('propietario') ?? false)
 
-const currentCopy = computed(() => periodCopy[activePeriod.value])
+const hoyTexto = new Intl.DateTimeFormat('es-BO', {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/La_Paz',
+}).format(new Date())
+const mesTexto = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric', timeZone: 'America/La_Paz' }).format(new Date())
+const currentCopy = computed(() => {
+  if (activePeriod.value === 'today') return { subtitle: `Gastos de hoy · ${hoyTexto}` }
+  if (activePeriod.value === 'week') return { subtitle: 'Gastos de la semana actual' }
+  return { subtitle: `Gastos del mes · ${mesTexto}` }
+})
 
 // --- Gastos reales del periodo (API) ---
 type ApiGasto = { id: string, fecha: string, categoria: string, concepto: string, metodo: string, monto: number }
@@ -130,9 +113,9 @@ const methodFromApi: Record<string, Method> = {
 
 function formatExpenseDate(iso: string) {
   const d = new Date(iso)
-  if (activePeriod.value === 'today') return d.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
-  if (activePeriod.value === 'week') return d.toLocaleDateString('es-BO', { weekday: 'short' })
-  return d.toLocaleDateString('es-BO', { day: '2-digit', month: 'short' })
+  if (activePeriod.value === 'today') return d.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/La_Paz' })
+  if (activePeriod.value === 'week') return d.toLocaleDateString('es-BO', { weekday: 'short', timeZone: 'America/La_Paz' })
+  return d.toLocaleDateString('es-BO', { day: '2-digit', month: 'short', timeZone: 'America/La_Paz' })
 }
 
 const rows = computed<ExpenseRow[]>(() => (gastosData.value?.gastos ?? []).map((g) => {
@@ -158,12 +141,6 @@ function sharePercent(part: number) {
   return total.value === 0 ? 0 : Math.round((part / total.value) * 100)
 }
 
-// Top de compras de inventario (a quién/qué le compraste más).
-const topPurchases = computed(() => rows.value
-  .filter(r => r.kind === 'Inventario')
-  .sort((a, b) => b.amount - a.amount)
-  .slice(0, 4))
-
 // Desglose de gastos operativos por categoría (con color y porcentaje).
 const operativeCategories = computed(() => {
   const grouped = new Map<string, number>()
@@ -184,6 +161,17 @@ const operativeCategories = computed(() => {
     .sort((a, b) => b.amount - a.amount)
 })
 
+const advice = computed(() => {
+  if (!rows.value.length) {
+    return ['No hay gastos registrados en este periodo. Registra solo salidas reales del negocio.']
+  }
+  const mainCategory = operativeCategories.value[0]
+  if (!mainCategory) {
+    return ['Las compras de inventario deben compararse con la rotación y las ventas antes de volver a comprar.']
+  }
+  return [`${mainCategory.label} es tu mayor gasto operativo: ${money(mainCategory.amount)}. Revísalo antes de recortar otras áreas.`]
+})
+
 // --- Tendencia (igual que Ingresos): por día en semana, por semana en mes ---
 const weekRows = computed<TrendRow[]>(() => gastosData.value?.semana ?? [])
 const monthRows = computed<TrendRow[]>(() => gastosData.value?.semanas ?? [])
@@ -202,8 +190,8 @@ const trendPanelTitle = computed(() => activePeriod.value === 'month' ? 'Gastos 
 
 const metrics = computed<MetricCard[]>(() => [
   { label: 'Total gastado', value: money(total.value), meta: `${rows.value.length} gastos en el periodo`, icon: 'fluent-emoji:money-with-wings', tone: 'red' },
-  { label: 'Compras de inventario', value: money(inventoryTotal.value), meta: `${sharePercent(inventoryTotal.value)}% · sube tu stock`, icon: 'fluent-emoji:package', tone: 'blue' },
   { label: 'Gastos operativos', value: money(operativeTotal.value), meta: `${sharePercent(operativeTotal.value)}% · dinero consumido`, icon: 'fluent-emoji:high-voltage', tone: 'orange' },
+  { label: 'Movimientos', value: String(rows.value.length), meta: activePeriod.value === 'today' ? 'Registrados hoy' : 'En el periodo', icon: 'fluent-emoji:receipt', tone: 'blue' },
 ])
 
 const kindFilters = computed<{ value: KindFilter, label: string, count: number }[]>(() => [
@@ -313,14 +301,6 @@ function irAInventario() {
   void navigateTo('/pos/catalogo?accion=entrada')
 }
 
-function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
-  exportDialogVisible.value = false
-
-  if (format === 'Imprimir' && import.meta.client) {
-    window.print()
-  }
-}
-
 function money(value: number) {
   return `Bs. ${new Intl.NumberFormat('es-BO', {
     minimumFractionDigits: 2,
@@ -356,13 +336,12 @@ function methodIcon(method: Method) {
           <InputText v-model="searchTerm" placeholder="Buscar gasto, proveedor o categoría..." />
         </IconField>
 
-        <Button type="button" icon="pi pi-download" label="Exportar" outlined @click="exportDialogVisible = true" />
         <Button type="button" icon="pi pi-plus" label="Registrar gasto" @click="openRegisterDialog" />
       </div>
     </section>
 
     <section class="period-switch" aria-label="Periodo de gastos">
-      <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />`
+      <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />
     </section>
 
     <section class="expense-metrics" aria-label="Resumen de gastos">
@@ -378,69 +357,27 @@ function methodIcon(method: Method) {
       </article>
     </section>
 
-    <!-- Split principal: Compras de inventario vs Gastos operativos (2 cols desktop / 1 col tablet-móvil) -->
-    <section class="expense-split" aria-label="Tipos de gasto">
-      <article class="split-card is-inventory">
-        <header>
-          <span class="split-card__icon"><Icon name="fluent-emoji:package" aria-hidden="true" /></span>
-          <div>
-            <small>Compras de inventario</small>
-            <strong>{{ money(inventoryTotal) }}</strong>
-          </div>
-          <span class="split-card__share">{{ sharePercent(inventoryTotal) }}%</span>
-        </header>
+    <section class="expense-breakdown" aria-label="Gastos por categoria">
+      <header>
+        <div>
+          <span>Distribución</span>
+          <h2>Gastos operativos por categoría</h2>
+        </div>
+        <strong>{{ money(operativeTotal) }}</strong>
+      </header>
 
-        <div class="split-card__bar"><i :style="{ width: `${sharePercent(inventoryTotal)}%` }" /></div>
-        <p class="split-card__hint">
-          <i class="pi pi-info-circle" aria-hidden="true" />
-          Sube tu stock: es dinero que sigues teniendo en mercadería.
-        </p>
+      <ul v-if="operativeCategories.length">
+        <li v-for="cat in operativeCategories" :key="cat.label">
+          <span class="expense-breakdown__label"><i :style="{ background: cat.color }" />{{ cat.label }}</span>
+          <span class="expense-breakdown__bar"><i :style="{ width: `${cat.percent}%`, background: cat.color }" /></span>
+          <strong>{{ money(cat.amount) }}</strong>
+        </li>
+      </ul>
+      <p v-else>No hay gastos operativos en este periodo.</p>
 
-        <ul v-if="topPurchases.length" class="split-card__list">
-          <li v-for="row in topPurchases" :key="row.concept + row.date">
-            <span class="dot" />
-            <span class="split-card__name">
-              <strong>{{ row.concept }}</strong>
-              <small>{{ row.supplier }}</small>
-            </span>
-            <strong class="split-card__amount">{{ money(row.amount) }}</strong>
-          </li>
-        </ul>
-        <p v-else class="split-card__empty">Sin compras de inventario en este periodo.</p>
-
-        <NuxtLink to="/pos/catalogo" class="split-card__link">
-          Ver mi inventario <i class="pi pi-arrow-right" aria-hidden="true" />
-        </NuxtLink>
-      </article>
-
-      <article class="split-card is-operative">
-        <header>
-          <span class="split-card__icon"><Icon name="fluent-emoji:high-voltage" aria-hidden="true" /></span>
-          <div>
-            <small>Gastos operativos</small>
-            <strong>{{ money(operativeTotal) }}</strong>
-          </div>
-          <span class="split-card__share">{{ sharePercent(operativeTotal) }}%</span>
-        </header>
-
-        <div class="split-card__bar is-operative"><i :style="{ width: `${sharePercent(operativeTotal)}%` }" /></div>
-        <p class="split-card__hint">
-          <i class="pi pi-info-circle" aria-hidden="true" />
-          Dinero consumido (alquiler, sueldos, servicios): no vuelve como stock.
-        </p>
-
-        <ul v-if="operativeCategories.length" class="split-card__list">
-          <li v-for="cat in operativeCategories" :key="cat.label">
-            <span class="dot" :style="{ background: cat.color }" />
-            <span class="split-card__name">
-              <strong>{{ cat.label }}</strong>
-              <small>{{ cat.percent }}% de operativos</small>
-            </span>
-            <strong class="split-card__amount">{{ money(cat.amount) }}</strong>
-          </li>
-        </ul>
-        <p v-else class="split-card__empty">Sin gastos operativos en este periodo.</p>
-      </article>
+      <Message v-if="inventoryTotal > 0" severity="info" size="small" icon="pi pi-box">
+        {{ money(inventoryTotal) }} corresponden a inventario y no se descuentan como gasto operativo.
+      </Message>
     </section>
 
     <!-- Tendencia de gastos (igual que Ingresos): por día en Semana, por semana en Mes -->
@@ -507,7 +444,7 @@ function methodIcon(method: Method) {
           </div>
         </header>
 
-        <ul class="expense-list">
+        <ul class="expense-list" :class="{ 'can-void': canVoidMovements }">
           <li v-for="(row, index) in visibleRows" :key="row.concept + row.date + index">
             <span class="expense-date">{{ row.date }}</span>
             <span class="expense-main">
@@ -524,9 +461,11 @@ function methodIcon(method: Method) {
             <strong class="expense-amount">- {{ money(row.amount) }}</strong>
             <Button
               v-if="canVoidMovements"
+              class="expense-void-button"
+              v-tooltip.left="'Anular gasto'"
               type="button"
               icon="pi pi-ban"
-              label="Anular"
+              aria-label="Anular gasto"
               size="small"
               severity="danger"
               text
@@ -547,7 +486,7 @@ function methodIcon(method: Method) {
       <span class="ai-advice__icon"><i class="pi pi-lightbulb" aria-hidden="true" /></span>
       <div>
         <h2>Consejo de Haru</h2>
-        <p v-for="line in currentCopy.advice" :key="line">{{ line }}</p>
+        <p v-for="line in advice" :key="line">{{ line }}</p>
       </div>
       <img src="/haru.png" alt="" aria-hidden="true">
     </section>
@@ -603,32 +542,6 @@ function methodIcon(method: Method) {
       </form>
     </Dialog>
 
-    <!-- Diálogo: exportar -->
-    <Dialog v-model:visible="exportDialogVisible" modal header="Exportar gastos" class="export-dialog">
-      <div class="export-options">
-        <button type="button" @click="exportReport('PDF')">
-          <i class="pi pi-file-pdf" aria-hidden="true" />
-          <span>
-            <strong>PDF</strong>
-            <small>Ideal para imprimir o compartir.</small>
-          </span>
-        </button>
-        <button type="button" @click="exportReport('Excel')">
-          <i class="pi pi-file-excel" aria-hidden="true" />
-          <span>
-            <strong>Excel</strong>
-            <small>Para revisar datos y cálculos.</small>
-          </span>
-        </button>
-        <button type="button" @click="exportReport('Imprimir')">
-          <i class="pi pi-print" aria-hidden="true" />
-          <span>
-            <strong>Imprimir</strong>
-            <small>Enviar el reporte actual a impresora.</small>
-          </span>
-        </button>
-      </div>
-    </Dialog>
   </div>
 </template>
 
@@ -726,7 +639,6 @@ function methodIcon(method: Method) {
 
 .expense-metric,
 .expense-panel,
-.split-card,
 .ai-advice {
   border: 1px solid #e5eaf0;
   border-radius: 8px;
@@ -818,173 +730,6 @@ function methodIcon(method: Method) {
   white-space: nowrap;
 }
 
-/* --- Split: inventario vs operativo (2 cols -> 1 col) --- */
-.expense-split {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.split-card {
-  display: grid;
-  gap: 12px;
-  padding: 18px;
-}
-
-.split-card header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.split-card__icon {
-  display: grid;
-  width: 50px;
-  height: 50px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 12px;
-  font-size: 1.9rem;
-}
-
-.split-card.is-inventory .split-card__icon {
-  background: #eaf3ff;
-  color: #2f7ded;
-}
-
-.split-card.is-operative .split-card__icon {
-  background: #fff0e8;
-  color: #ff6b2c;
-}
-
-.split-card header small {
-  display: block;
-  color: #64748b;
-  font-size: 0.76rem;
-  font-weight: 800;
-}
-
-.split-card header strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 1.5rem;
-  font-weight: 900;
-}
-
-.split-card__share {
-  margin-left: auto;
-  align-self: flex-start;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 900;
-}
-
-.split-card__bar {
-  height: 8px;
-  border-radius: 999px;
-  background: #eef2f7;
-  overflow: hidden;
-}
-
-.split-card__bar i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #2f7ded, #1d4ed8);
-}
-
-.split-card__bar.is-operative i {
-  background: linear-gradient(90deg, #ff8a4c, #ea580c);
-}
-
-.split-card__hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  color: #5b6b7b;
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.split-card__hint i {
-  margin-top: 1px;
-  color: #94a3b8;
-}
-
-.split-card__list {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.split-card__list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: #2f7ded;
-}
-
-.split-card__name {
-  min-width: 0;
-}
-
-.split-card__name strong {
-  display: block;
-  overflow: hidden;
-  font-size: 0.82rem;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.split-card__name small {
-  color: #64748b;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.split-card__amount {
-  font-size: 0.84rem;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.split-card__empty {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.split-card__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #1c7a2c;
-  font-size: 0.8rem;
-  font-weight: 900;
-  text-decoration: none;
-}
-
-.split-card__link:hover {
-  text-decoration: underline;
-}
-
 /* --- Grid principal --- */
 .expense-grid {
   display: grid;
@@ -1066,6 +811,10 @@ function methodIcon(method: Method) {
   padding: 11px 12px;
   border-radius: 10px;
   background: #f9fafb;
+}
+
+.expense-list.can-void li {
+  grid-template-columns: 56px minmax(0, 1fr) auto auto 36px;
 }
 
 .expense-date {
@@ -1222,70 +971,7 @@ function methodIcon(method: Method) {
   flex: 1 1 0;
 }
 
-.export-dialog {
-  width: min(420px, calc(100vw - 24px));
-}
-
-.export-options {
-  display: grid;
-  gap: 8px;
-}
-
-.export-options button {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #e5eaf0;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #111827;
-  text-align: left;
-  cursor: pointer;
-}
-
-.export-options button:hover {
-  border-color: #b7e3c1;
-  background: #f8fff9;
-}
-
-.export-options i {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 9px;
-  background: #e8f7eb;
-  color: #0b6f38;
-}
-
-.export-options strong,
-.export-options small {
-  display: block;
-}
-
-.export-options strong {
-  font-size: 0.86rem;
-  font-weight: 900;
-}
-
-.export-options small {
-  margin-top: 2px;
-  color: #64748b;
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
 /* --- Responsivo --- */
-
-/* Tablet y móvil: las tarjetas pasan a 1 columna */
-@media (max-width: 1024px) {
-  .expense-split {
-    grid-template-columns: 1fr;
-  }
-}
 
 @media (max-width: 760px) {
   .expense-heading,
@@ -1515,5 +1201,169 @@ function methodIcon(method: Method) {
   font-size: 0.74rem;
   font-weight: 800;
   color: #1f2937;
+}
+
+.expense-breakdown {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid #e5eaf0;
+  border-bottom: 1px solid #e5eaf0;
+}
+
+.expense-breakdown > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.expense-breakdown header span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.expense-breakdown h2 {
+  margin: 3px 0 0;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.expense-breakdown > header > strong {
+  color: #b91c1c;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.expense-breakdown ul {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.expense-breakdown li {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.expense-breakdown__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.expense-breakdown__label i {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.expense-breakdown__bar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef2f7;
+}
+
+.expense-breakdown__bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.expense-breakdown li > strong {
+  color: #334155;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.expense-breakdown > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+  .expense-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .expense-metric:first-child {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .expense-breakdown {
+    padding: 14px 0;
+  }
+
+  .expense-breakdown > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .expense-breakdown li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 10px;
+  }
+
+  .expense-breakdown__bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .expense-list li,
+  .expense-list.can-void li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "date amount"
+      "main action";
+    gap: 7px 10px;
+  }
+
+  .expense-date { grid-area: date; }
+  .expense-main { grid-area: main; }
+  .expense-method { display: none; }
+  .expense-amount { grid-area: amount; }
+  .expense-void-button {
+    grid-area: action;
+    justify-self: end;
+  }
+
+  .trend-chart,
+  .month-bars {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .trend-bar {
+    flex: 0 0 84px;
+    scroll-snap-align: start;
+  }
+
+  .month-bar {
+    flex: 0 0 72px;
+  }
+
+  :global(.expense-dialog.p-dialog) {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
 }
 </style>

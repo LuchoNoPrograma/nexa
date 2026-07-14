@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
-import { requireStoreSession } from '../../utils/posCatalog'
+import { requireStoreAccess } from '../../utils/posCatalog'
 import {
   calcularDiagnostico,
   preguntasPendientes,
@@ -13,7 +13,7 @@ type DiagnosticoBody = {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   await ensureDatabase()
 
   const body = await readBody<DiagnosticoBody>(event)

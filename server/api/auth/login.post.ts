@@ -3,6 +3,7 @@ import { ensureDatabase, pool } from '../../utils/db'
 import { assertLoginAllowed, clearLoginFailures, getLoginRateLimitKey, recordLoginFailure } from '../../utils/loginRateLimit'
 import { completePendingOAuthLink } from '../../utils/oauth'
 import { createSessionToken, hashSessionToken, verifyPassword } from '../../utils/password'
+import { assertRateLimit } from '../../utils/rateLimit'
 
 const SESSION_DAYS = {
   normal: 7,
@@ -30,6 +31,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const rateLimitKey = getLoginRateLimitKey(event, identificador.toLowerCase())
+  await assertRateLimit(event, {
+    namespace: 'login',
+    maxRequests: 20,
+    windowMs: 15 * 60 * 1000,
+    keyParts: [identificador.toLowerCase()],
+    message: 'Demasiados intentos. Intenta de nuevo en unos minutos.',
+  })
   assertLoginAllowed(rateLimitKey)
 
   const userResult = await pool.query<{
@@ -67,18 +75,19 @@ export default defineEventHandler(async (event) => {
 
   if (!user) {
     recordLoginFailure(rateLimitKey)
-    throw createError({ statusCode: 404, statusMessage: 'No existe este usuario.' })
+    throw createError({ statusCode: 401, statusMessage: 'Credenciales invalidas o metodo de acceso incorrecto.' })
   }
 
   // Cuenta creada solo con Google: no tiene contraseña local. Se guía al usuario
   // al método correcto en lugar de dar un "credenciales inválidas" confuso.
   if (!user.password_hash) {
-    throw createError({ statusCode: 409, statusMessage: 'Esta cuenta usa "Continuar con Google". Inicia sesión con ese botón.' })
+    recordLoginFailure(rateLimitKey)
+    throw createError({ statusCode: 401, statusMessage: 'Credenciales invalidas o metodo de acceso incorrecto.' })
   }
 
   if (!(await verifyPassword(password, user.password_hash))) {
     recordLoginFailure(rateLimitKey)
-    throw createError({ statusCode: 401, statusMessage: 'Credenciales invalidas.' })
+    throw createError({ statusCode: 401, statusMessage: 'Credenciales invalidas o metodo de acceso incorrecto.' })
   }
 
   clearLoginFailures(rateLimitKey)
@@ -90,8 +99,15 @@ export default defineEventHandler(async (event) => {
 
   await pool.query(
     `
-      insert into sesion (usuario_id, token_hash, user_agent, ip, expires_at)
-      values ($1, $2, $3, $4, $5)
+      insert into sesion (usuario_id, tienda_id, token_hash, user_agent, ip, expires_at)
+      values (
+        $1,
+        (select tienda_id from tienda_usuario where usuario_id = $1 and estado = 'activo' order by created_at asc limit 1),
+        $2,
+        $3,
+        $4,
+        $5
+      )
     `,
     [
       user.id,

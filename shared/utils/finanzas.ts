@@ -55,7 +55,8 @@ export type FinanzasInput = {
   ventasPeriodo: number
   // Costo de las ventas: Σ (costo_unitario × cantidad) de lo realmente vendido.
   costoVentas: number
-  // Gastos operativos del periodo: egresos del grupo 'gasto_operativo' + sueldos.
+  // Gastos operativos efectivamente registrados. La planilla estimada no se
+  // descuenta hasta que exista el movimiento de pago correspondiente.
   gastosOperativos: number
   // Gastos financieros: intereses/comisiones bancarias (grupo 'gasto_financiero').
   gastosFinancieros: number

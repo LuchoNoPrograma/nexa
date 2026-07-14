@@ -1,5 +1,5 @@
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 import {
   HORAS_MENSUALES_REFERENCIA,
   SEMANAS_POR_MES,
@@ -11,7 +11,7 @@ import {
 // con su planilla semanal (celdas marcadas y horas) + el costo laboral mensual
 // estimado (para que Finanzas/Reportes lo consuman).
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   await ensureDatabase()
 
   // Config de la tienda (la crea con valores por defecto si aún no existe).

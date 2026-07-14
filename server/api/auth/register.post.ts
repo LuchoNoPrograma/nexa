@@ -1,6 +1,7 @@
 import { createError, getRequestHeader, readBody, setCookie } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { createSessionToken, hashPassword, hashSessionToken } from '../../utils/password'
+import { assertRateLimit } from '../../utils/rateLimit'
 
 type RegisterBody = {
   fullName?: string
@@ -80,9 +81,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Ingresa una ciudad valida.' })
   }
 
-  if (password.length < 6) {
-    throw createError({ statusCode: 400, statusMessage: 'La contraseña debe tener al menos 6 caracteres.' })
+  if (password.length < 10 || password.length > 128) {
+    throw createError({ statusCode: 400, statusMessage: 'La contraseña debe tener entre 10 y 128 caracteres.' })
   }
+
+  await assertRateLimit(event, {
+    namespace: 'registro',
+    maxRequests: 5,
+    windowMs: 60 * 60 * 1000,
+    keyParts: [phone],
+    message: 'Se realizaron varios registros desde este dispositivo. Intenta nuevamente mas tarde.',
+  })
 
   const existingPhone = await pool.query<{ nombre: string; created_at: Date }>(
     'select nombre, created_at from usuario where telefono = $1 limit 1',
@@ -192,11 +201,12 @@ export default defineEventHandler(async (event) => {
 
     await client.query(
       `
-        insert into sesion (usuario_id, token_hash, user_agent, ip, expires_at)
-        values ($1, $2, $3, $4, $5)
+        insert into sesion (usuario_id, tienda_id, token_hash, user_agent, ip, expires_at)
+        values ($1, $2, $3, $4, $5, $6)
       `,
       [
         userId,
+        storeId,
         tokenHash,
         getRequestHeader(event, 'user-agent') ?? null,
         getRequestHeader(event, 'x-forwarded-for') ?? event.node.req.socket.remoteAddress ?? null,

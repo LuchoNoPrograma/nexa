@@ -2,6 +2,7 @@ import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { cleanText, numberOrZero, requireStoreAccess } from '../../utils/posCatalog'
 import { getCashOverview, requireOpenCashSession } from '../../utils/posCash'
+import { tieneAcceso } from '~~/shared/utils/acceso'
 
 type SaleItemBody = {
   id?: string
@@ -25,6 +26,16 @@ type SaleBody = {
   paymentLines?: PaymentLineBody[]
 }
 
+const MAX_SALE_ITEMS = 100
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+function sameMoney(left: number, right: number) {
+  return Math.abs(roundMoney(left) - roundMoney(right)) < 0.01
+}
+
 function dbPaymentMethod(label: unknown) {
   const normalized = cleanText(label).toLowerCase()
 
@@ -43,15 +54,13 @@ export default defineEventHandler(async (event) => {
   const items = Array.isArray(body.items) ? body.items : []
   const paymentLines = Array.isArray(body.paymentLines) ? body.paymentLines : []
 
-  if (!items.length) {
+  if (!items.length || items.length > MAX_SALE_ITEMS) {
     throw createError({ statusCode: 400, statusMessage: 'Agrega productos para vender.' })
   }
 
-  const total = numberOrZero(body.total)
   const clientOperationId = cleanText(body.clientOperationId)
-
-  if (total <= 0) {
-    throw createError({ statusCode: 400, statusMessage: 'El total debe ser mayor a cero.' })
+  if (!clientOperationId || clientOperationId.length > 120) {
+    throw createError({ statusCode: 400, statusMessage: 'La venta no tiene un identificador de operacion valido.' })
   }
 
   const client = await pool.connect()
@@ -60,24 +69,26 @@ export default defineEventHandler(async (event) => {
     await client.query('begin')
     const cashSessionId = await requireOpenCashSession(client, session.storeId)
 
-    if (clientOperationId) {
-      const existingSale = await client.query<{ id: string }>(
-        `
-          select id
-          from venta
-          where tienda_id = $1
-            and numero = $2
-          limit 1
-        `,
-        [session.storeId, clientOperationId],
-      )
+    const existingSale = await client.query<{ id: string, number: string | null }>(
+      `
+        select id, numero as number
+        from venta
+        where tienda_id = $1
+          and client_operation_id = $2
+        limit 1
+      `,
+      [session.storeId, clientOperationId],
+    )
 
-      if (existingSale.rowCount) {
-        const overview = await getCashOverview(client, session.storeId)
-        await client.query('commit')
-        return { ...overview, saleId: existingSale.rows[0].id, saleNumber: clientOperationId }
-      }
+    if (existingSale.rowCount) {
+      const overview = await getCashOverview(client, session.storeId)
+      await client.query('commit')
+      return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
     }
+
+    // Serializa la numeracion dentro de la caja para evitar que dos cobros
+    // simultaneos calculen el mismo count(*) + 1.
+    await client.query('select pg_advisory_xact_lock(hashtext($1))', [cashSessionId])
 
     const saleCodeResult = await client.query<{ sequence: number; saleTime: string }>(
       `
@@ -94,53 +105,38 @@ export default defineEventHandler(async (event) => {
     const saleSequence = saleCodeResult.rows[0]?.sequence ?? 1
     const saleTime = saleCodeResult.rows[0]?.saleTime ?? new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
     const cashSaleCode = `C${saleSequence} ${saleTime}`
-    const saleNumber = clientOperationId || `C${saleSequence}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
+    const saleNumber = `C${saleSequence}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
 
-    const saleResult = await client.query<{ id: string }>(
-      `
-        insert into venta (
-          tienda_id,
-          usuario_id,
-          caja_sesion_id,
-          numero,
-          canal,
-          estado,
-          subtotal,
-          descuento,
-          total,
-          notas
-        )
-        values ($1, $2, $3, $4, 'pos', 'pagada', $5, $6, $7, $8)
-        returning id
-      `,
-      [
-        session.storeId,
-        session.id,
-        cashSessionId,
-        saleNumber,
-        numberOrZero(body.subtotal),
-        numberOrZero(body.discount),
-        total,
-        null,
-      ],
-    )
-
-    const saleId = saleResult.rows[0].id
+    const normalizedItems: Array<{
+      id: string
+      name: string
+      kind: string
+      cost: number
+      price: number
+      stock: number
+      quantity: number
+    }> = []
+    const productIds = new Set<string>()
+    let calculatedSubtotal = 0
 
     for (const item of items) {
       const productId = cleanText(item.id)
       const quantity = numberOrZero(item.quantity)
-      const price = numberOrZero(item.price)
 
-      if (!productId || quantity <= 0 || price <= 0) {
+      if (!productId || quantity <= 0 || quantity > 9999) {
         throw createError({ statusCode: 400, statusMessage: 'Revisa los productos de la venta.' })
       }
+      if (productIds.has(productId)) {
+        throw createError({ statusCode: 400, statusMessage: 'Cada producto debe aparecer una sola vez en la venta.' })
+      }
+      productIds.add(productId)
 
       const productResult = await client.query<{
         id: string
         name: string
         kind: string
         cost: number
+        price: number
         stock: number
       }>(
         `
@@ -149,6 +145,7 @@ export default defineEventHandler(async (event) => {
             nombre as name,
             tipo as kind,
             costo_unitario::float as cost,
+            precio_venta::float as price,
             stock_actual::float as stock
           from producto
           where id = $1
@@ -160,12 +157,76 @@ export default defineEventHandler(async (event) => {
       )
 
       const product = productResult.rows[0]
-
       if (!product) {
         throw createError({ statusCode: 404, statusMessage: 'Producto no encontrado.' })
       }
 
-      const subtotal = quantity * price
+      if (!sameMoney(numberOrZero(item.price), product.price)) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: `El precio de ${product.name} cambio. Actualiza el catalogo antes de cobrar.`,
+        })
+      }
+
+      if (product.kind !== 'servicio' && product.stock < quantity) {
+        throw createError({ statusCode: 409, statusMessage: `Stock insuficiente para ${product.name}.` })
+      }
+
+      normalizedItems.push({ ...product, quantity })
+      calculatedSubtotal = roundMoney(calculatedSubtotal + quantity * product.price)
+    }
+
+    const discount = roundMoney(numberOrZero(body.discount))
+    if (discount > calculatedSubtotal) {
+      throw createError({ statusCode: 400, statusMessage: 'El descuento no puede superar el subtotal.' })
+    }
+    if (discount > 0 && !tieneAcceso('pos.descuento.aplicar', session)) {
+      throw createError({ statusCode: 403, statusMessage: 'No autorizado para aplicar descuentos.' })
+    }
+
+    const total = roundMoney(calculatedSubtotal - discount)
+    if (total <= 0) {
+      throw createError({ statusCode: 400, statusMessage: 'El total debe ser mayor a cero.' })
+    }
+    if (!sameMoney(numberOrZero(body.subtotal), calculatedSubtotal) || !sameMoney(numberOrZero(body.total), total)) {
+      throw createError({ statusCode: 409, statusMessage: 'Los totales cambiaron. Revisa la venta antes de cobrar.' })
+    }
+
+    const saleResult = await client.query<{ id: string }>(
+      `
+        insert into venta (
+          tienda_id,
+          usuario_id,
+          caja_sesion_id,
+          numero,
+          client_operation_id,
+          canal,
+          estado,
+          subtotal,
+          descuento,
+          total,
+          notas
+        )
+        values ($1, $2, $3, $4, $5, 'pos', 'pagada', $6, $7, $8, $9)
+        returning id
+      `,
+      [
+        session.storeId,
+        session.id,
+        cashSessionId,
+        saleNumber,
+        clientOperationId,
+        calculatedSubtotal,
+        discount,
+        total,
+        null,
+      ],
+    )
+
+    const saleId = saleResult.rows[0].id
+
+    for (const product of normalizedItems) {
+      const subtotal = roundMoney(product.quantity * product.price)
 
       await client.query(
         `
@@ -181,11 +242,11 @@ export default defineEventHandler(async (event) => {
           )
           values ($1, $2, $3, $4, $5, $6, $7, $8)
         `,
-        [saleId, product.id, product.name, product.kind, quantity, product.cost, price, subtotal],
+        [saleId, product.id, product.name, product.kind, product.quantity, product.cost, product.price, subtotal],
       )
 
       if (product.kind !== 'servicio') {
-        const nextStock = Math.max(product.stock - quantity, 0)
+        const nextStock = product.stock - product.quantity
 
         await client.query(
           `
@@ -214,17 +275,22 @@ export default defineEventHandler(async (event) => {
             )
             values ($1, $2, $3, $4, 'salida', 'venta', $5, $6, $7, $8, $9)
           `,
-          [session.storeId, product.id, session.id, saleId, quantity, product.stock, nextStock, product.cost, `Venta ${cashSaleCode}`],
+          [session.storeId, product.id, session.id, saleId, product.quantity, product.stock, nextStock, product.cost, `Venta ${cashSaleCode}`],
         )
       }
     }
 
     const validPaymentLines = paymentLines
-      .map((line) => ({ label: cleanText(line.label, 'Efectivo'), amount: numberOrZero(line.amount) }))
+      .map((line) => ({ label: cleanText(line.label, 'Efectivo'), amount: roundMoney(numberOrZero(line.amount)) }))
       .filter((line) => line.amount > 0)
 
     if (!validPaymentLines.length) {
       validPaymentLines.push({ label: 'Efectivo', amount: total })
+    }
+
+    const paidTotal = roundMoney(validPaymentLines.reduce((sum, payment) => sum + payment.amount, 0))
+    if (!sameMoney(paidTotal, total)) {
+      throw createError({ statusCode: 400, statusMessage: 'La suma de los pagos debe coincidir con el total.' })
     }
 
     for (const payment of validPaymentLines) {
@@ -276,19 +342,21 @@ export default defineEventHandler(async (event) => {
     return { ...overview, saleId, saleNumber: cashSaleCode }
   } catch (error) {
     await client.query('rollback')
-    if (clientOperationId && typeof error === 'object' && error && 'code' in error && error.code === '23505') {
-      const existingSale = await client.query<{ id: string }>(
+    if (typeof error === 'object' && error && 'code' in error && error.code === '23505') {
+      const existingSale = await client.query<{ id: string, number: string | null }>(
         `
-          select id
+          select id, numero as number
           from venta
           where tienda_id = $1
-            and numero = $2
+            and client_operation_id = $2
           limit 1
         `,
         [session.storeId, clientOperationId],
       )
       const overview = await getCashOverview(client, session.storeId)
-      return { ...overview, saleId: existingSale.rows[0]?.id, saleNumber: clientOperationId }
+      if (existingSale.rows[0]) {
+        return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
+      }
     }
     throw error
   } finally {

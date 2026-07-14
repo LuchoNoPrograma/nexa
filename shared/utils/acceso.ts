@@ -22,6 +22,7 @@ export const ACCESO_ALIAS: Record<string, AliasTipo> = {
   CLIENTES: { permiso: 'cliente.gestionar' },
   REPORTE: { permiso: 'reporte.ver' },
   CONFIG: { permiso: 'configuracion.gestionar' },
+  HARU: { permiso: 'haru.usar' },
   // Roles de tienda
   PROPIETARIO: { rol: 'propietario' },
   ADMINISTRADOR: { rol: 'administrador' },

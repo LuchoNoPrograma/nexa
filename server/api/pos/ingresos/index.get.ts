@@ -1,5 +1,5 @@
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 
 // Datos REALES de ingresos del negocio para la página de Ingresos.
 // "Ingreso" = ventas (venta/venta_item) + otros ingresos registrados en caja
@@ -14,11 +14,11 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
 // Fuente unificada de ingresos (fecha, monto). $1 = tienda. Se usa como CTE en cada
 // consulta; $1 se repite, lo que PostgreSQL permite sin problema.
 const INGRESOS_CTE = `
-  select v.fecha, v.total as monto
+  select v.fecha, v.total as monto, 'venta'::text as origen
   from venta v
   where v.tienda_id = $1 and v.estado not in ('anulada', 'cotizacion')
   union all
-  select cm.fecha, cm.monto
+  select cm.fecha, cm.monto, 'otro_ingreso'::text as origen
   from caja_movimiento cm
   where cm.tienda_id = $1
     and cm.tipo = 'ingreso'
@@ -32,7 +32,7 @@ type DiaMesRow = { day: number, sales: number, transactions: number }
 type MesRow = { month_idx: number, sales: number }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'reporte.ver')
   await ensureDatabase()
 
   const id = [session.storeId]
@@ -54,13 +54,17 @@ export default defineEventHandler(async (event) => {
         from (
           select
             null::uuid as "movementId",
-            to_char(v.fecha, 'HH24:MI') as time,
+            to_char(v.fecha at time zone 'America/La_Paz', 'HH24:MI') as time,
             vi.nombre_producto as product,
             coalesce(c.nombre, 'General') as category,
             vi.cantidad::float as qty,
             vi.precio_unitario::float as "unitPrice",
             vi.subtotal::float as total,
-            case when pm.metodo ilike 'qr' then 'QR' else 'Efectivo' end as method,
+            case
+              when pm.metodo ilike 'qr' then 'QR'
+              when pm.metodo ilike 'transferencia' or pm.metodo ilike 'tarjeta' then 'Transferencia'
+              else 'Efectivo'
+            end as method,
             v.fecha as orden
           from venta v
           join venta_item vi on vi.venta_id = v.id
@@ -71,17 +75,21 @@ export default defineEventHandler(async (event) => {
           ) pm on true
           where v.tienda_id = $1
             and v.estado not in ('anulada', 'cotizacion')
-            and v.fecha >= date_trunc('day', now())
+            and v.fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
           union all
           select
             cm.id as "movementId",
-            to_char(cm.fecha, 'HH24:MI') as time,
+            to_char(cm.fecha at time zone 'America/La_Paz', 'HH24:MI') as time,
             cm.concepto as product,
             'Otro ingreso' as category,
             1::float as qty,
             cm.monto::float as "unitPrice",
             cm.monto::float as total,
-            case when cm.metodo ilike 'qr' then 'QR' else 'Efectivo' end as method,
+            case
+              when cm.metodo ilike 'qr' then 'QR'
+              when cm.metodo ilike 'transferencia' or cm.metodo ilike 'tarjeta' then 'Transferencia'
+              else 'Efectivo'
+            end as method,
             cm.fecha as orden
           from caja_movimiento cm
           where cm.tienda_id = $1
@@ -89,7 +97,7 @@ export default defineEventHandler(async (event) => {
             and cm.estado <> 'anulado'
             and cm.venta_id is null
             and cm.compra_id is null
-            and cm.fecha >= date_trunc('day', now())
+            and cm.fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
         ) t
         order by orden
       `,
@@ -105,11 +113,11 @@ export default defineEventHandler(async (event) => {
           coalesce(sum(i.monto), 0)::float as sales,
           count(i.fecha)::int as transactions
         from generate_series(
-          date_trunc('week', now()),
-          date_trunc('week', now()) + interval '6 days',
+          date_trunc('week', now() at time zone 'America/La_Paz'),
+          date_trunc('week', now() at time zone 'America/La_Paz') + interval '6 days',
           interval '1 day'
         ) d(dia)
-        left join ingresos i on i.fecha >= d.dia and i.fecha < d.dia + interval '1 day'
+        left join ingresos i on i.fecha >= d.dia at time zone 'America/La_Paz' and i.fecha < (d.dia + interval '1 day') at time zone 'America/La_Paz'
         group by d.dia
         order by d.dia
       `,
@@ -124,11 +132,11 @@ export default defineEventHandler(async (event) => {
           coalesce(sum(i.monto), 0)::float as sales,
           count(i.fecha)::int as transactions
         from generate_series(
-          date_trunc('month', now()),
-          date_trunc('month', now()) + interval '1 month' - interval '1 day',
+          date_trunc('month', now() at time zone 'America/La_Paz'),
+          date_trunc('month', now() at time zone 'America/La_Paz') + interval '1 month' - interval '1 day',
           interval '1 day'
         ) d(dia)
-        left join ingresos i on i.fecha >= d.dia and i.fecha < d.dia + interval '1 day'
+        left join ingresos i on i.fecha >= d.dia at time zone 'America/La_Paz' and i.fecha < (d.dia + interval '1 day') at time zone 'America/La_Paz'
         group by d.dia
         order by d.dia
       `,
@@ -142,11 +150,11 @@ export default defineEventHandler(async (event) => {
           extract(month from m.mes)::int as month_idx,
           coalesce(sum(i.monto), 0)::float as sales
         from generate_series(
-          date_trunc('month', now()) - interval '5 months',
-          date_trunc('month', now()),
+          date_trunc('month', now() at time zone 'America/La_Paz') - interval '5 months',
+          date_trunc('month', now() at time zone 'America/La_Paz'),
           interval '1 month'
         ) m(mes)
-        left join ingresos i on i.fecha >= m.mes and i.fecha < m.mes + interval '1 month'
+        left join ingresos i on i.fecha >= m.mes at time zone 'America/La_Paz' and i.fecha < (m.mes + interval '1 month') at time zone 'America/La_Paz'
         group by m.mes
         order by m.mes
       `,
@@ -160,7 +168,7 @@ export default defineEventHandler(async (event) => {
         join venta v on v.id = vi.venta_id
         where v.tienda_id = $1
           and v.estado not in ('anulada', 'cotizacion')
-          and v.fecha >= date_trunc('day', now())
+          and v.fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
         group by vi.nombre_producto
         order by qty desc
         limit 1
@@ -170,19 +178,25 @@ export default defineEventHandler(async (event) => {
     // Totales de referencia para las comparativas (hoy / ayer / semana anterior).
     pool.query<{
       ventas_hoy_count: number
+      movimientos_hoy_count: number
+      ventas_hoy_total: number
+      otros_hoy_total: number
       ayer: number
       semana_anterior: number
     }>(
       `
         with ingresos as (${INGRESOS_CTE})
         select
-          (select count(*) from ingresos where fecha >= date_trunc('day', now()))::int as ventas_hoy_count,
+          (select count(*) from ingresos where origen = 'venta' and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz')::int as ventas_hoy_count,
+          (select count(*) from ingresos where fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz')::int as movimientos_hoy_count,
+          coalesce((select sum(monto) from ingresos where origen = 'venta' and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as ventas_hoy_total,
+          coalesce((select sum(monto) from ingresos where origen = 'otro_ingreso' and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as otros_hoy_total,
           coalesce((select sum(monto) from ingresos
-            where fecha >= date_trunc('day', now()) - interval '1 day'
-              and fecha < date_trunc('day', now())), 0)::float as ayer,
+            where fecha >= (date_trunc('day', now() at time zone 'America/La_Paz') - interval '1 day') at time zone 'America/La_Paz'
+              and fecha < date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as ayer,
           coalesce((select sum(monto) from ingresos
-            where fecha >= date_trunc('week', now()) - interval '1 week'
-              and fecha < date_trunc('week', now())), 0)::float as semana_anterior
+            where fecha >= (date_trunc('week', now() at time zone 'America/La_Paz') - interval '1 week') at time zone 'America/La_Paz'
+              and fecha < date_trunc('week', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as semana_anterior
       `,
       id,
     ),
@@ -219,8 +233,8 @@ export default defineEventHandler(async (event) => {
     sales: row.sales,
   }))
 
-  const totalHoy = ingresosHoy.rows.reduce((sum, row) => sum + row.total, 0)
   const e = escalares.rows[0]
+  const totalHoy = (e?.ventas_hoy_total ?? 0) + (e?.otros_hoy_total ?? 0)
   const totalMesActual = mesesLista.at(-1)?.sales ?? 0
   const totalMesAnterior = mesesLista.at(-2)?.sales ?? 0
   const totalSemanaActual = semana.reduce((sum, d) => sum + d.sales, 0)
@@ -236,8 +250,11 @@ export default defineEventHandler(async (event) => {
     meses: mesesLista,
     topProducto: topProducto.rows[0] ?? null,
     resumenHoy: {
-      total: totalHoy,
+      totalIngresos: totalHoy,
+      totalVentas: e?.ventas_hoy_total ?? 0,
+      otrosIngresos: e?.otros_hoy_total ?? 0,
       ventas: e?.ventas_hoy_count ?? 0,
+      movimientos: e?.movimientos_hoy_count ?? 0,
     },
     comparativas: {
       hoyVsAyer: variacion(totalHoy, e?.ayer ?? 0),

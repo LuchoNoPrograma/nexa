@@ -1,6 +1,7 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { requireStoreAccess } from '../../utils/posCatalog'
+import { assertRateLimit } from '../../utils/rateLimit'
 import type { CurrentSession } from '../../utils/session'
 
 type ChatBody = {
@@ -118,7 +119,6 @@ function logGeminiResponse(response: GeminiResponse, reply: string, model: strin
     finishReason: response.candidates?.[0]?.finishReason ?? null,
     parts: response.candidates?.[0]?.content?.parts?.length ?? 0,
     replyLength: reply.length,
-    replyPreview: reply.slice(0, 500),
   })
 }
 
@@ -297,15 +297,14 @@ async function requestGemini(params: {
       contents: params.contents,
       generationConfig,
     }),
+    signal: AbortSignal.timeout(25_000),
   })
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '')
     console.error('[haru:gemini:error]', {
       model: params.model,
       status: response.status,
       statusText: response.statusText,
-      bodyPreview: errorText.slice(0, 500),
     })
 
     if (params.disableThinking && response.status === 400) {
@@ -488,6 +487,14 @@ export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
 
+  await assertRateLimit(event, {
+    namespace: 'haru-chat',
+    maxRequests: 30,
+    windowMs: 15 * 60 * 1000,
+    keyParts: [session.storeId, session.id],
+    message: 'Alcanzaste el limite temporal de mensajes de Haru. Intenta nuevamente en unos minutos.',
+  })
+
   const body = await readBody<ChatBody | null>(event)
   const message = normalizeMessage(body?.message)
 
@@ -508,9 +515,10 @@ export default defineEventHandler(async (event) => {
           from haru_conversacion
           where id = $1
             and tienda_id = $2
+            and usuario_id = $3
           limit 1
         `,
-        [conversationId, session.storeId],
+        [conversationId, session.storeId, session.id],
       )
 
       conversationId = existing.rows[0]?.id ?? null

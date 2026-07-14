@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 
 export type PosSession = {
   id: string
-  email: string
+  email: string | null
   name: string
   role: string
   store: string

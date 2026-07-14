@@ -1,5 +1,5 @@
 import { ensureDatabase, pool } from '../../utils/db'
-import { requireStoreSession } from '../../utils/posCatalog'
+import { requireStoreAccess } from '../../utils/posCatalog'
 
 type DiagnosticoRow = {
   id: string
@@ -18,7 +18,7 @@ type DiagnosticoRow = {
 }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   await ensureDatabase()
 
   const result = await pool.query<DiagnosticoRow>(

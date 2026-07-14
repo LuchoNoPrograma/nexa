@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Escribe un mensaje un poco mas detallado.' })
   }
 
-  assertRateLimit(event, {
+  await assertRateLimit(event, {
     namespace: 'contacto',
     maxRequests: 8,
     windowMs: 15 * 60 * 1000,

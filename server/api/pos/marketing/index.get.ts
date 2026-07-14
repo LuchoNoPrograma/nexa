@@ -1,12 +1,12 @@
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 import type { MarketingPublicacion } from '~~/shared/utils/marketing'
 
 // Lectura del módulo de Marketing. NO consume IA: solo devuelve la publicación
 // sugerida ya guardada (si existe) y el conteo de productos disponibles para
 // generar contenido. La IA se invoca aparte, al pulsar "generar".
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'haru.usar')
   await ensureDatabase()
 
   const [

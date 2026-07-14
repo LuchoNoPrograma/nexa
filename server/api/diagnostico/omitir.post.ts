@@ -1,11 +1,11 @@
 import { ensureDatabase, pool } from '../../utils/db'
-import { requireStoreSession } from '../../utils/posCatalog'
+import { requireStoreAccess } from '../../utils/posCatalog'
 
 // "Saltar por ahora": deja el onboarding como omitido para no volver a forzarlo.
 // No consume el único intento: el usuario aún puede hacerlo luego desde Inicio
 // mientras no haya un diagnóstico completado.
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'configuracion.gestionar')
   await ensureDatabase()
 
   await pool.query(

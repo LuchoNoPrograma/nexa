@@ -36,6 +36,10 @@ Variables de entorno recomendadas:
 DATABASE_URL=postgresql://...
 NEXA_SUPER_ADMIN_EMAIL=admin@nexa.bo
 NEXA_SUPER_ADMIN_PASSWORD=pon-una-clave-larga
+NEXA_SEED_DEMO=false
+NEXA_RESET_DEMO_ADMIN_PASSWORD=false
+DATABASE_SSL_REJECT_UNAUTHORIZED=true
+NEXA_PUBLIC_URL=https://tu-dominio.example
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-3.5-flash
 ```
@@ -45,7 +49,8 @@ Notas:
 - Ejecuta `npm run db:migrate` desde tu maquina cuando necesites aplicar cambios de base de datos. No lo pongas como Build Command en Vercel.
 - `GEMINI_API_KEY` no debe llevar prefijo `NUXT_PUBLIC_`; solo se usa en endpoints `server/api`.
 - Si `GEMINI_API_KEY` no existe, Haru responde con fallback local para no romper la demo.
-- Si configuras `NEXA_SUPER_ADMIN_EMAIL` y `NEXA_SUPER_ADMIN_PASSWORD`, la app crea/actualiza el usuario admin demo, la tienda demo y productos base en la primera peticion.
+- El seed demo solo se ejecuta con `NEXA_SEED_DEMO=true`. Mantenlo desactivado en produccion normal.
+- El seed no reemplaza una clave existente salvo que actives temporalmente `NEXA_RESET_DEMO_ADMIN_PASSWORD=true`.
 - La conexion SSL y el pool pequeno para Vercel se detectan automaticamente cuando `DATABASE_URL` es de Supabase.
 - Cambia `NEXA_SUPER_ADMIN_PASSWORD` antes de compartir la demo.
 

@@ -11,7 +11,7 @@ useHead({
 
 type PeriodKey = 'today' | 'week' | 'month'
 type Tone = 'green' | 'blue' | 'gold' | 'orange'
-type PaymentMethod = 'Efectivo' | 'QR'
+type PaymentMethod = 'Efectivo' | 'QR' | 'Transferencia'
 
 interface MetricCard {
   label: string
@@ -51,7 +51,13 @@ type IngresosResponse = {
   semanas: TrendRow[]
   meses: MonthComparisonRow[]
   topProducto: { name: string, qty: number } | null
-  resumenHoy: { total: number, ventas: number }
+  resumenHoy: {
+    totalIngresos: number
+    totalVentas: number
+    otrosIngresos: number
+    ventas: number
+    movimientos: number
+  }
   comparativas: {
     hoyVsAyer: number | null
     semanaVsAnterior: number | null
@@ -67,7 +73,6 @@ const periodOptions = [
 
 const activePeriod = ref<PeriodKey>('today')
 const searchTerm = ref('')
-const exportDialogVisible = ref(false)
 const session = usePosSession()
 const cashMovementVoidDialog = useCashMovementVoidDialog()
 const voidingMovementId = ref('')
@@ -82,7 +87,7 @@ const { data, refresh } = await useFetch<IngresosResponse>('/api/pos/ingresos', 
     semanas: [],
     meses: [],
     topProducto: null,
-    resumenHoy: { total: 0, ventas: 0 },
+    resumenHoy: { totalIngresos: 0, totalVentas: 0, otrosIngresos: 0, ventas: 0, movimientos: 0 },
     comparativas: { hoyVsAyer: null, semanaVsAnterior: null, mesVsAnterior: null },
   }),
 })
@@ -109,16 +114,16 @@ function variacionTexto(pct: number | null, sufijo: string) {
 
 // Fechas reales para el subtítulo (no fijas).
 const hoyTexto = computed(() => new Intl.DateTimeFormat('es-BO', {
-  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/La_Paz',
 }).format(new Date()))
 const mesTexto = computed(() => {
-  const t = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric' }).format(new Date())
+  const t = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric', timeZone: 'America/La_Paz' }).format(new Date())
   return t.charAt(0).toUpperCase() + t.slice(1)
 })
 
 const currentCopy = computed(() => {
   if (activePeriod.value === 'today') {
-    return { title: 'Ingresos', subtitle: `Ventas realizadas hoy · ${hoyTexto.value}`, panelTitle: 'Ventas realizadas hoy' }
+    return { title: 'Ingresos', subtitle: `Ingresos registrados hoy · ${hoyTexto.value}`, panelTitle: 'Movimientos de hoy' }
   }
   if (activePeriod.value === 'week') {
     return { title: 'Ingresos', subtitle: 'Semana actual', panelTitle: 'Ingresos por día' }
@@ -142,15 +147,15 @@ const maxMonthlyComparisonValue = computed(() => Math.max(...monthlyComparisonRo
 const currentMonthComparison = computed(() => monthlyComparisonRows.value.at(-1) ?? { label: '—', sales: 0 })
 const previousMonthComparison = computed(() => monthlyComparisonRows.value.at(-2) ?? { label: '—', sales: 0 })
 const currentMonthVariation = computed(() => data.value?.comparativas.mesVsAnterior ?? null)
-const todayTotal = computed(() => data.value?.resumenHoy.total ?? 0)
+const todayTotal = computed(() => data.value?.resumenHoy.totalIngresos ?? 0)
 
 const metrics = computed<MetricCard[]>(() => {
   const comp = data.value?.comparativas
   if (activePeriod.value === 'today') {
     const top = data.value?.topProducto
     return [
-      { label: 'Total vendido', value: money(todayTotal.value), meta: variacionTexto(comp?.hoyVsAyer ?? null, 'ayer'), icon: 'fluent-emoji:money-bag', tone: 'green' },
-      { label: 'Número de ventas', value: String(data.value?.resumenHoy.ventas ?? 0), meta: 'Ventas registradas hoy', icon: 'fluent-emoji:receipt', tone: 'blue' },
+      { label: 'Ingresos de hoy', value: money(todayTotal.value), meta: variacionTexto(comp?.hoyVsAyer ?? null, 'ayer'), icon: 'fluent-emoji:money-bag', tone: 'green' },
+      { label: 'Ventas', value: money(data.value?.resumenHoy.totalVentas ?? 0), meta: `${data.value?.resumenHoy.ventas ?? 0} ventas · ${money(data.value?.resumenHoy.otrosIngresos ?? 0)} otros`, icon: 'fluent-emoji:receipt', tone: 'blue' },
       { label: 'Producto más vendido', value: top?.name ?? 'Sin ventas', meta: top ? `${top.qty} unidades vendidas` : 'Aún no hay ventas hoy', icon: 'fluent-emoji:star', tone: 'orange' },
     ]
   }
@@ -158,14 +163,14 @@ const metrics = computed<MetricCard[]>(() => {
   if (activePeriod.value === 'week') {
     return [
       { label: 'Total semanal', value: money(trendTotal.value), meta: variacionTexto(comp?.semanaVsAnterior ?? null, 'semana anterior'), icon: 'fluent-emoji:money-bag', tone: 'green' },
-      { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Esta semana', icon: 'fluent-emoji:receipt', tone: 'blue' },
+      { label: 'Movimientos', value: String(trendTransactions.value), meta: 'Esta semana', icon: 'fluent-emoji:receipt', tone: 'blue' },
       { label: 'Mejor día', value: bestTrendRow.value.label, meta: money(bestTrendRow.value.sales), icon: 'fluent-emoji:spiral-calendar', tone: 'orange' },
     ]
   }
 
   return [
     { label: 'Total mensual', value: money(trendTotal.value), meta: variacionTexto(comp?.mesVsAnterior ?? null, 'mes anterior'), icon: 'fluent-emoji:money-bag', tone: 'green' },
-    { label: 'Ventas registradas', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'fluent-emoji:receipt', tone: 'blue' },
+    { label: 'Movimientos', value: String(trendTransactions.value), meta: 'Acumulado del mes', icon: 'fluent-emoji:receipt', tone: 'blue' },
     { label: 'Mejor mes reciente', value: bestMonthRow.value.label, meta: money(bestMonthRow.value.sales), icon: 'fluent-emoji:trophy', tone: 'orange' },
   ]
 })
@@ -175,7 +180,10 @@ const advice = computed<string[]>(() => {
   if (activePeriod.value === 'today') {
     const top = data.value?.topProducto
     if (!todaySales.value.length) {
-      return ['Aún no registras ventas hoy. Comparte una promoción por WhatsApp para arrancar.']
+      return ['Aún no registras ingresos hoy. Comparte una promoción por WhatsApp para arrancar.']
+    }
+    if (!(data.value?.resumenHoy.ventas ?? 0)) {
+      return ['Hay ingresos manuales registrados, pero todavía no ventas. Revisa el POS antes del cierre.']
     }
     return [
       top ? `Hoy "${top.name}" es lo que más se vende. Tenlo a la vista y ofrécelo primero.` : 'Mantén a la vista tus productos más pedidos para vender más rápido.',
@@ -209,14 +217,6 @@ const visibleSales = computed(() => {
   ].some((value) => value.toLowerCase().includes(term)))
 })
 
-function exportReport(format: 'PDF' | 'Excel' | 'Imprimir') {
-  exportDialogVisible.value = false
-
-  if (format === 'Imprimir' && import.meta.client) {
-    window.print()
-  }
-}
-
 async function voidIngreso(row: SaleRow) {
   if (!row.movementId || !canVoidMovements.value || voidingMovementId.value) {
     return
@@ -242,13 +242,12 @@ async function voidIngreso(row: SaleRow) {
 }
 
 // --- Registrar ingreso ---
-// "Venta" se registra en el POS y "Inventario" (mercadería que entra) en el catálogo;
-// aquí solo se guarda un "otro ingreso" (reembolso, aporte, interés) en caja_movimiento.
-type IngresoTipo = 'Otro' | 'Venta' | 'Inventario'
+// Las ventas se registran en el POS; aquí solo se guarda un ingreso manual
+// (reembolso, aporte o interés) en caja_movimiento.
+type IngresoTipo = 'Otro' | 'Venta'
 const tipoOptions: { label: string, value: IngresoTipo }[] = [
   { label: 'Otro ingreso', value: 'Otro' },
   { label: 'Venta', value: 'Venta' },
-  { label: 'Mercadería (inventario)', value: 'Inventario' },
 ]
 const methodOptions = ['Efectivo', 'QR', 'Transferencia']
 
@@ -276,11 +275,6 @@ function openRegisterDialog() {
 function irAlPos() {
   registerDialogVisible.value = false
   void navigateTo('/pos')
-}
-
-function irAInventario() {
-  registerDialogVisible.value = false
-  void navigateTo('/pos/catalogo?accion=entrada')
 }
 
 async function saveIngreso() {
@@ -324,7 +318,7 @@ async function saveIngreso() {
       </div>
 
       <div class="income-heading__tools">
-        <IconField class="income-search">
+        <IconField v-if="activePeriod === 'today'" class="income-search">
           <InputIcon>
             <i class="pi pi-search" />
           </InputIcon>
@@ -332,7 +326,6 @@ async function saveIngreso() {
         </IconField>
 
         <Button type="button" icon="pi pi-plus" label="Registrar ingreso" @click="openRegisterDialog" />
-        <Button type="button" icon="pi pi-download" label="Exportar reporte" outlined @click="exportDialogVisible = true" />
       </div>
     </section>
 
@@ -363,7 +356,7 @@ async function saveIngreso() {
           <Tag :value="activePeriod === 'today' ? 'Hoy' : activePeriod === 'week' ? 'Semana' : 'Mes'" severity="success" />
         </header>
 
-        <DataTable v-if="activePeriod === 'today'" :value="visibleSales" size="small" class="income-table">
+        <DataTable v-if="activePeriod === 'today'" :value="visibleSales" size="small" class="income-table income-desktop-table">
           <Column field="time" header="Hora" />
           <Column field="product" header="Producto / Servicio" />
           <Column field="category" header="Categoría" />
@@ -402,6 +395,32 @@ async function saveIngreso() {
           </Column>
         </DataTable>
 
+        <ul v-if="activePeriod === 'today'" class="income-mobile-list" aria-label="Movimientos de hoy">
+          <li v-for="row in visibleSales" :key="`${row.time}-${row.product}-${row.movementId ?? row.total}`">
+            <span class="income-mobile-list__time">{{ row.time }}</span>
+            <span class="income-mobile-list__main">
+              <strong>{{ row.product }}</strong>
+              <small>{{ row.category }} · {{ row.method }}<template v-if="row.qty > 1"> · {{ row.qty }} unidades</template></small>
+            </span>
+            <strong class="income-mobile-list__amount">{{ money(row.total) }}</strong>
+            <Button
+              v-if="row.movementId && canVoidMovements"
+              class="income-mobile-list__void"
+              v-tooltip.left="'Anular ingreso'"
+              type="button"
+              icon="pi pi-ban"
+              aria-label="Anular ingreso"
+              size="small"
+              severity="danger"
+              text
+              :loading="voidingMovementId === row.movementId"
+              :disabled="Boolean(voidingMovementId)"
+              @click="voidIngreso(row)"
+            />
+          </li>
+          <li v-if="!visibleSales.length" class="income-mobile-list__empty">No hay ingresos registrados hoy.</li>
+        </ul>
+
         <div v-else class="trend-layout">
           <div class="trend-chart" aria-label="Gráfico de ingresos del periodo">
             <article v-for="row in trendRows" :key="row.label" class="trend-bar">
@@ -417,7 +436,7 @@ async function saveIngreso() {
           <DataTable :value="trendRows" size="small" class="income-table trend-table">
             <Column field="label" :header="activePeriod === 'week' ? 'Día' : 'Semana'" />
             <Column field="range" header="Periodo" />
-            <Column header="Ventas">
+            <Column header="Movimientos">
               <template #body="{ data }">{{ data.transactions }}</template>
             </Column>
             <Column header="Ingresos">
@@ -468,7 +487,7 @@ async function saveIngreso() {
       <img src="/haru.png" alt="" aria-hidden="true">
     </section>
 
-    <Dialog v-model:visible="registerDialogVisible" modal header="Registrar ingreso" class="export-dialog">
+    <Dialog v-model:visible="registerDialogVisible" modal header="Registrar ingreso" class="register-dialog">
       <form class="register-form" @submit.prevent="saveIngreso">
         <label class="register-field">
           <span>Tipo de ingreso</span>
@@ -483,17 +502,6 @@ async function saveIngreso() {
           <footer class="register-actions">
             <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
             <Button type="button" label="Ir al POS" icon="pi pi-arrow-right" icon-pos="right" @click="irAlPos" />
-          </footer>
-        </template>
-
-        <!-- Mercadería que entra: se registra en el inventario (suma stock). -->
-        <template v-else-if="registerForm.tipo === 'Inventario'">
-          <Message severity="info" size="small" icon="pi pi-box">
-            La mercadería que entra se registra en tu inventario para que sume stock y su costo se descuente al vender.
-          </Message>
-          <footer class="register-actions">
-            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
-            <Button type="button" label="Ir a inventario" icon="pi pi-arrow-right" icon-pos="right" @click="irAInventario" />
           </footer>
         </template>
 
@@ -522,31 +530,6 @@ async function saveIngreso() {
       </form>
     </Dialog>
 
-    <Dialog v-model:visible="exportDialogVisible" modal header="Exportar reporte" class="export-dialog">
-      <div class="export-options">
-        <button type="button" @click="exportReport('PDF')">
-          <i class="pi pi-file-pdf" aria-hidden="true" />
-          <span>
-            <strong>PDF</strong>
-            <small>Ideal para imprimir o compartir.</small>
-          </span>
-        </button>
-        <button type="button" @click="exportReport('Excel')">
-          <i class="pi pi-file-excel" aria-hidden="true" />
-          <span>
-            <strong>Excel</strong>
-            <small>Para revisar datos y cálculos.</small>
-          </span>
-        </button>
-        <button type="button" @click="exportReport('Imprimir')">
-          <i class="pi pi-print" aria-hidden="true" />
-          <span>
-            <strong>Imprimir</strong>
-            <small>Enviar el reporte actual a impresora.</small>
-          </span>
-        </button>
-      </div>
-    </Dialog>
   </div>
 </template>
 
@@ -784,6 +767,62 @@ async function saveIngreso() {
   font-size: 0.72rem;
 }
 
+.income-mobile-list {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.income-mobile-list li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.income-mobile-list__time {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.income-mobile-list__main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.income-mobile-list__main strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.income-mobile-list__main small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.income-mobile-list__amount {
+  color: #08742a;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.income-mobile-list__empty {
+  display: block !important;
+  color: #64748b;
+  text-align: center;
+}
+
 .trend-layout {
   display: grid;
   gap: 16px;
@@ -993,60 +1032,8 @@ async function saveIngreso() {
   filter: drop-shadow(0 18px 22px rgba(15, 23, 42, 0.16));
 }
 
-.export-dialog {
+.register-dialog {
   width: min(420px, calc(100vw - 24px));
-}
-
-.export-options {
-  display: grid;
-  gap: 8px;
-}
-
-.export-options button {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #e5eaf0;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #111827;
-  text-align: left;
-  cursor: pointer;
-}
-
-.export-options button:hover {
-  border-color: #b7e3c1;
-  background: #f8fff9;
-}
-
-.export-options i {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 9px;
-  background: #e8f7eb;
-  color: #0b6f38;
-}
-
-.export-options strong,
-.export-options small {
-  display: block;
-}
-
-.export-options strong {
-  font-size: 0.86rem;
-  font-weight: 900;
-}
-
-.export-options small {
-  margin-top: 2px;
-  color: #64748b;
-  font-size: 0.74rem;
-  font-weight: 700;
 }
 
 @media (max-width: 1320px) {
@@ -1072,10 +1059,15 @@ async function saveIngreso() {
     grid-template-columns: 1fr;
   }
 
-  /* Las 3 tarjetas se mantienen en una fila también en móvil, compactas. */
   .income-metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .income-metric:first-child {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
   }
 
   .income-metric {
@@ -1110,12 +1102,52 @@ async function saveIngreso() {
     padding: 12px;
   }
 
+  .income-desktop-table,
+  .trend-table {
+    display: none;
+  }
+
+  .income-mobile-list {
+    display: block;
+  }
+
+  .income-mobile-list li {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "time main amount"
+      ". main action";
+    gap: 6px 10px;
+  }
+
+  .income-mobile-list__time { grid-area: time; }
+  .income-mobile-list__main { grid-area: main; }
+  .income-mobile-list__amount { grid-area: amount; }
+  .income-mobile-list__void {
+    grid-area: action;
+    justify-self: end;
+  }
+
   .trend-chart {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .trend-bar {
+    flex: 0 0 88px;
+    scroll-snap-align: start;
   }
 
   .month-bars {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+  }
+
+  .month-bar {
+    flex: 0 0 74px;
   }
 
   .month-comparison header,
@@ -1129,7 +1161,12 @@ async function saveIngreso() {
   }
 
   .ai-advice img {
-    justify-self: start;
+    display: none;
+  }
+
+  :global(.register-dialog.p-dialog) {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
   }
 }
 

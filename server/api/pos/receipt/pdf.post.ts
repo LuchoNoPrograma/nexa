@@ -43,7 +43,7 @@ function validateThermalDocument(value: unknown): ThermalDocument {
 export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'VENDER || CAJA || REPORTE')
 
-  assertRateLimit(event, {
+  await assertRateLimit(event, {
     namespace: 'pos.receipt.pdf',
     maxRequests: 20,
     windowMs: 60 * 1000,

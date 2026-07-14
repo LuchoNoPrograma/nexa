@@ -1,9 +1,9 @@
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 import { getCashOverview } from '../../../utils/posCash'
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'CAJA || REPORTE')
   await ensureDatabase()
 
   const client = await pool.connect()

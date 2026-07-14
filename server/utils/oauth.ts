@@ -136,8 +136,15 @@ export async function issueOAuthSession(event: H3Event, userId: string) {
 
   await pool.query(
     `
-      insert into sesion (usuario_id, token_hash, user_agent, ip, expires_at)
-      values ($1, $2, $3, $4, $5)
+      insert into sesion (usuario_id, tienda_id, token_hash, user_agent, ip, expires_at)
+      values (
+        $1,
+        (select tienda_id from tienda_usuario where usuario_id = $1 and estado = 'activo' order by created_at asc limit 1),
+        $2,
+        $3,
+        $4,
+        $5
+      )
     `,
     [
       userId,

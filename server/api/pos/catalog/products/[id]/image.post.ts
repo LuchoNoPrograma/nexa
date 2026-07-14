@@ -7,6 +7,21 @@ import { requireStoreAccess } from '../../../../../utils/posCatalog'
 const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const maxFileSize = 1024 * 1024
 
+function hasValidSignature(data: Buffer, contentType: string) {
+  if (contentType === 'image/jpeg') {
+    return data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+  }
+  if (contentType === 'image/png') {
+    return data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  }
+  if (contentType === 'image/webp') {
+    return data.length >= 12
+      && data.subarray(0, 4).toString('ascii') === 'RIFF'
+      && data.subarray(8, 12).toString('ascii') === 'WEBP'
+  }
+  return false
+}
+
 function requiredConfig(name: string): string {
   const value = process.env[name]?.trim()
   if (!value) {
@@ -44,6 +59,9 @@ export default defineEventHandler(async (event) => {
   }
   if (image.data.byteLength > maxFileSize) {
     throw createError({ statusCode: 413, statusMessage: 'La imagen no puede superar 1 MB.' })
+  }
+  if (!hasValidSignature(image.data, contentType)) {
+    throw createError({ statusCode: 415, statusMessage: 'El contenido del archivo no coincide con una imagen valida.' })
   }
 
   const supabaseUrl = requiredConfig('SUPABASE_URL').replace(/\/$/, '')

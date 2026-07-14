@@ -1,13 +1,9 @@
-import { requireSession } from '../../utils/session'
+import { requireStoreAccess } from '../../utils/posCatalog'
 import { ensureDatabase, pool } from '../../utils/db'
 
 export default defineEventHandler(async (event) => {
-  const session = await requireSession(event)
+  const session = await requireStoreAccess(event, 'producto.ver')
   await ensureDatabase()
-
-  if (!session.storeId) {
-    return { products: [] }
-  }
 
   const result = await pool.query(
     `

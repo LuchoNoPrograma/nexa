@@ -32,7 +32,7 @@ const canSubmit = computed(() =>
   && form.phone.replace(/\D/g, '').length >= 7
   && form.businessName.trim().length >= 2
   && form.city.trim().length >= 2
-  && form.password.length >= 6
+  && form.password.length >= 10
   && form.password === form.confirmPassword,
 )
 
@@ -171,7 +171,9 @@ async function onSubmit() {
               :type="showPassword ? 'text' : 'password'"
               name="password"
               autocomplete="new-password"
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 10 caracteres"
+              minlength="10"
+              maxlength="128"
               required
             >
             <button
@@ -196,6 +198,8 @@ async function onSubmit() {
               name="confirmPassword"
               autocomplete="new-password"
               placeholder="Repite tu contraseña"
+              minlength="10"
+              maxlength="128"
               required
             >
             <button

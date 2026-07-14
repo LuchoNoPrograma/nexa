@@ -1,6 +1,6 @@
 import { getQuery } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
-import { requireStoreSession } from '../../../utils/posCatalog'
+import { requireStoreAccess } from '../../../utils/posCatalog'
 
 // Lista de gastos (egresos confirmados) del periodo + totales + tendencia. Alimenta
 // la página Gastos con datos reales. Periodo: 'today' | 'week' | 'month'.
@@ -24,9 +24,9 @@ const EGRESOS_CTE = `
 `
 
 function rangoSql(periodo: Periodo): string {
-  if (periodo === 'today') return "fecha >= date_trunc('day', now())"
-  if (periodo === 'week') return "fecha >= date_trunc('week', now())"
-  return "fecha >= date_trunc('month', now())"
+  if (periodo === 'today') return "fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'"
+  if (periodo === 'week') return "fecha >= date_trunc('week', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'"
+  return "fecha >= date_trunc('month', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'"
 }
 
 type DiaRow = { dow: number, range: string, sales: number, transactions: number }
@@ -34,7 +34,7 @@ type DiaMesRow = { day: number, sales: number, transactions: number }
 type MesRow = { month_idx: number, sales: number }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreSession(event)
+  const session = await requireStoreAccess(event, 'reporte.ver')
   await ensureDatabase()
 
   const periodo = (getQuery(event).periodo as Periodo) || 'month'
@@ -72,11 +72,11 @@ export default defineEventHandler(async (event) => {
           coalesce(sum(e.monto), 0)::float as sales,
           count(e.fecha)::int as transactions
         from generate_series(
-          date_trunc('week', now()),
-          date_trunc('week', now()) + interval '6 days',
+          date_trunc('week', now() at time zone 'America/La_Paz'),
+          date_trunc('week', now() at time zone 'America/La_Paz') + interval '6 days',
           interval '1 day'
         ) d(dia)
-        left join egresos e on e.fecha >= d.dia and e.fecha < d.dia + interval '1 day'
+        left join egresos e on e.fecha >= d.dia at time zone 'America/La_Paz' and e.fecha < (d.dia + interval '1 day') at time zone 'America/La_Paz'
         group by d.dia
         order by d.dia
       `,
@@ -91,11 +91,11 @@ export default defineEventHandler(async (event) => {
           coalesce(sum(e.monto), 0)::float as sales,
           count(e.fecha)::int as transactions
         from generate_series(
-          date_trunc('month', now()),
-          date_trunc('month', now()) + interval '1 month' - interval '1 day',
+          date_trunc('month', now() at time zone 'America/La_Paz'),
+          date_trunc('month', now() at time zone 'America/La_Paz') + interval '1 month' - interval '1 day',
           interval '1 day'
         ) d(dia)
-        left join egresos e on e.fecha >= d.dia and e.fecha < d.dia + interval '1 day'
+        left join egresos e on e.fecha >= d.dia at time zone 'America/La_Paz' and e.fecha < (d.dia + interval '1 day') at time zone 'America/La_Paz'
         group by d.dia
         order by d.dia
       `,
@@ -109,11 +109,11 @@ export default defineEventHandler(async (event) => {
           extract(month from m.mes)::int as month_idx,
           coalesce(sum(e.monto), 0)::float as sales
         from generate_series(
-          date_trunc('month', now()) - interval '5 months',
-          date_trunc('month', now()),
+          date_trunc('month', now() at time zone 'America/La_Paz') - interval '5 months',
+          date_trunc('month', now() at time zone 'America/La_Paz'),
           interval '1 month'
         ) m(mes)
-        left join egresos e on e.fecha >= m.mes and e.fecha < m.mes + interval '1 month'
+        left join egresos e on e.fecha >= m.mes at time zone 'America/La_Paz' and e.fecha < (m.mes + interval '1 month') at time zone 'America/La_Paz'
         group by m.mes
         order by m.mes
       `,

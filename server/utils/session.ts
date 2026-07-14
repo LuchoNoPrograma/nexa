@@ -4,7 +4,7 @@ import { hashSessionToken } from './password'
 
 export type CurrentSession = {
   id: string
-  email: string
+  email: string | null
   name: string
   role: string
   store: string
@@ -49,7 +49,18 @@ export async function getCurrentSession(event: Parameters<typeof getCookie>[0]):
       join usuario u on u.id = s.usuario_id
       left join usuario_rol platform_user_role on platform_user_role.usuario_id = u.id and platform_user_role.tienda_id is null
       left join rol platform_role on platform_role.id = platform_user_role.rol_id and platform_role.alcance = 'plataforma'
-      left join tienda_usuario tu on tu.usuario_id = u.id and tu.estado = 'activo'
+      left join tienda_usuario tu on tu.usuario_id = u.id
+        and tu.estado = 'activo'
+        and tu.tienda_id = coalesce(
+          s.tienda_id,
+          (
+            select tu_default.tienda_id
+            from tienda_usuario tu_default
+            where tu_default.usuario_id = u.id and tu_default.estado = 'activo'
+            order by tu_default.created_at asc
+            limit 1
+          )
+        )
       left join tienda t on t.id = tu.tienda_id and t.activo = true
       left join usuario_rol store_user_role on store_user_role.usuario_id = u.id and store_user_role.tienda_id = t.id
       left join rol store_role on store_role.id = store_user_role.rol_id and store_role.alcance = 'tienda'

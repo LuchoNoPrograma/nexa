@@ -165,7 +165,7 @@ const sidebarItems: SidebarItem[] = [
   { label: 'Inicio', icon: 'pi pi-home', to: '/pos/inicio', aliases: ['principal', 'portada', 'comenzar'] },
   { label: 'Caja', icon: 'pi pi-wallet', to: '/pos/caja', acceso: 'CAJA', aliases: ['cobrar', 'cobro', 'movimientos de caja'] },
   { label: 'Ventas', icon: 'pi pi-shopping-cart', to: '/pos', acceso: 'VENDER', aliases: ['venta', 'vender', 'nueva venta', 'realizar venta', 'hacer venta'] },
-  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG', aliases: ['publicidad', 'promocion', 'redes sociales'] },
+  { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'HARU', aliases: ['publicidad', 'promocion', 'redes sociales'] },
   { label: 'Inventario', icon: 'pi pi-box', to: '/pos/catalogo', acceso: 'INVENTARIO', aliases: ['producto', 'productos', 'stock', 'catalogo', 'existencias'] },
   {
     label: 'Finanzas',
@@ -868,7 +868,7 @@ function selectModule(to?: string) {
       </div>
     </section>
 
-    <PosBusinessProfileDialog />
+    <PosBusinessProfileDialog v-if="puede('CONFIG')" />
     <PosAccountSecurityDialog />
 
     <!-- Bottom navigation (mobile only): Inicio · Caja · [Ventas] · Inventario · Más -->
@@ -945,6 +945,7 @@ function selectModule(to?: string) {
           <span class="more-drawer-label">{{ item.label }}</span>
         </button>
         <button
+          v-if="puede('HARU')"
           type="button"
           class="more-drawer-item more-drawer-item--haru"
           @click="moreMenuOpen = false; openHaru()"

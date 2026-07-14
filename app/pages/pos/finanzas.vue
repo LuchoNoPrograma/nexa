@@ -151,10 +151,6 @@ const expenseCategories = computed(() => {
 
 const donutGradient = computed(() => buildDonut(expenseCategories.value, expensesTotal.value))
 
-const haruTip = computed(() => isProfit.value
-  ? 'Tu resumen cruza ventas, costo de productos y gastos. Si quieres mejorar la ganancia, empieza por revisar el gasto más grande o los productos con menor margen.'
-  : 'Este periodo estás perdiendo dinero. Revisa primero costos de productos, luego gastos operativos y después ajusta precios donde el margen por unidad sea bajo.')
-
 // Frase amable que explica el margen neto (ROS) sin jerga.
 const rosTexto = computed(() => {
   const m = cascada.value?.margenNeto
@@ -224,7 +220,7 @@ const recomendaciones = computed<Recomendacion[]>(() => {
         <article class="fin-hero__tile is-out">
           <span class="fin-hero__ic"><i class="pi pi-arrow-up-right" aria-hidden="true" /></span>
           <span>
-            <small>Salió</small>
+            <small>Costos y gastos</small>
             <strong>Bs {{ bs(expensesTotal) }}</strong>
           </span>
         </article>
@@ -233,17 +229,9 @@ const recomendaciones = computed<Recomendacion[]>(() => {
 
     <!-- GANANCIA REAL: lectura simple — a dónde va cada boliviano que vendes -->
     <section v-if="resumen" class="profit" :class="{ 'is-loss': !netaIsProfit }" aria-label="Tu ganancia del periodo">
-      <div class="profit__top">
-        <div class="profit__headline">
-          <small>{{ netaIsProfit ? `Tu ganancia ${periodLabel}` : `Tu pérdida ${periodLabel}` }}</small>
-          <strong><em>Bs</em> {{ bs(Math.abs(resumen.ganancia)) }}</strong>
-          <span class="profit__ros"><i class="pi pi-sparkles" aria-hidden="true" /> {{ rosTexto }}</span>
-        </div>
-      </div>
-
-      <!-- Barra: a dónde va tu dinero (siempre suma 100%) -->
       <div class="profit__where">
-        <span class="profit__where-title">¿A dónde va tu dinero?</span>
+        <span class="profit__where-title">Cómo se reparte lo que vendes</span>
+        <span class="profit__ros"><i class="pi pi-sparkles" aria-hidden="true" /> {{ rosTexto }}</span>
         <div class="moneybar" role="img" aria-label="Reparto de tus ventas">
           <span
             v-for="parte in resumen.partes"
@@ -337,14 +325,6 @@ const recomendaciones = computed<Recomendacion[]>(() => {
       </section>
     </div>
 
-    <!-- Consejo de Haru -->
-    <section class="haru-tip">
-      <div class="haru-tip__copy">
-        <span class="haru-tip__kicker"><i class="pi pi-sparkles" aria-hidden="true" />Consejo de Haru</span>
-        <p>{{ haruTip }}</p>
-      </div>
-      <img src="/haru.png" alt="" aria-hidden="true" class="haru-tip__mascot">
-    </section>
     </div>
 
     <!-- Recomendaciones de Haru: a la derecha en desktop, al fondo en mobile -->
@@ -521,6 +501,7 @@ const recomendaciones = computed<Recomendacion[]>(() => {
   padding: 13px 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.14);
+  min-width: 0;
 }
 
 .fin-hero__ic {
@@ -553,6 +534,7 @@ const recomendaciones = computed<Recomendacion[]>(() => {
   display: block;
   font-size: 1.12rem;
   font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
 /* --- Tarjetas blancas --- */
@@ -685,51 +667,6 @@ const recomendaciones = computed<Recomendacion[]>(() => {
   text-align: right;
 }
 
-/* --- Consejo de Haru --- */
-.haru-tip {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 150px;
-  overflow: hidden;
-  padding: 20px 165px 20px 22px;
-  border-radius: 18px;
-  color: #fff;
-  background: linear-gradient(120deg, #063718, #0e7a26 70%, #14a634);
-  box-shadow: 0 16px 34px rgba(6, 55, 24, 0.26);
-}
-
-.haru-tip__kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #9af29c;
-  font-size: 0.72rem;
-  font-weight: 900;
-}
-
-.haru-tip__copy p {
-  margin: 8px 0 0;
-  max-width: 360px;
-  font-size: 0.86rem;
-  font-weight: 600;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.haru-tip__mascot {
-  position: absolute;
-  right: 12px;
-  bottom: 0;
-  height: 150px;
-  width: auto;
-  object-fit: contain;
-  object-position: bottom;
-  filter: drop-shadow(0 14px 18px rgba(3, 24, 9, 0.34));
-  pointer-events: none;
-}
-
 /* --- Responsivo --- */
 /* Tablet y móvil: las dos tarjetas grandes pasan a una sola columna. */
 @media (max-width: 1024px) {
@@ -754,6 +691,8 @@ const recomendaciones = computed<Recomendacion[]>(() => {
 
   .fin-hero__main strong {
     font-size: 2.2rem;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .spend {
@@ -766,18 +705,22 @@ const recomendaciones = computed<Recomendacion[]>(() => {
     width: 100%;
   }
 
-  .haru-tip {
-    min-height: 134px;
-    padding: 18px 124px 18px 18px;
+  .fin-card__head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
-  .haru-tip__mascot {
-    height: 130px;
-    right: 6px;
+  .spend__list li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
+
+  .spend__pct {
+    display: none;
+  }
+
 }
 
-@media (max-width: 380px) {
+@media (max-width: 440px) {
   .fin-hero__split {
     grid-template-columns: 1fr;
   }
@@ -922,6 +865,25 @@ const recomendaciones = computed<Recomendacion[]>(() => {
 @media (max-width: 560px) {
   .profit__headline strong {
     font-size: 2.1rem;
+  }
+
+  .profit {
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .profit__legend li {
+    grid-template-columns: 12px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .profit__leg-amount {
+    grid-column: 2;
+    white-space: normal;
+  }
+
+  .profit__note {
+    align-items: flex-start;
   }
 }
 </style>
