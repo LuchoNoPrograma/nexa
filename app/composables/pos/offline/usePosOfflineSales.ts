@@ -20,6 +20,51 @@ export type PosOfflineSalePayload = {
 
 const SALE_CREATE_TYPE = 'pos.sale.create'
 
+type PosRequestError = {
+  status?: number
+  statusCode?: number
+  response?: { status?: number }
+  data?: { statusCode?: number; statusMessage?: string; message?: string }
+  statusMessage?: string
+  message?: string
+}
+
+export type PosOfflineSyncResult = {
+  total: number
+  synced: number
+  failures: Array<{ id: string; message: string; status: number | null }>
+}
+
+export function posRequestErrorStatus(error: unknown) {
+  const requestError = error as PosRequestError
+  const status = requestError.statusCode
+    ?? requestError.status
+    ?? requestError.response?.status
+    ?? requestError.data?.statusCode
+
+  return typeof status === 'number' ? status : null
+}
+
+export function posRequestErrorMessage(error: unknown, fallback: string) {
+  const requestError = error as PosRequestError
+
+  return requestError.data?.statusMessage
+    || requestError.data?.message
+    || requestError.statusMessage
+    || requestError.message
+    || fallback
+}
+
+export function shouldQueuePosSale(error: unknown) {
+  const status = posRequestErrorStatus(error)
+  return status === null || status === 0 || status === 408 || status === 429 || status >= 500
+}
+
+function shouldStopSync(error: unknown) {
+  const status = posRequestErrorStatus(error)
+  return shouldQueuePosSale(error) || status === 401 || status === 403
+}
+
 export function usePosOfflineSales() {
   const queue = useOfflineQueue()
 
@@ -44,18 +89,33 @@ export function usePosOfflineSales() {
 
   async function sync(storeId: string, sendSale: (payload: PosOfflineSalePayload) => Promise<unknown>) {
     const sales = await queue.pending<PosOfflineSalePayload>(storeId, SALE_CREATE_TYPE)
+    const result: PosOfflineSyncResult = {
+      total: sales.length,
+      synced: 0,
+      failures: [],
+    }
 
     for (const sale of sales) {
       try {
         await queue.markSyncing(sale)
         await sendSale(sale.payload)
         await queue.remove(sale.id)
+        result.synced += 1
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'No se pudo sincronizar la venta.'
+        const message = posRequestErrorMessage(error, 'No se pudo sincronizar la venta.')
         await queue.markError(sale, message)
-        break
+        result.failures.push({ id: sale.id, message, status: posRequestErrorStatus(error) })
+
+        // Un conflicto de una venta no debe bloquear las demas. En cambio, si
+        // el servidor no responde o la sesion ya no sirve, evitamos reintentar
+        // toda la cola contra el mismo error global.
+        if (shouldStopSync(error)) {
+          break
+        }
       }
     }
+
+    return result
   }
 
   return {

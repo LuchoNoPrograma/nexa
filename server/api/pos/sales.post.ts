@@ -67,7 +67,6 @@ export default defineEventHandler(async (event) => {
 
   try {
     await client.query('begin')
-    const cashSessionId = await requireOpenCashSession(client, session.storeId)
 
     const existingSale = await client.query<{ id: string, number: string | null }>(
       `
@@ -85,6 +84,8 @@ export default defineEventHandler(async (event) => {
       await client.query('commit')
       return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
     }
+
+    const cashSessionId = await requireOpenCashSession(client, session.storeId)
 
     // Serializa la numeracion dentro de la caja para evitar que dos cobros
     // simultaneos calculen el mismo count(*) + 1.
@@ -168,10 +169,6 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      if (product.kind !== 'servicio' && product.stock < quantity) {
-        throw createError({ statusCode: 409, statusMessage: `Stock insuficiente para ${product.name}.` })
-      }
-
       normalizedItems.push({ ...product, quantity })
       calculatedSubtotal = roundMoney(calculatedSubtotal + quantity * product.price)
     }
@@ -246,7 +243,14 @@ export default defineEventHandler(async (event) => {
       )
 
       if (product.kind !== 'servicio') {
-        const nextStock = product.stock - product.quantity
+        // La venta es la fuente financiera principal. Si el inventario estaba
+        // desactualizado (un caso frecuente al vender offline), se registra la
+        // venta y el faltante queda trazado sin llevar el stock bajo cero.
+        const missingStock = Math.max(product.quantity - product.stock, 0)
+        const nextStock = Math.max(product.stock - product.quantity, 0)
+        const inventoryNote = missingStock > 0
+          ? `Venta ${cashSaleCode}. Faltante de inventario: ${missingStock}.`
+          : `Venta ${cashSaleCode}`
 
         await client.query(
           `
@@ -275,7 +279,7 @@ export default defineEventHandler(async (event) => {
             )
             values ($1, $2, $3, $4, 'salida', 'venta', $5, $6, $7, $8, $9)
           `,
-          [session.storeId, product.id, session.id, saleId, product.quantity, product.stock, nextStock, product.cost, `Venta ${cashSaleCode}`],
+          [session.storeId, product.id, session.id, saleId, product.quantity, product.stock, nextStock, product.cost, inventoryNote],
         )
       }
     }
@@ -357,6 +361,17 @@ export default defineEventHandler(async (event) => {
       if (existingSale.rows[0]) {
         return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
       }
+    }
+    const statusCode = typeof error === 'object' && error && 'statusCode' in error
+      ? Number(error.statusCode)
+      : 500
+    if (!Number.isFinite(statusCode) || statusCode >= 500) {
+      console.error('[pos:sales:error]', { storeId: session.storeId, clientOperationId }, error)
+    } else if (statusCode === 409) {
+      const message = typeof error === 'object' && error && 'statusMessage' in error
+        ? String(error.statusMessage)
+        : 'Conflicto al registrar la venta.'
+      console.warn('[pos:sales:conflict]', { storeId: session.storeId, clientOperationId, message })
     }
     throw error
   } finally {

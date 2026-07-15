@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { usePosOfflineSales } from '~/composables/pos/offline/usePosOfflineSales'
+import {
+  posRequestErrorMessage,
+  posRequestErrorStatus,
+  shouldQueuePosSale,
+  usePosOfflineSales,
+} from '~/composables/pos/offline/usePosOfflineSales'
 import type { PosSaleProduct as Product } from '~/stores/catalog'
 import { printHtmlDocument } from '~/utils/printHtmlDocument'
 
@@ -80,6 +85,7 @@ const cart = ref<CartLine[]>([])
 const saleSaveError = ref('')
 const pendingSales = ref(0)
 const syncingSales = ref(false)
+const syncSalesError = ref('')
 const recentAddedProductId = ref('')
 const cartLineFeedback = ref<{ id: number, productId: string, label: string } | null>(null)
 const cartPulse = ref(false)
@@ -417,7 +423,12 @@ async function confirmCharge() {
       catalogStore.applyLocalStock(receipt.items)
       void catalogStore.saveSaleProductsLocally().catch(() => null)
       void refreshPendingSales()
-    } catch {
+    } catch (error: unknown) {
+      if (!shouldQueuePosSale(error)) {
+        saleSaveError.value = posRequestErrorMessage(error, 'No se pudo registrar la venta. Revisa los datos e intenta nuevamente.')
+        return
+      }
+
       const storeId = session.value?.storeId
 
       if (!storeId) {
@@ -441,14 +452,20 @@ async function confirmCharge() {
           total: receipt.total,
         })
       } catch {
-        saleSaveError.value = 'No se pudo guardar la venta ni en servidor ni en este dispositivo.'
+        saleSaveError.value = 'No pudimos guardar la venta. No cierres esta pantalla e intenta nuevamente.'
         return
       }
 
       catalogStore.applyLocalStock(receipt.items)
       void catalogStore.saveSaleProductsLocally().catch(() => null)
       await refreshPendingSales()
-      offlineNotice.value = 'Venta guardada localmente. Se sincronizará cuando vuelva internet.'
+      const serverRespondedWithError = (posRequestErrorStatus(error) ?? 0) >= 500
+      offlineNotice.value = serverRespondedWithError
+        ? 'La venta quedó guardada en este equipo. Intentaremos registrarla nuevamente.'
+        : 'La venta quedó guardada en este equipo. La registraremos cuando vuelva la conexión.'
+      syncSalesError.value = serverRespondedWithError
+        ? 'La venta todavía no aparece en caja. Puedes usar Reintentar en unos momentos.'
+        : ''
     }
   }
 
@@ -934,8 +951,24 @@ async function syncPendingSales() {
   }
 
   syncingSales.value = true
+  syncSalesError.value = ''
   try {
-    await offlineSales.sync(storeId, (payload) => cashRegister.registerSale(payload))
+    const result = await offlineSales.sync(storeId, (payload) => cashRegister.registerSale(payload))
+
+    if (result.failures.length) {
+      const firstFailure = result.failures[0]
+      const syncedCopy = result.synced
+        ? `${result.synced} venta${result.synced === 1 ? '' : 's'} ya ${result.synced === 1 ? 'quedó registrada' : 'quedaron registradas'}. `
+        : ''
+      const failedCopy = `${result.failures.length} venta${result.failures.length === 1 ? '' : 's'}`
+      syncSalesError.value = `${syncedCopy}No pudimos registrar ${failedCopy}. Motivo: ${firstFailure?.message ?? 'intenta nuevamente'}.`
+    } else if (result.synced) {
+      offlineNotice.value = result.synced === 1
+        ? 'La venta pendiente ya quedó registrada.'
+        : `Las ${result.synced} ventas pendientes ya quedaron registradas.`
+    }
+  } catch (error: unknown) {
+    syncSalesError.value = posRequestErrorMessage(error, 'No se pudo acceder a las ventas guardadas en este dispositivo.')
   } finally {
     syncingSales.value = false
     await refreshPendingSales()
@@ -1125,14 +1158,18 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         {{ offlineNotice }}
       </Message>
 
+      <Message v-if="syncSalesError" severity="error" size="small" icon="pi pi-exclamation-triangle">
+        {{ syncSalesError }}
+      </Message>
+
       <Message v-if="pendingSales" severity="info" size="small" icon="pi pi-cloud-upload">
-        {{ pendingSales }} venta{{ pendingSales === 1 ? '' : 's' }} pendiente{{ pendingSales === 1 ? '' : 's' }} de sincronizar.
+        {{ pendingSales }} venta{{ pendingSales === 1 ? '' : 's' }} guardada{{ pendingSales === 1 ? '' : 's' }} en este equipo, aún sin registrar en caja.
         <Button
           type="button"
           text
           size="small"
           icon="pi pi-refresh"
-          :label="syncingSales ? 'Sincronizando' : 'Sincronizar'"
+          :label="syncingSales ? 'Registrando...' : 'Reintentar'"
           :loading="syncingSales"
           @click="syncPendingSales"
         />
