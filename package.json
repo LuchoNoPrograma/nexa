@@ -7,7 +7,9 @@
     "db:migrate": "dbmate --migrations-dir database/local --no-dump-schema migrate",
     "db:rollback": "dbmate --migrations-dir database/local --no-dump-schema rollback",
     "db:status": "dbmate --migrations-dir database/local status",
+    "db:clone:supabase": "node scripts/clone-supabase-to-local.mjs",
     "dev": "npm run db:migrate && LAUNCH_EDITOR=idea nuxt dev",
+    "dev:snapshot": "bash -lc 'set -a; source .env; set +a; export DATABASE_URL=\"${DATABASE_URL%/*}/nexa_supabase_snapshot\"; npm run dev'",
     "host": "npm run db:migrate && LAUNCH_EDITOR=idea nuxt dev --host",
     "generate": "nuxt generate",
     "preview": "nuxt preview"

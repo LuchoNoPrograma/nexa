@@ -27,3 +27,6 @@ docs/seguridad-mvp.md
 # This project applies DB changes with dbmate from database/local.
 supabase/migrations/
 .vercel
+
+# Production snapshots may contain customer and authentication data.
+database/backups/
