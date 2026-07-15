@@ -11,7 +11,7 @@ useHead({
 
 type PeriodKey = 'today' | 'week' | 'month'
 type Tone = 'green' | 'blue' | 'gold' | 'orange'
-type PaymentMethod = 'Efectivo' | 'QR' | 'Transferencia'
+type PaymentMethod = 'Efectivo' | 'QR' | 'Transferencia' | 'Mixto'
 
 interface MetricCard {
   label: string
@@ -66,7 +66,7 @@ type IngresosResponse = {
 }
 
 const periodOptions = [
-  { label: 'Hoy', value: 'today' },
+  { label: 'Día', value: 'today' },
   { label: 'Semana', value: 'week' },
   { label: 'Mes', value: 'month' },
 ]
@@ -78,7 +78,7 @@ const cashMovementVoidDialog = useCashMovementVoidDialog()
 const voidingMovementId = ref('')
 const canVoidMovements = computed(() => session.value?.roles.includes('propietario') ?? false)
 
-// Datos REALES del negocio. Una sola lectura: el usuario alterna Hoy/Semana/Mes
+// Datos REALES del negocio. Una sola lectura: el usuario alterna Día/Semana/Mes
 // sin volver a pedir al servidor (todo viene en la misma respuesta).
 const { data, refresh } = await useFetch<IngresosResponse>('/api/pos/ingresos', {
   default: () => ({
@@ -123,7 +123,7 @@ const mesTexto = computed(() => {
 
 const currentCopy = computed(() => {
   if (activePeriod.value === 'today') {
-    return { title: 'Ingresos', subtitle: `Ingresos registrados hoy · ${hoyTexto.value}`, panelTitle: 'Movimientos de hoy' }
+    return { title: 'Ingresos', subtitle: `Día calendario · ${hoyTexto.value} · incluye todos los turnos`, panelTitle: 'Movimientos del día' }
   }
   if (activePeriod.value === 'week') {
     return { title: 'Ingresos', subtitle: 'Semana actual', panelTitle: 'Ingresos por día' }
@@ -353,7 +353,7 @@ async function saveIngreso() {
             <span>{{ activePeriod === 'today' ? 'Detalle operativo' : 'Tendencia' }}</span>
             <h2>{{ currentCopy.panelTitle }}</h2>
           </div>
-          <Tag :value="activePeriod === 'today' ? 'Hoy' : activePeriod === 'week' ? 'Semana' : 'Mes'" severity="success" />
+          <Tag :value="activePeriod === 'today' ? 'Día calendario' : activePeriod === 'week' ? 'Semana' : 'Mes'" severity="success" />
         </header>
 
         <DataTable v-if="activePeriod === 'today'" :value="visibleSales" size="small" class="income-table income-desktop-table">
@@ -361,7 +361,7 @@ async function saveIngreso() {
           <Column field="product" header="Producto / Servicio" />
           <Column field="category" header="Categoría" />
           <Column field="qty" header="Cantidad" />
-          <Column header="Precio unitario">
+          <Column header="Precio neto">
             <template #body="{ data }">{{ money(data.unitPrice) }}</template>
           </Column>
           <Column header="Total">

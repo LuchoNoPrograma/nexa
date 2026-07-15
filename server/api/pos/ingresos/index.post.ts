@@ -1,6 +1,7 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { cleanText, nullableText, numberOrZero, requireStoreAccess } from '../../../utils/posCatalog'
+import { lockCashSession } from '../../../utils/posCash'
 import { CATEGORIAS_INGRESO } from '~~/shared/utils/finanzas'
 
 const metodos = ['efectivo', 'qr', 'transferencia', 'tarjeta', 'otro'] as const
@@ -15,9 +16,8 @@ type IngresoBody = {
 }
 
 // Registrar un ingreso que NO es venta de productos (reembolso, aporte, interés…).
-// Persiste en caja_movimiento como ingreso CONFIRMADO para que Finanzas lo tome de
-// inmediato como "otro ingreso". Las ventas reales se registran desde el POS, no aquí.
-// No exige caja abierta: un ingreso puntual no depende de que el POS esté abierto.
+// Finanzas lo muestra de inmediato. Si existe un turno abierto y la fecha pertenece
+// a ese turno, también se enlaza a caja para que forme parte del arqueo.
 export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'caja.movimiento.crear')
   await ensureDatabase()
@@ -39,17 +39,97 @@ export default defineEventHandler(async (event) => {
     : 'otro_ingreso'
   const metodo = metodos.includes(body.metodo as typeof metodos[number]) ? body.metodo : 'efectivo'
   const fecha = nullableText(body.fecha)
+  const fechaMs = fecha ? Date.parse(fecha) : Date.now()
 
-  const result = await pool.query<{ id: string }>(
-    `
-      insert into caja_movimiento (
-        tienda_id, usuario_id, tipo, categoria, concepto, metodo, monto, estado, fecha, notas
+  if (!Number.isFinite(fechaMs) || fechaMs > Date.now() + 5 * 60 * 1000) {
+    throw createError({ statusCode: 400, statusMessage: 'La fecha del ingreso no es válida.' })
+  }
+
+  const client = await pool.connect()
+
+  try {
+    await client.query('begin')
+
+    const openSessionResult = await client.query<{ id: string }>(
+      `
+        select id
+        from caja_sesion
+        where tienda_id = $1
+          and estado = 'abierta'
+          and abierta_at <= coalesce($2::timestamptz, now())
+        order by abierta_at desc
+        limit 1
+      `,
+      [session.storeId, fecha],
+    )
+    let cashSessionId = openSessionResult.rows[0]?.id ?? null
+
+    if (cashSessionId) {
+      await lockCashSession(client, cashSessionId)
+      const stillOpen = await client.query<{ id: string }>(
+        `
+          select id
+          from caja_sesion
+          where id = $1
+            and tienda_id = $2
+            and estado = 'abierta'
+        `,
+        [cashSessionId, session.storeId],
       )
-      values ($1, $2, 'ingreso', $3, $4, $5, $6, 'confirmado', coalesce($7::timestamptz, now()), $8)
-      returning id
-    `,
-    [session.storeId, session.id, categoria, concepto, metodo, monto, fecha, nullableText(body.notas)],
-  )
+      if (!stillOpen.rows[0]) {
+        throw createError({ statusCode: 409, statusMessage: 'El turno se cerró mientras registrabas el ingreso. Revisa el cierre antes de volver a intentarlo.' })
+      }
+    }
 
-  return { id: result.rows[0]?.id }
+    const result = await client.query<{ id: string }>(
+      `
+        insert into caja_movimiento (
+          tienda_id,
+          caja_sesion_id,
+          usuario_id,
+          tipo,
+          categoria,
+          concepto,
+          metodo,
+          monto,
+          estado,
+          fecha,
+          notas
+        )
+        values (
+          $1,
+          $2,
+          $3,
+          'ingreso',
+          $4,
+          $5,
+          $6,
+          $7,
+          case when $2::uuid is null then 'confirmado' else 'pendiente' end,
+          coalesce($8::timestamptz, now()),
+          $9
+        )
+        returning id
+      `,
+      [
+        session.storeId,
+        cashSessionId,
+        session.id,
+        categoria,
+        concepto,
+        metodo,
+        monto,
+        fecha,
+        nullableText(body.notas),
+      ],
+    )
+
+    await client.query('commit')
+    return { id: result.rows[0]?.id, cashSessionId }
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 })

@@ -83,6 +83,8 @@ const appliedDiscountLabel = ref('')
 const lastReceipt = ref<SaleReceipt | null>(null)
 const cart = ref<CartLine[]>([])
 const saleSaveError = ref('')
+const saleSaving = ref(false)
+const checkoutOperationId = ref('')
 const pendingSales = ref(0)
 const syncingSales = ref(false)
 const syncSalesError = ref('')
@@ -421,88 +423,104 @@ function chargeSale() {
   }
 
   resetCheckout()
+  if (saleMode.value === 'venta') {
+    checkoutOperationId.value = offlineSales.createOperationId(session.value?.storeId)
+  }
   receivedAmount.value = total.value
   checkoutOpen.value = true
   nextTick(() => checkoutScroll.value?.scrollTo({ top: 0 }))
 }
 
 async function confirmCharge() {
-  if (checkoutInvalid.value) {
+  if (checkoutInvalid.value || saleSaving.value) {
     return
   }
 
-  let receipt = buildSaleReceipt()
-  saleSaveError.value = ''
+  saleSaving.value = true
 
-  if (receipt.mode === 'venta') {
-    const clientOperationId = offlineSales.createOperationId(session.value?.storeId)
-    const occurredAt = receipt.date.toISOString()
-    receipt = {
-      ...receipt,
-      number: clientOperationId,
-    }
+  try {
+    let receipt = buildSaleReceipt()
+    saleSaveError.value = ''
 
-    try {
-      const saleResult = await cashRegister.registerSale({ ...receipt, clientOperationId, occurredAt })
+    if (receipt.mode === 'venta') {
+      const clientOperationId = checkoutOperationId.value || offlineSales.createOperationId(session.value?.storeId)
+      checkoutOperationId.value = clientOperationId
+      const occurredAt = receipt.date.toISOString()
       receipt = {
         ...receipt,
-        saleId: saleResult.saleId,
-        number: saleResult.saleNumber ?? receipt.number,
-      }
-      catalogStore.applyLocalStock(receipt.items)
-      void catalogStore.saveSaleProductsLocally().catch(() => null)
-      void refreshPendingSales()
-    } catch (error: unknown) {
-      if (!shouldQueuePosSale(error)) {
-        saleSaveError.value = posRequestErrorMessage(error, 'No se pudo registrar la venta. Revisa los datos e intenta nuevamente.')
-        return
-      }
-
-      const storeId = session.value?.storeId
-
-      if (!storeId) {
-        saleSaveError.value = 'No se pudo guardar la venta porque no hay tienda activa.'
-        return
+        number: clientOperationId,
       }
 
       try {
-        await offlineSales.queueCreate(storeId, {
+        const saleResult = await cashRegister.registerSale({
+          ...receipt,
           clientOperationId,
           occurredAt,
-          number: receipt.number,
-          items: receipt.items.map((item) => ({
-            id: item.id,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-          })),
-          paymentLines: receipt.paymentLines,
-          subtotal: receipt.subtotal,
-          discount: receipt.discount,
-          total: receipt.total,
+          cashSessionId: cashRegister.cashSessionId.value ?? undefined,
         })
-      } catch {
-        saleSaveError.value = 'No pudimos guardar la venta. No cierres esta pantalla e intenta nuevamente.'
-        return
+        receipt = {
+          ...receipt,
+          saleId: saleResult.saleId,
+          number: saleResult.saleNumber ?? receipt.number,
+        }
+        catalogStore.applyLocalStock(receipt.items)
+        void catalogStore.saveSaleProductsLocally().catch(() => null)
+        void refreshPendingSales()
+      } catch (error: unknown) {
+        if (!shouldQueuePosSale(error)) {
+          saleSaveError.value = posRequestErrorMessage(error, 'No se pudo registrar la venta. Revisa los datos e intenta nuevamente.')
+          return
+        }
+
+        const storeId = session.value?.storeId
+
+        if (!storeId) {
+          saleSaveError.value = 'No se pudo guardar la venta porque no hay tienda activa.'
+          return
+        }
+
+        try {
+          await offlineSales.queueCreate(storeId, {
+            clientOperationId,
+            cashSessionId: cashRegister.cashSessionId.value ?? undefined,
+            occurredAt,
+            number: receipt.number,
+            items: receipt.items.map((item) => ({
+              id: item.id,
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+            })),
+            paymentLines: receipt.paymentLines,
+            subtotal: receipt.subtotal,
+            discount: receipt.discount,
+            total: receipt.total,
+          })
+        } catch {
+          saleSaveError.value = 'No pudimos guardar la venta. No cierres esta pantalla e intenta nuevamente.'
+          return
+        }
+
+        catalogStore.applyLocalStock(receipt.items)
+        void catalogStore.saveSaleProductsLocally().catch(() => null)
+        await refreshPendingSales()
+        const serverRespondedWithError = (posRequestErrorStatus(error) ?? 0) >= 500
+        offlineNotice.value = serverRespondedWithError
+          ? 'La venta quedó guardada en este equipo. Intentaremos registrarla nuevamente.'
+          : 'La venta quedó guardada en este equipo. La registraremos cuando vuelva la conexión.'
+        syncSalesError.value = serverRespondedWithError
+          ? 'La venta todavía no aparece en caja. Puedes usar Reintentar en unos momentos.'
+          : ''
       }
-
-      catalogStore.applyLocalStock(receipt.items)
-      void catalogStore.saveSaleProductsLocally().catch(() => null)
-      await refreshPendingSales()
-      const serverRespondedWithError = (posRequestErrorStatus(error) ?? 0) >= 500
-      offlineNotice.value = serverRespondedWithError
-        ? 'La venta quedó guardada en este equipo. Intentaremos registrarla nuevamente.'
-        : 'La venta quedó guardada en este equipo. La registraremos cuando vuelva la conexión.'
-      syncSalesError.value = serverRespondedWithError
-        ? 'La venta todavía no aparece en caja. Puedes usar Reintentar en unos momentos.'
-        : ''
     }
-  }
 
-  lastReceipt.value = receipt
-  checkoutOpen.value = false
-  clearSale()
-  receiptOpen.value = true
+    lastReceipt.value = receipt
+    checkoutOpen.value = false
+    clearSale()
+    receiptOpen.value = true
+  } finally {
+    saleSaving.value = false
+  }
 }
 
 // OJO: no reseteamos saleMode aquí. resetCheckout se llama al ABRIR el cobro
@@ -510,6 +528,7 @@ async function confirmCharge() {
 // hacía que el tab volviera a "Venta". El modo se reinicia en clearSale (al
 // terminar/limpiar la venta).
 function resetCheckout() {
+  checkoutOperationId.value = ''
   paymentMethod.value = 'efectivo'
   splitPayment.value = false
   clearSplitPayment()
@@ -974,15 +993,15 @@ async function syncPendingSales() {
     return
   }
 
-  const count = await offlineSales.pendingCount(storeId).catch(() => 0)
-  if (!count) {
-    pendingSales.value = 0
-    return
-  }
-
   syncingSales.value = true
   syncSalesError.value = ''
   try {
+    const count = await offlineSales.pendingCount(storeId).catch(() => 0)
+    if (!count) {
+      pendingSales.value = 0
+      return
+    }
+
     const result = await offlineSales.sync(storeId, (payload) => cashRegister.registerSale(payload))
 
     if (result.failures.length) {
@@ -1845,11 +1864,12 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
       </div>
 
       <footer class="checkout-footer">
-        <Button type="button" label="Cancelar" outlined severity="secondary" @click="checkoutOpen = false" />
+        <Button type="button" label="Cancelar" outlined severity="secondary" :disabled="saleSaving" @click="checkoutOpen = false" />
         <Button
           type="button"
           :label="saleMode === 'venta' ? 'Cobrar y guardar' : 'Guardar cotización'"
-          :disabled="checkoutInvalid"
+          :loading="saleSaving"
+          :disabled="checkoutInvalid || saleSaving"
           @click="confirmCharge"
         />
       </footer>

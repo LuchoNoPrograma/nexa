@@ -2,6 +2,7 @@ import { useOfflineQueue } from '~/composables/offline/useOfflineQueue'
 
 export type PosOfflineSalePayload = {
   clientOperationId: string
+  cashSessionId?: string
   occurredAt?: string
   number: string
   items: Array<{

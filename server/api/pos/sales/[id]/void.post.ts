@@ -1,7 +1,7 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../utils/db'
 import { cleanText, numberOrZero, requireStoreSession } from '../../../../utils/posCatalog'
-import { getCashOverview } from '../../../../utils/posCash'
+import { CASH_LATE_SALE_NOTE, getCashOverview, lockCashSession, refreshClosedCashSessionTotals } from '../../../../utils/posCash'
 
 type VoidSaleBody = {
   reason?: string
@@ -28,11 +28,26 @@ export default defineEventHandler(async (event) => {
   try {
     await client.query('begin')
 
+    const cashSessionLookup = await client.query<{ cashSessionId: string | null }>(
+      `
+        select caja_sesion_id as "cashSessionId"
+        from venta
+        where id = $1
+          and tienda_id = $2
+      `,
+      [saleId, session.storeId],
+    )
+    const cashSessionId = cashSessionLookup.rows[0]?.cashSessionId ?? null
+    if (cashSessionId) {
+      await lockCashSession(client, cashSessionId)
+    }
+
     const saleResult = await client.query<{
       id: string
       status: string
       number: string | null
       cashSessionStatus: string | null
+      lateReconciled: boolean
       ownerId: string | null
     }>(
       `
@@ -41,6 +56,13 @@ export default defineEventHandler(async (event) => {
           v.estado as status,
           v.numero as number,
           cs.estado as "cashSessionStatus",
+          exists (
+            select 1
+            from caja_movimiento cm
+            where cm.venta_id = v.id
+              and cm.tienda_id = v.tienda_id
+              and cm.notas = $3
+          ) as "lateReconciled",
           t.owner_id as "ownerId"
         from venta v
         join tienda t on t.id = v.tienda_id
@@ -49,7 +71,7 @@ export default defineEventHandler(async (event) => {
           and v.tienda_id = $2
         for update of v
       `,
-      [saleId, session.storeId],
+      [saleId, session.storeId, CASH_LATE_SALE_NOTE],
     )
 
     const sale = saleResult.rows[0]
@@ -70,7 +92,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 409, statusMessage: 'Solo se pueden anular ventas pagadas.' })
     }
 
-    if (sale.cashSessionStatus && sale.cashSessionStatus !== 'abierta') {
+    if (sale.cashSessionStatus && sale.cashSessionStatus !== 'abierta' && !sale.lateReconciled) {
       throw createError({ statusCode: 409, statusMessage: 'No se puede anular una venta de una caja ya cerrada.' })
     }
 
@@ -80,23 +102,36 @@ export default defineEventHandler(async (event) => {
     const itemResult = await client.query<{
       productId: string | null
       kind: string
-      quantity: number
+      restockQuantity: number
       cost: number
     }>(
       `
         select
           producto_id as "productId",
           tipo_producto as kind,
-          cantidad::float as quantity,
+          coalesce((
+            select greatest(im.stock_anterior - im.stock_nuevo, 0)
+            from inventario_movimiento im
+            where im.venta_id = vi.venta_id
+              and im.producto_id = vi.producto_id
+              and im.origen = 'venta'
+            order by im.created_at
+            limit 1
+          ), cantidad)::float as "restockQuantity",
           costo_unitario::float as cost
-        from venta_item
-        where venta_id = $1
+        from venta_item vi
+        where vi.venta_id = $1
       `,
       [sale.id],
     )
 
     for (const item of itemResult.rows) {
       if (!item.productId || item.kind === 'servicio') {
+        continue
+      }
+
+      const quantity = numberOrZero(item.restockQuantity)
+      if (quantity <= 0) {
         continue
       }
 
@@ -112,7 +147,6 @@ export default defineEventHandler(async (event) => {
       )
 
       const previousStock = Number(productResult.rows[0]?.stock ?? 0)
-      const quantity = numberOrZero(item.quantity)
       const nextStock = previousStock + quantity
 
       await client.query(
@@ -181,6 +215,10 @@ export default defineEventHandler(async (event) => {
       `,
       [session.storeId, sale.id, session.id, reason],
     )
+
+    if (cashSessionId && sale.cashSessionStatus === 'cerrada') {
+      await refreshClosedCashSessionTotals(client, session.storeId, cashSessionId)
+    }
 
     const overview = await getCashOverview(client, session.storeId)
     await client.query('commit')

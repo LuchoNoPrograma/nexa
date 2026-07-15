@@ -19,10 +19,12 @@ export type PosCashMovement = {
   amount: number
   source: PosCashMovementSource
   status: PosCashMovementStatus
+  canVoid?: boolean
   note?: string
 }
 
 export type PosCashProductSale = {
+  productId: string | null
   name: string
   qty: number
   total: number
@@ -42,6 +44,7 @@ type PosSaleLine = {
 
 export type RegisterSaleInput = {
   clientOperationId?: string
+  cashSessionId?: string
   occurredAt?: string
   number: string
   items: PosSaleLine[]
@@ -52,6 +55,7 @@ export type RegisterSaleInput = {
 }
 
 type CashSessionPayload = {
+  id: string
   status: PosCashStatus
   openingFloat: number
   expectedCash: number
@@ -81,6 +85,7 @@ export const useCashStore = defineStore('cash', () => {
   const movements = ref<PosCashMovement[]>([])
   const productSales = ref<PosCashProductSale[]>([])
   const cashSession = ref<CashSessionPayload | null>(null)
+  const cashSessionId = ref<string | null>(null)
   const isLoading = ref(false)
   const loadedAt = ref(0)
   let pendingRequest: Promise<void> | null = null
@@ -92,13 +97,14 @@ export const useCashStore = defineStore('cash', () => {
 
   function applyOverview(overview: CashOverviewPayload) {
     cashSession.value = overview.session
+    cashSessionId.value = overview.session?.id ?? null
     cashStatus.value = overview.session?.status ?? 'cerrada'
     movements.value = overview.movements
     productSales.value = overview.productSales
     loadedAt.value = Date.now()
 
     if (sessionStore.session?.storeId) {
-      void offlineCash.saveStatus(sessionStore.session.storeId, cashStatus.value).catch(() => null)
+      void offlineCash.saveStatus(sessionStore.session.storeId, cashStatus.value, cashSessionId.value).catch(() => null)
     }
   }
 
@@ -134,12 +140,16 @@ export const useCashStore = defineStore('cash', () => {
           throw error
         }
 
-        const localStatus = await offlineCash.getStatus(storeId)
+        const [localStatus, localCashSessionId] = await Promise.all([
+          offlineCash.getStatus(storeId),
+          offlineCash.getSessionId(storeId),
+        ])
         if (!localStatus) {
           throw error
         }
 
         cashStatus.value = localStatus
+        cashSessionId.value = localCashSessionId
       })
       .finally(() => {
         if (requestVersion !== version) {
@@ -212,6 +222,7 @@ export const useCashStore = defineStore('cash', () => {
     movements.value = []
     productSales.value = []
     cashSession.value = null
+    cashSessionId.value = null
     isLoading.value = false
     loadedAt.value = 0
     pendingRequest = null
@@ -220,6 +231,7 @@ export const useCashStore = defineStore('cash', () => {
   return {
     cashStatus,
     cashSession,
+    cashSessionId,
     movements,
     productSales,
     isLoading,

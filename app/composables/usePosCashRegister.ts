@@ -3,11 +3,12 @@ import { useCashStore } from '~/stores/cash'
 
 export function usePosCashRegister() {
   const store = useCashStore()
-  const { cashStatus, cashSession, movements, productSales, isLoading } = storeToRefs(store)
+  const { cashStatus, cashSession, cashSessionId, movements, productSales, isLoading } = storeToRefs(store)
 
   return {
     cashStatus,
     cashSession,
+    cashSessionId,
     movements,
     productSales,
     isLoading,

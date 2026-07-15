@@ -1,7 +1,7 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../../utils/db'
 import { cleanText, requireStoreSession } from '../../../../../utils/posCatalog'
-import { getCashOverview } from '../../../../../utils/posCash'
+import { getCashOverview, lockCashSession } from '../../../../../utils/posCash'
 
 type VoidMovementBody = {
   reason?: string
@@ -27,6 +27,20 @@ export default defineEventHandler(async (event) => {
 
   try {
     await client.query('begin')
+
+    const cashSessionLookup = await client.query<{ cashSessionId: string | null }>(
+      `
+        select caja_sesion_id as "cashSessionId"
+        from caja_movimiento
+        where id = $1
+          and tienda_id = $2
+      `,
+      [movementId, session.storeId],
+    )
+    const cashSessionId = cashSessionLookup.rows[0]?.cashSessionId ?? null
+    if (cashSessionId) {
+      await lockCashSession(client, cashSessionId)
+    }
 
     const result = await client.query<{
       status: string

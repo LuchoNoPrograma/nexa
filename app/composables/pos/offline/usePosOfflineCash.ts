@@ -6,11 +6,18 @@ function cashStatusKey(storeId: string) {
   return `${storeId}:cashStatus`
 }
 
+function cashSessionIdKey(storeId: string) {
+  return `${storeId}:cashSessionId`
+}
+
 export function usePosOfflineCash() {
   const offlineDb = useOfflineDb()
 
-  async function saveStatus(storeId: string, status: PosCashStatus) {
-    await offlineDb.putMeta(cashStatusKey(storeId), status)
+  async function saveStatus(storeId: string, status: PosCashStatus, sessionId: string | null) {
+    await Promise.all([
+      offlineDb.putMeta(cashStatusKey(storeId), status),
+      offlineDb.putMeta(cashSessionIdKey(storeId), sessionId),
+    ])
   }
 
   async function getStatus(storeId: string) {
@@ -18,8 +25,14 @@ export function usePosOfflineCash() {
     return status === 'abierta' || status === 'cerrada' ? status : null
   }
 
+  async function getSessionId(storeId: string) {
+    const sessionId = await offlineDb.getMeta<unknown>(cashSessionIdKey(storeId))
+    return typeof sessionId === 'string' && sessionId ? sessionId : null
+  }
+
   return {
     saveStatus,
     getStatus,
+    getSessionId,
   }
 }

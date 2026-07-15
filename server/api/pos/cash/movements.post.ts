@@ -1,7 +1,7 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { cleanText, nullableText, numberOrZero, requireStoreAccess } from '../../../utils/posCatalog'
-import { getCashOverview, requireOpenCashSession } from '../../../utils/posCash'
+import { getCashOverview, requireLockedOpenCashSession } from '../../../utils/posCash'
 
 const movementTypes = ['Ingreso', 'Egreso'] as const
 const paymentMethods = ['Efectivo', 'QR'] as const
@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     await client.query('begin')
-    const cashSessionId = await requireOpenCashSession(client, session.storeId)
+    const cashSessionId = await requireLockedOpenCashSession(client, session.storeId)
 
     await client.query(
       `

@@ -23,6 +23,7 @@ const currencyFormatter = new Intl.NumberFormat('es-BO', {
 })
 
 const cashRegister = usePosCashRegister()
+const offlineSales = usePosOfflineSales()
 const session = usePosSession()
 const catalogStore = useCatalogStore()
 const saleVoidDialog = useSaleVoidDialog()
@@ -34,9 +35,12 @@ const registerName = ref('Caja principal')
 const openedBy = ref('Responsable de caja')
 const openedAt = ref('')
 const openingFloat = ref(0)
-const countedCash = ref(0)
+const countedCash = ref<number | null>(null)
 const desiredFloat = ref(0)
 const closingNote = ref('')
+const closeError = ref('')
+const closingCash = ref(false)
+const pendingCloseConfirmed = ref(false)
 const closedAt = ref('')
 const lastPrintedAt = ref('')
 const cashLoadError = ref('')
@@ -124,7 +128,7 @@ watch(() => cashRegister.cashSession.value, (cashSession) => {
     openedBy.value = session.value?.name?.trim() || 'Responsable de caja'
     openedAt.value = ''
     openingFloat.value = 0
-    countedCash.value = 0
+    countedCash.value = null
     desiredFloat.value = 0
     closedAt.value = ''
     closingNote.value = ''
@@ -133,7 +137,7 @@ watch(() => cashRegister.cashSession.value, (cashSession) => {
 
   cashStatus.value = cashSession.status
   openingFloat.value = cashSession.openingFloat
-  countedCash.value = cashSession.countedCash ?? (cashSession.status === 'cerrada' ? cashSession.expectedCash : cashSession.openingFloat)
+  countedCash.value = cashSession.status === 'cerrada' ? cashSession.countedCash : null
   desiredFloat.value = cashSession.openingFloat
   openedAt.value = cashSession.openedAt
   closedAt.value = cashSession.closedAt ?? ''
@@ -158,17 +162,24 @@ const expectedCash = computed(() => {
   return openingFloat.value + cashIncome.value - cashOutcome.value
 })
 
-const countedDifference = computed(() => Number(countedCash.value || 0) - expectedCash.value)
+const hasCountedCash = computed(() => countedCash.value !== null && Number.isFinite(Number(countedCash.value)))
+const countedDifference = computed(() => hasCountedCash.value ? Number(countedCash.value) - expectedCash.value : 0)
 
 const totalSales = computed(() => movements.value
   .filter((movement) => movement.type === 'Ingreso' && movement.source === 'venta')
   .reduce((sum, movement) => sum + movement.amount, 0))
 
-const salesReadyToClose = computed(() => movements.value
-  .filter((movement) => movement.source === 'venta' && movement.status === 'por_cerrar').length)
+const salesInTurn = computed(() => new Set(movements.value
+  .filter((movement) => movement.source === 'venta')
+  .map((movement) => movement.saleId ?? movement.id)).size)
+const salesReadyToClose = computed(() => new Set(movements.value
+  .filter((movement) => movement.source === 'venta' && movement.status === 'por_cerrar')
+  .map((movement) => movement.saleId ?? movement.id)).size)
 const canVoidSales = computed(() => session.value?.roles.includes('propietario') ?? false)
 
-const depositAmount = computed(() => Math.max(Number(countedCash.value || 0) - Number(desiredFloat.value || 0), 0))
+const depositAmount = computed(() => hasCountedCash.value
+  ? Math.max(Number(countedCash.value) - Number(desiredFloat.value || 0), 0)
+  : 0)
 
 const productUnits = computed(() => productSales.value.reduce((sum, item) => sum + item.qty, 0))
 const productTotal = computed(() => productSales.value.reduce((sum, item) => sum + item.total, 0))
@@ -180,7 +191,7 @@ const { open: abrirHaru } = useHaruChat()
 
 const recomendaciones = computed<Recomendacion[]>(() => recomendacionesCaja({
   cajaAbierta: cashStatus.value === 'abierta',
-  numVentas: movements.value.filter(m => m.type === 'Ingreso' && m.source === 'venta').length,
+  numVentas: salesInTurn.value,
   ventasTurno: totalSales.value,
   ventasPorCerrar: salesReadyToClose.value,
   egresosTurno: movements.value.filter(m => m.type === 'Egreso').reduce((sum, m) => sum + m.amount, 0),
@@ -202,9 +213,9 @@ const paymentBreakdown = computed(() => paymentMethods.map((method) => {
 // Los 4 accesos grandes de la caja (estilo POS profesional).
 const cashTools = computed<{ key: string; label: string; desc: string; icon: string; tone: string; action: () => void }[]>(() => [
   { key: 'movimiento', label: 'Entrada / salida', desc: 'Dinero que entra o sale', icon: 'fluent-emoji:money-with-wings', tone: 'green', action: () => openMovementDialog('Ingreso') },
-  { key: 'producto', label: 'Reporte por producto', desc: 'Qué y cuánto se vendió hoy', icon: 'fluent-emoji:package', tone: 'blue', action: () => { productDialogVisible.value = true } },
+  { key: 'producto', label: 'Reporte por producto', desc: 'Qué y cuánto se vendió en el turno', icon: 'fluent-emoji:package', tone: 'blue', action: () => { productDialogVisible.value = true } },
   { key: 'arqueo', label: 'Arqueo de caja', desc: 'Cuenta el efectivo físico', icon: 'fluent-emoji:abacus', tone: 'amber', action: () => { arqueoDialogVisible.value = true } },
-  { key: 'cierre', label: 'Cerrar turno', desc: 'Revisa y termina caja', icon: 'fluent-emoji:check-mark-button', tone: 'slate', action: () => { closeDialogVisible.value = true } },
+  { key: 'cierre', label: 'Cerrar turno', desc: 'Revisa y termina caja', icon: 'fluent-emoji:check-mark-button', tone: 'slate', action: () => { closeError.value = ''; pendingCloseConfirmed.value = false; closeDialogVisible.value = true } },
 ])
 
 const closeReportRows = computed(() => [
@@ -212,8 +223,8 @@ const closeReportRows = computed(() => [
   { label: 'Ventas y entradas en efectivo', value: money(cashIncome.value) },
   { label: 'Salidas en efectivo', value: money(cashOutcome.value) },
   { label: 'Dinero esperado en caja', value: money(expectedCash.value), strong: true },
-  { label: 'Efectivo contado', value: money(Number(countedCash.value || 0)), strong: true },
-  { label: 'Diferencia', value: money(countedDifference.value), strong: true, tone: differenceTone.value },
+  { label: 'Efectivo contado', value: hasCountedCash.value ? money(Number(countedCash.value)) : 'Pendiente', strong: true },
+  { label: 'Diferencia', value: hasCountedCash.value ? money(countedDifference.value) : 'Pendiente', strong: true, tone: differenceTone.value },
   { label: 'Dejar en caja', value: money(Number(desiredFloat.value || 0)) },
   { label: 'Retirar / depositar', value: money(depositAmount.value) },
 ])
@@ -227,6 +238,10 @@ const sessionDuration = computed(() => {
 })
 
 const differenceTone = computed(() => {
+  if (!hasCountedCash.value) {
+    return 'neutral'
+  }
+
   const absDifference = Math.abs(countedDifference.value)
 
   if (absDifference <= 0.01) {
@@ -241,6 +256,10 @@ const differenceTone = computed(() => {
 })
 
 const differenceLabel = computed(() => {
+  if (!hasCountedCash.value) {
+    return 'Conteo pendiente'
+  }
+
   if (Math.abs(countedDifference.value) <= 0.01) {
     return 'Caja cuadrada'
   }
@@ -249,6 +268,10 @@ const differenceLabel = computed(() => {
 })
 
 const differenceHelp = computed(() => {
+  if (!hasCountedCash.value) {
+    return 'Ingresa el efectivo contado para comparar el turno.'
+  }
+
   if (Math.abs(countedDifference.value) <= 0.01) {
     return 'El conteo coincide con lo esperado.'
   }
@@ -299,7 +322,7 @@ async function openCashSession() {
   registerName.value = openingForm.registerName.trim() || 'Caja principal'
   openedBy.value = openingForm.openedBy.trim() || 'Responsable de caja'
   openingFloat.value = Number(openingForm.openingFloat || 0)
-  countedCash.value = openingFloat.value
+  countedCash.value = null
   desiredFloat.value = openingFloat.value
   openedAt.value = currentTime.value
   closedAt.value = ''
@@ -380,12 +403,37 @@ async function voidManualMovement(movement: CashMovement) {
 }
 
 async function closeCashSession(printAfterClose = false) {
-  await cashRegister.closeTurn(Number(countedCash.value || 0), closingNote.value)
-  closedAt.value = currentTime.value
-  closeDialogVisible.value = false
+  if (!hasCountedCash.value || closingCash.value) {
+    return
+  }
 
-  if (printAfterClose) {
-    printClosureReport()
+  closingCash.value = true
+  closeError.value = ''
+
+  try {
+    const storeId = session.value?.storeId
+    if (storeId) {
+      const pending = await offlineSales.pendingCount(storeId)
+      if (pending && !pendingCloseConfirmed.value) {
+        pendingCloseConfirmed.value = true
+        closeError.value = `Hay ${pending} venta${pending === 1 ? '' : 's'} pendiente${pending === 1 ? '' : 's'} de sincronizar. Intenta registrarlas desde Ventas. Si ya las revisaste, vuelve a pulsar “Cerrar e imprimir”; quedarán pendientes de conciliación con su turno original.`
+        return
+      }
+    }
+
+    await cashRegister.closeTurn(Number(countedCash.value), closingNote.value)
+    pendingCloseConfirmed.value = false
+    closedAt.value = currentTime.value
+    closeDialogVisible.value = false
+
+    if (printAfterClose) {
+      printClosureReport()
+    }
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    closeError.value = dataError?.statusMessage ?? 'No se pudo cerrar el turno. Revisa la conexión e intenta nuevamente.'
+  } finally {
+    closingCash.value = false
   }
 }
 
@@ -869,7 +917,7 @@ async function downloadProductReport() {
 <template>
   <div class="cash-shell">
     <div class="cash-page">
-    <!-- Encabezado: estado del turno + total del día bien visible -->
+    <!-- Encabezado: estado del turno + total del turno bien visible -->
     <section class="cash-top">
       <div class="cash-state" :class="cashStatus === 'abierta' ? 'is-open' : 'is-closed'">
         <span class="state-dot" aria-hidden="true" />
@@ -923,12 +971,12 @@ async function downloadProductReport() {
       {{ cashLoadError }}
     </Message>
 
-    <!-- Movimientos del día: lista simple y legible -->
+    <!-- Movimientos del turno: lista simple y legible -->
     <section class="panel moves-panel">
       <header class="panel-head">
         <div>
           <span>Registro del turno</span>
-          <h2>Movimientos de hoy</h2>
+          <h2>Movimientos del turno</h2>
         </div>
         <Button
           type="button"
@@ -951,7 +999,7 @@ async function downloadProductReport() {
             {{ movementSign(movement.type) }} {{ money(movement.amount) }}
           </strong>
           <Button
-            v-if="canVoidSales && movement.saleId && cashStatus === 'abierta'"
+            v-if="canVoidSales && movement.saleId && (cashStatus === 'abierta' || movement.canVoid)"
             type="button"
             icon="pi pi-ban"
             label="Anular"
@@ -1054,7 +1102,7 @@ async function downloadProductReport() {
         </div>
 
         <ul class="product-list">
-          <li v-for="(item, index) in productRanking" :key="item.name">
+          <li v-for="(item, index) in productRanking" :key="`${item.productId ?? 'sin-id'}-${item.name}`">
             <b>{{ index + 1 }}</b>
             <span class="product-main">
               <strong>{{ item.name }}</strong>
@@ -1091,12 +1139,12 @@ async function downloadProductReport() {
 
         <div class="report-rows">
           <div><span>Dinero esperado</span><strong>{{ money(expectedCash) }}</strong></div>
-          <div><span>Efectivo contado</span><strong>{{ money(Number(countedCash || 0)) }}</strong></div>
+          <div><span>Efectivo contado</span><strong>{{ hasCountedCash ? money(Number(countedCash)) : 'Pendiente' }}</strong></div>
         </div>
 
         <div class="difference-box" :class="`is-${differenceTone}`">
           <span>{{ differenceLabel }}</span>
-          <strong>{{ formatSigned(countedDifference) }}</strong>
+          <strong>{{ hasCountedCash ? formatSigned(countedDifference) : '--' }}</strong>
           <small>{{ differenceHelp }}</small>
         </div>
       </div>
@@ -1108,11 +1156,11 @@ async function downloadProductReport() {
           icon="pi pi-download"
           outlined
           :loading="reportPdfDownloading === 'arqueo'"
-          :disabled="!!reportPdfDownloading"
+          :disabled="!!reportPdfDownloading || !hasCountedCash"
           @click="downloadArqueoReport"
         />
-        <Button type="button" label="Imprimir arqueo" icon="pi pi-print" outlined @click="printArqueoReport" />
-        <Button type="button" label="Continuar al cierre" icon="pi pi-arrow-right" severity="danger" :disabled="cashStatus === 'cerrada'" @click="arqueoDialogVisible = false; closeDialogVisible = true" />
+        <Button type="button" label="Imprimir arqueo" icon="pi pi-print" outlined :disabled="!hasCountedCash" @click="printArqueoReport" />
+        <Button type="button" label="Continuar al cierre" icon="pi pi-arrow-right" severity="danger" :disabled="cashStatus === 'cerrada' || !hasCountedCash" @click="arqueoDialogVisible = false; closeError = ''; pendingCloseConfirmed = false; closeDialogVisible = true" />
       </template>
     </Dialog>
 
@@ -1121,6 +1169,9 @@ async function downloadProductReport() {
       <div class="close-content">
         <Message severity="warn" icon="pi pi-exclamation-triangle">
           Revisa el dinero contado antes de cerrar. Luego el turno quedará guardado.
+        </Message>
+        <Message v-if="closeError" severity="error" icon="pi pi-exclamation-circle">
+          {{ closeError }}
         </Message>
 
         <div class="close-fields">
@@ -1156,8 +1207,8 @@ async function downloadProductReport() {
           label="Cerrar e imprimir"
           icon="pi pi-print"
           severity="danger"
-          :loading="reportPdfDownloading === 'cierre'"
-          :disabled="!!reportPdfDownloading || cashStatus === 'cerrada'"
+          :loading="closingCash"
+          :disabled="!!reportPdfDownloading || closingCash || cashStatus === 'cerrada' || !hasCountedCash"
           @click="closeCashSession(true)"
         />
       </template>
@@ -1685,6 +1736,12 @@ async function downloadProductReport() {
 
 .difference-box small {
   line-height: 1.35;
+}
+
+.difference-box.is-neutral {
+  border-color: #dbe3dc;
+  background: #f8faf8;
+  color: #5c6b60;
 }
 
 .difference-box.is-green {

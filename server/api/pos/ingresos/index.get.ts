@@ -6,7 +6,7 @@ import { requireStoreAccess } from '../../../utils/posCatalog'
 // (caja_movimiento tipo ingreso que no son venta ni compra: reembolsos, aportes,
 // movimientos manuales). Se incluyen apenas se registran (pendiente o confirmado),
 // para que el dueño vea de inmediato lo que cargó, no solo al cerrar el turno.
-// Se devuelve todo en una sola lectura para alternar Hoy/Semana/Mes sin re-pedir.
+// Se devuelve todo en una sola lectura para alternar Día/Semana/Mes sin re-pedir.
 
 const DIAS_DOW = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -16,7 +16,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
 const INGRESOS_CTE = `
   select v.fecha, v.total as monto, 'venta'::text as origen
   from venta v
-  where v.tienda_id = $1 and v.estado not in ('anulada', 'cotizacion')
+  where v.tienda_id = $1 and v.estado = 'pagada'
   union all
   select cm.fecha, cm.monto, 'otro_ingreso'::text as origen
   from caja_movimiento cm
@@ -58,9 +58,20 @@ export default defineEventHandler(async (event) => {
             vi.nombre_producto as product,
             coalesce(c.nombre, 'General') as category,
             vi.cantidad::float as qty,
-            vi.precio_unitario::float as "unitPrice",
-            vi.subtotal::float as total,
+            (
+              case
+                when v.subtotal > 0 then vi.precio_unitario * v.total / v.subtotal
+                else vi.precio_unitario
+              end
+            )::float as "unitPrice",
+            (
+              case
+                when v.subtotal > 0 then vi.subtotal * v.total / v.subtotal
+                else vi.subtotal
+              end
+            )::float as total,
             case
+              when pm.metodo = 'mixto' then 'Mixto'
               when pm.metodo ilike 'qr' then 'QR'
               when pm.metodo ilike 'transferencia' or pm.metodo ilike 'tarjeta' then 'Transferencia'
               else 'Efectivo'
@@ -71,11 +82,19 @@ export default defineEventHandler(async (event) => {
           left join producto p on p.id = vi.producto_id
           left join categoria c on c.id = p.categoria_id
           left join lateral (
-            select metodo from caja_movimiento cm where cm.venta_id = v.id limit 1
+            select
+              case
+                when count(distinct cm.metodo) > 1 then 'mixto'
+                else min(cm.metodo)
+              end as metodo
+            from caja_movimiento cm
+            where cm.venta_id = v.id
+              and cm.estado <> 'anulado'
           ) pm on true
           where v.tienda_id = $1
-            and v.estado not in ('anulada', 'cotizacion')
+            and v.estado = 'pagada'
             and v.fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
+            and v.fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz'
           union all
           select
             cm.id as "movementId",
@@ -98,6 +117,7 @@ export default defineEventHandler(async (event) => {
             and cm.venta_id is null
             and cm.compra_id is null
             and cm.fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
+            and cm.fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz'
         ) t
         order by orden
       `,
@@ -167,9 +187,10 @@ export default defineEventHandler(async (event) => {
         from venta_item vi
         join venta v on v.id = vi.venta_id
         where v.tienda_id = $1
-          and v.estado not in ('anulada', 'cotizacion')
+          and v.estado = 'pagada'
           and v.fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
-        group by vi.nombre_producto
+          and v.fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz'
+        group by vi.producto_id, vi.nombre_producto
         order by qty desc
         limit 1
       `,
@@ -187,10 +208,21 @@ export default defineEventHandler(async (event) => {
       `
         with ingresos as (${INGRESOS_CTE})
         select
-          (select count(*) from ingresos where origen = 'venta' and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz')::int as ventas_hoy_count,
-          (select count(*) from ingresos where fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz')::int as movimientos_hoy_count,
-          coalesce((select sum(monto) from ingresos where origen = 'venta' and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as ventas_hoy_total,
-          coalesce((select sum(monto) from ingresos where origen = 'otro_ingreso' and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as otros_hoy_total,
+          (select count(*) from ingresos
+            where origen = 'venta'
+              and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
+              and fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz')::int as ventas_hoy_count,
+          (select count(*) from ingresos
+            where fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
+              and fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz')::int as movimientos_hoy_count,
+          coalesce((select sum(monto) from ingresos
+            where origen = 'venta'
+              and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
+              and fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz'), 0)::float as ventas_hoy_total,
+          coalesce((select sum(monto) from ingresos
+            where origen = 'otro_ingreso'
+              and fecha >= date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'
+              and fecha < (date_trunc('day', now() at time zone 'America/La_Paz') + interval '1 day') at time zone 'America/La_Paz'), 0)::float as otros_hoy_total,
           coalesce((select sum(monto) from ingresos
             where fecha >= (date_trunc('day', now() at time zone 'America/La_Paz') - interval '1 day') at time zone 'America/La_Paz'
               and fecha < date_trunc('day', now() at time zone 'America/La_Paz') at time zone 'America/La_Paz'), 0)::float as ayer,

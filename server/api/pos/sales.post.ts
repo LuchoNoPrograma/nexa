@@ -1,7 +1,7 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { cleanText, numberOrZero, requireStoreAccess } from '../../utils/posCatalog'
-import { getCashOverview, requireOpenCashSession } from '../../utils/posCash'
+import { CASH_LATE_SALE_NOTE, getCashOverview, refreshClosedCashSessionTotals, resolveCashSessionForSale } from '../../utils/posCash'
 import { tieneAcceso } from '~~/shared/utils/acceso'
 
 type SaleItemBody = {
@@ -18,6 +18,7 @@ type PaymentLineBody = {
 
 type SaleBody = {
   clientOperationId?: string
+  cashSessionId?: string
   occurredAt?: string
   number?: string
   subtotal?: number
@@ -30,6 +31,7 @@ type SaleBody = {
 const MAX_SALE_ITEMS = 100
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
 const MAX_OFFLINE_AGE_MS = 365 * 24 * 60 * 60 * 1000
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
@@ -41,7 +43,7 @@ function sameMoney(left: number, right: number) {
 
 function saleOccurredAt(value: unknown, clientOperationId: string) {
   const explicitTime = typeof value === 'string' ? Date.parse(value) : Number.NaN
-  const operationTime = Number(clientOperationId.match(/^OFF-[^-]+-(\d{13})-/)?.[1] ?? Number.NaN)
+  const operationTime = Number(clientOperationId.match(/-(\d{13})-[^-]+$/)?.[1] ?? Number.NaN)
   const timestamp = Number.isFinite(explicitTime) ? explicitTime : operationTime
   const now = Date.now()
 
@@ -102,11 +104,17 @@ export default defineEventHandler(async (event) => {
       return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
     }
 
-    const cashSessionId = await requireOpenCashSession(client, session.storeId)
-
-    // Serializa la numeracion dentro de la caja para evitar que dos cobros
-    // simultaneos calculen el mismo count(*) + 1.
-    await client.query('select pg_advisory_xact_lock(hashtext($1))', [cashSessionId])
+    const requestedCashSessionId = cleanText(body.cashSessionId) || undefined
+    if (requestedCashSessionId && !UUID_PATTERN.test(requestedCashSessionId)) {
+      throw createError({ statusCode: 400, statusMessage: 'El turno de caja indicado no es válido.' })
+    }
+    const cashSession = await resolveCashSessionForSale(
+      client,
+      session.storeId,
+      occurredAt,
+      requestedCashSessionId,
+    )
+    const cashSessionId = cashSession.id
 
     const saleCodeResult = await client.query<{ sequence: number; saleTime: string }>(
       `
@@ -355,10 +363,28 @@ export default defineEventHandler(async (event) => {
             fecha,
             notas
           )
-          values ($1, $2, $3, $4, $5, 'ingreso', 'venta', $6, $7, $8, 'pendiente', $9, 'Listo para revisar al cerrar caja')
+          values ($1, $2, $3, $4, $5, 'ingreso', 'venta', $6, $7, $8, $9, $10, $11)
         `,
-        [session.storeId, cashSessionId, paymentResult.rows[0].id, saleId, session.id, `Venta ${cashSaleCode}`, method, payment.amount, occurredAt],
+        [
+          session.storeId,
+          cashSessionId,
+          paymentResult.rows[0].id,
+          saleId,
+          session.id,
+          `Venta ${cashSaleCode}`,
+          method,
+          payment.amount,
+          cashSession.status === 'cerrada' ? 'confirmado' : 'pendiente',
+          occurredAt,
+          cashSession.status === 'cerrada'
+            ? CASH_LATE_SALE_NOTE
+            : 'Listo para revisar al cerrar caja',
+        ],
       )
+    }
+
+    if (cashSession.status === 'cerrada') {
+      await refreshClosedCashSessionTotals(client, session.storeId, cashSessionId)
     }
 
     const overview = await getCashOverview(client, session.storeId)
