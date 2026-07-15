@@ -54,7 +54,7 @@ const {
 } = storeToRefs(catalogStore)
 const search = ref('')
 const discount = ref(0)
-const catalogView = ref<'grid' | 'table'>('grid')
+const catalogView = ref<'grid' | 'table'>('table')
 const selectedProduct = ref<Product | null>(null)
 const productInfoOpen = ref(false)
 const checkoutOpen = ref(false)
