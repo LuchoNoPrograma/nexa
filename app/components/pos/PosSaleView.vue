@@ -1154,26 +1154,28 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         </div>
       </Popover>
 
-      <Message v-if="offlineNotice" severity="warn" size="small" icon="pi pi-wifi">
-        {{ offlineNotice }}
-      </Message>
+      <div v-if="offlineNotice || syncSalesError || pendingSales" class="catalog-alerts" role="status">
+        <Message v-if="offlineNotice" severity="warn" size="small" icon="pi pi-wifi">
+          {{ offlineNotice }}
+        </Message>
 
-      <Message v-if="syncSalesError" severity="error" size="small" icon="pi pi-exclamation-triangle">
-        {{ syncSalesError }}
-      </Message>
+        <Message v-if="syncSalesError" severity="error" size="small" icon="pi pi-exclamation-triangle">
+          {{ syncSalesError }}
+        </Message>
 
-      <Message v-if="pendingSales" severity="info" size="small" icon="pi pi-cloud-upload">
-        {{ pendingSales }} venta{{ pendingSales === 1 ? '' : 's' }} guardada{{ pendingSales === 1 ? '' : 's' }} en este equipo, aún sin registrar en caja.
-        <Button
-          type="button"
-          text
-          size="small"
-          icon="pi pi-refresh"
-          :label="syncingSales ? 'Registrando...' : 'Reintentar'"
-          :loading="syncingSales"
-          @click="syncPendingSales"
-        />
-      </Message>
+        <Message v-if="pendingSales" severity="info" size="small" icon="pi pi-cloud-upload">
+          {{ pendingSales }} venta{{ pendingSales === 1 ? '' : 's' }} guardada{{ pendingSales === 1 ? '' : 's' }} en este equipo, aún sin registrar en caja.
+          <Button
+            type="button"
+            text
+            size="small"
+            icon="pi pi-refresh"
+            :label="syncingSales ? 'Registrando...' : 'Reintentar'"
+            :loading="syncingSales"
+            @click="syncPendingSales"
+          />
+        </Message>
+      </div>
 
       <div class="catalog-scroll" :class="{ 'is-table': catalogView === 'table' }">
         <!-- Cargando catálogo -->
@@ -2019,7 +2021,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   height: calc(100dvh - var(--catalog-sticky-top) - 12px);
   max-height: calc(100dvh - var(--catalog-sticky-top) - 12px);
   min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -2224,10 +2226,31 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .catalog-scroll {
+  grid-row: 4;
   min-height: 0;
   overflow-y: auto;
   padding-right: 3px;
   overscroll-behavior: contain;
+}
+
+.catalog-alerts {
+  display: grid;
+  grid-row: 3;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 0 6px;
+}
+
+.catalog-alerts :deep(.p-message) {
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+}
+
+.catalog-alerts :deep(.p-message-content) {
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  line-height: 1.35;
 }
 
 /* --- Estado vacío / feedback inicial del catálogo --- */
