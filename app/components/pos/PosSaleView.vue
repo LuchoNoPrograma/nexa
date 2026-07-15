@@ -128,6 +128,23 @@ const filteredProducts = computed(() => {
   })
 })
 
+const inventoryNotice = computed(() => {
+  if (saleMode.value !== 'venta') {
+    return ''
+  }
+
+  const line = cart.value.find(item => item.kind !== 'servicio' && item.quantity > item.stock)
+  if (!line) {
+    return ''
+  }
+
+  if (line.stock <= 0) {
+    return `No hay existencias registradas de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
+  }
+
+  return `Solo hay ${line.stock} unidad${line.stock === 1 ? '' : 'es'} registrada${line.stock === 1 ? '' : 's'} de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
+})
+
 const subtotal = computed(() => cart.value.reduce((sum, line) => sum + line.price * line.quantity, 0))
 const total = computed(() => Math.max(subtotal.value - discount.value, 0))
 const productCount = computed(() => cart.value.reduce((sum, line) => sum + line.quantity, 0))
@@ -1164,9 +1181,13 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         </div>
       </Popover>
 
-      <div v-if="offlineNotice || syncSalesError || pendingSales" class="catalog-alerts" role="status">
+      <div v-if="offlineNotice || inventoryNotice || syncSalesError || pendingSales" class="catalog-alerts" role="status">
         <Message v-if="offlineNotice" severity="warn" size="small" icon="pi pi-wifi">
           {{ offlineNotice }}
+        </Message>
+
+        <Message v-if="inventoryNotice" severity="warn" size="small" icon="pi pi-box">
+          {{ inventoryNotice }}
         </Message>
 
         <Message v-if="syncSalesError" severity="error" size="small" icon="pi pi-exclamation-triangle">
