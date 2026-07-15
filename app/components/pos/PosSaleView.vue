@@ -957,11 +957,19 @@ async function syncPendingSales() {
 
     if (result.failures.length) {
       const firstFailure = result.failures[0]
-      const syncedCopy = result.synced
-        ? `${result.synced} venta${result.synced === 1 ? '' : 's'} ya ${result.synced === 1 ? 'quedó registrada' : 'quedaron registradas'}. `
-        : ''
-      const failedCopy = `${result.failures.length} venta${result.failures.length === 1 ? '' : 's'}`
-      syncSalesError.value = `${syncedCopy}No pudimos registrar ${failedCopy}. Motivo: ${firstFailure?.message ?? 'intenta nuevamente'}.`
+      const connectionFailed = shouldQueuePosSale({ status: firstFailure?.status ?? undefined })
+
+      if (connectionFailed) {
+        offlineNotice.value = result.synced
+          ? `${result.synced} venta${result.synced === 1 ? ' quedó registrada' : 's quedaron registradas'}. Las demás siguen guardadas en este equipo.`
+          : 'No hay conexión. Las ventas siguen guardadas en este equipo.'
+      } else {
+        const syncedCopy = result.synced
+          ? `${result.synced} venta${result.synced === 1 ? '' : 's'} ya ${result.synced === 1 ? 'quedó registrada' : 'quedaron registradas'}. `
+          : ''
+        const failedCopy = `${result.failures.length} venta${result.failures.length === 1 ? '' : 's'}`
+        syncSalesError.value = `${syncedCopy}No pudimos registrar ${failedCopy}. Motivo: ${firstFailure?.message ?? 'intenta nuevamente'}.`
+      }
     } else if (result.synced) {
       offlineNotice.value = result.synced === 1
         ? 'La venta pendiente ya quedó registrada.'
