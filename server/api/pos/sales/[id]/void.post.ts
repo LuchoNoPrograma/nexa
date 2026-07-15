@@ -1,7 +1,7 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../../utils/db'
 import { cleanText, numberOrZero, requireStoreSession } from '../../../../utils/posCatalog'
-import { CASH_LATE_SALE_NOTE, getCashOverview, lockCashSession, refreshClosedCashSessionTotals } from '../../../../utils/posCash'
+import { CASH_LATE_SALE_NOTE, getCashOverview, lockCashSession, refreshClosedCashSessionTotals, visibleCashSaleNumber } from '../../../../utils/posCash'
 
 type VoidSaleBody = {
   reason?: string
@@ -96,7 +96,8 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 409, statusMessage: 'No se puede anular una venta de una caja ya cerrada.' })
     }
 
-    const saleLabel = sale.number ? `Venta ${sale.number}` : 'Venta'
+    const saleNumber = visibleCashSaleNumber(sale.number)
+    const saleLabel = saleNumber ? `Venta ${saleNumber}` : 'Venta'
     const note = `Anulación: ${reason}`
 
     const itemResult = await client.query<{

@@ -5,26 +5,18 @@ type SaleDocument = {
   phone: string
   docLabel: string
   number: string
-  dateLabel: string
   seller: string
   items: Array<{
     name: string
     quantity: number
     price: string
     total: string
-    kind?: string
   }>
-  subtotal: string
   discount?: {
-    label: string
     amount: string
   } | null
   total: string
   paymentSummary: string
-  payments: Array<{
-    label: string
-    amount: string
-  }>
   footerNote: string
   footerStrong: string
 }
@@ -114,10 +106,39 @@ function thermalCss() {
     .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
     footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 11px; }
     footer strong { display: block; margin-top: 3px; color: #000; }
+    .ticket.sale-ticket { padding: 2px 4mm 2mm; border: 0; font-size: 11px; line-height: 1.25; }
+    .sale-ticket header { padding-bottom: 4px; }
+    .sale-ticket h1 { font-size: 16px; }
+    .sale-ticket header p { margin-top: 1px; font-size: 10px; white-space: nowrap; }
+    .sale-ticket .doc { margin: 5px 0; padding: 0 0 5px; border: 0; border-bottom: 1px dashed #000; }
+    .sale-ticket .doc strong { margin-top: 2px; font-size: 12px; white-space: nowrap; }
+    .sale-ticket .meta div, .sale-ticket .payment div { display: flex; justify-content: space-between; gap: 8px; }
+    .sale-ticket .meta b { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+    .sale-ticket .section-title { margin: 7px 0 3px; }
+    table.sale-lines { width: 100%; margin-top: 5px; border-collapse: collapse; table-layout: fixed; }
+    table.sale-lines .qty-col { width: 9mm; }
+    table.sale-lines .unit-col { width: 17mm; }
+    table.sale-lines .amount-col { width: 19mm; }
+    table.sale-lines th, table.sale-lines td { padding: 4px 2px; vertical-align: top; }
+    table.sale-lines th:first-child, table.sale-lines td:first-child { padding-left: 0; }
+    table.sale-lines th:last-child, table.sale-lines td:last-child { padding-right: 0; }
+    table.sale-lines th { border-bottom: 1px solid #000; font-size: 9px; font-weight: 900; text-align: left; text-transform: uppercase; }
+    table.sale-lines tbody td { border-bottom: 1px dashed #000; break-inside: avoid; }
+    table.sale-lines .detail { overflow-wrap: anywhere; }
+    table.sale-lines .qty { text-align: center; }
+    table.sale-lines .unit, table.sale-lines .amt { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 900; white-space: nowrap; }
+    table.sale-lines .discount-row td { padding-top: 5px; font-weight: 700; }
+    table.sale-lines .total-row td { padding-top: 6px; border-top: 2px solid #000; font-size: 15px; font-weight: 900; text-transform: uppercase; }
+    table.sale-lines .total-row .amt { font-size: 14px; }
+    .sale-ticket .payment { display: grid; gap: 3px; }
+    .sale-ticket .payment b { font: 900 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
+    .sale-ticket footer { margin-top: 9px; padding-top: 6px; font-size: 10px; }
   `
 }
 
-function renderShell(title: string, content: string) {
+function renderShell(title: string, content: string, ticketClass = '') {
+  const className = ticketClass ? `ticket ${ticketClass}` : 'ticket'
+
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -126,59 +147,52 @@ function renderShell(title: string, content: string) {
   <style>${thermalCss()}</style>
 </head>
 <body>
-  <main class="ticket">${content}</main>
+  <main class="${className}">${content}</main>
 </body>
 </html>`
 }
 
 function renderSaleDocument(doc: SaleDocument) {
   const rows = doc.items.map(item => `
-    <section class="item">
-      <div class="item-main">
-        <strong>${escapeHtml(item.name)}</strong>
-        <b>${escapeHtml(item.total)}</b>
-      </div>
-      <div class="item-meta">${escapeHtml(item.quantity)} x ${escapeHtml(item.price)}</div>
-      ${item.kind === 'combo' ? '<ul><li>1x Producto principal del combo</li><li>1x Complemento incluido</li></ul>' : ''}
-    </section>
+    <tr>
+      <td class="qty">${escapeHtml(item.quantity)}</td>
+      <td class="detail">${escapeHtml(item.name)}</td>
+      <td class="unit">${escapeHtml(item.price)}</td>
+      <td class="amt">${escapeHtml(item.total)}</td>
+    </tr>
   `).join('')
   const discount = doc.discount
-    ? `<div><span>Descuento</span><b>${escapeHtml(doc.discount.amount)}</b></div><small>${escapeHtml(doc.discount.label)}</small>`
+    ? `<tr class="discount-row"><td colspan="3">Descuento</td><td class="amt">${escapeHtml(doc.discount.amount)}</td></tr>`
     : ''
-  const payments = doc.payments.map(payment => `
-    <div><span>${escapeHtml(payment.label)}</span><b>${escapeHtml(payment.amount)}</b></div>
-  `).join('')
 
   return renderShell(doc.number, `
     <header>
       <h1>${escapeHtml(doc.storeName)}</h1>
-      <p>${escapeHtml(doc.address)}</p>
-      <p>${escapeHtml(doc.phone)}</p>
+      <p>${escapeHtml(doc.address)} | ${escapeHtml(doc.phone)}</p>
     </header>
     <section class="doc">
       <span>${escapeHtml(doc.docLabel)}</span>
       <strong>${escapeHtml(doc.number)}</strong>
-      <small>${escapeHtml(doc.dateLabel)}</small>
     </section>
     <section class="meta"><div><span>Atendió</span><b>${escapeHtml(doc.seller)}</b></div></section>
-    <div class="section-title">Detalle</div>
-    ${rows}
-    <div class="section-title">Resumen</div>
-    <section class="summary">
-      <div><span>Subtotal</span><b>${escapeHtml(doc.subtotal)}</b></div>
-      ${discount}
-    </section>
-    <section class="total"><span>Total</span><b>${escapeHtml(doc.total)}</b></section>
+    <table class="sale-lines">
+      <colgroup><col class="qty-col"><col><col class="unit-col"><col class="amount-col"></colgroup>
+      <thead><tr><th class="qty">Cant.</th><th>Detalle</th><th class="unit">P/U</th><th class="amt">Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        ${discount}
+        <tr class="total-row"><td colspan="3">Total Bs</td><td class="amt">${escapeHtml(doc.total)}</td></tr>
+      </tfoot>
+    </table>
     <div class="section-title">Cobro</div>
     <section class="payment">
       <div><span>Método</span><b>${escapeHtml(doc.paymentSummary)}</b></div>
-      ${payments}
     </section>
     <footer>
       <em>${escapeHtml(doc.footerNote)}</em>
       <strong>${escapeHtml(doc.footerStrong)}</strong>
     </footer>
-  `)
+  `, 'sale-ticket')
 }
 
 function renderCell(cell: CashReportCell, tag: 'td' | 'th') {

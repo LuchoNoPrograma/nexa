@@ -1,7 +1,7 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../utils/db'
 import { cleanText, numberOrZero, requireStoreAccess } from '../../utils/posCatalog'
-import { CASH_LATE_SALE_NOTE, getCashOverview, refreshClosedCashSessionTotals, resolveCashSessionForSale } from '../../utils/posCash'
+import { CASH_LATE_SALE_NOTE, getCashOverview, refreshClosedCashSessionTotals, resolveCashSessionForSale, visibleCashSaleNumber } from '../../utils/posCash'
 import { tieneAcceso } from '~~/shared/utils/acceso'
 
 type SaleItemBody = {
@@ -101,7 +101,11 @@ export default defineEventHandler(async (event) => {
     if (existingSale.rowCount) {
       const overview = await getCashOverview(client, session.storeId)
       await client.query('commit')
-      return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
+      return {
+        ...overview,
+        saleId: existingSale.rows[0].id,
+        saleNumber: visibleCashSaleNumber(existingSale.rows[0].number),
+      }
     }
 
     const requestedCashSessionId = cleanText(body.cashSessionId) || undefined
@@ -124,14 +128,14 @@ export default defineEventHandler(async (event) => {
         from venta
         where tienda_id = $1
           and caja_sesion_id = $2
-          and estado <> 'anulada'
       `,
       [session.storeId, cashSessionId, occurredAt],
     )
     const saleSequence = saleCodeResult.rows[0]?.sequence ?? 1
     const saleTime = saleCodeResult.rows[0]?.saleTime ?? new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
-    const cashSaleCode = `C${saleSequence} ${saleTime}`
-    const saleNumber = `C${saleSequence}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
+    const displaySaleNumber = `C${saleSequence}`
+    const cashSaleCode = `${displaySaleNumber} ${saleTime}`
+    const saleNumber = `${displaySaleNumber}-${cashSessionId.slice(0, 8)}-${saleTime.replace(':', '')}`
 
     const normalizedItems: Array<{
       id: string
@@ -390,7 +394,7 @@ export default defineEventHandler(async (event) => {
     const overview = await getCashOverview(client, session.storeId)
     await client.query('commit')
 
-    return { ...overview, saleId, saleNumber: cashSaleCode }
+    return { ...overview, saleId, saleNumber: displaySaleNumber }
   } catch (error) {
     await client.query('rollback')
     if (typeof error === 'object' && error && 'code' in error && error.code === '23505') {
@@ -406,7 +410,11 @@ export default defineEventHandler(async (event) => {
       )
       const overview = await getCashOverview(client, session.storeId)
       if (existingSale.rows[0]) {
-        return { ...overview, saleId: existingSale.rows[0].id, saleNumber: existingSale.rows[0].number }
+        return {
+          ...overview,
+          saleId: existingSale.rows[0].id,
+          saleNumber: visibleCashSaleNumber(existingSale.rows[0].number),
+        }
       }
     }
     const statusCode = typeof error === 'object' && error && 'statusCode' in error

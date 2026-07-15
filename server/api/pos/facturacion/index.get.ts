@@ -1,6 +1,7 @@
 import { getQuery } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { requireStoreAccess } from '../../../utils/posCatalog'
+import { visibleCashSaleNumber } from '../../../utils/posCash'
 import { decryptSecret } from '../../../utils/secrets'
 
 export default defineEventHandler(async (event) => {
@@ -36,6 +37,7 @@ export default defineEventHandler(async (event) => {
   return {
     facturas: result.rows.map(row => ({
       ...row,
+      venta_numero: visibleCashSaleNumber(row.venta_numero) ?? null,
       razon_social_cliente: decryptSecret(row.razon_social_cliente),
       numero_documento_cliente: decryptSecret(row.numero_documento_cliente),
     })),

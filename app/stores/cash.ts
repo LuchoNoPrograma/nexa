@@ -71,6 +71,7 @@ type CashOverviewPayload = {
   session: CashSessionPayload | null
   movements: PosCashMovement[]
   productSales: PosCashProductSale[]
+  lastSaleSequence: number
   saleId?: string
   saleNumber?: string
 }
@@ -86,6 +87,8 @@ export const useCashStore = defineStore('cash', () => {
   const productSales = ref<PosCashProductSale[]>([])
   const cashSession = ref<CashSessionPayload | null>(null)
   const cashSessionId = ref<string | null>(null)
+  const lastSaleSequence = ref(0)
+  const saleSequenceReady = ref(false)
   const isLoading = ref(false)
   const loadedAt = ref(0)
   let pendingRequest: Promise<void> | null = null
@@ -96,15 +99,28 @@ export const useCashStore = defineStore('cash', () => {
   }
 
   function applyOverview(overview: CashOverviewPayload) {
+    const previousSessionId = cashSessionId.value
+    const nextSessionId = overview.session?.id ?? null
+    const serverSequence = Math.max(Math.floor(Number(overview.lastSaleSequence ?? 0)), 0)
+
     cashSession.value = overview.session
-    cashSessionId.value = overview.session?.id ?? null
+    cashSessionId.value = nextSessionId
     cashStatus.value = overview.session?.status ?? 'cerrada'
     movements.value = overview.movements
     productSales.value = overview.productSales
+    lastSaleSequence.value = previousSessionId === nextSessionId
+      ? Math.max(lastSaleSequence.value, serverSequence)
+      : serverSequence
+    saleSequenceReady.value = Boolean(nextSessionId)
     loadedAt.value = Date.now()
 
     if (sessionStore.session?.storeId) {
-      void offlineCash.saveStatus(sessionStore.session.storeId, cashStatus.value, cashSessionId.value).catch(() => null)
+      void offlineCash.saveStatus(
+        sessionStore.session.storeId,
+        cashStatus.value,
+        cashSessionId.value,
+        lastSaleSequence.value,
+      ).catch(() => null)
     }
   }
 
@@ -150,6 +166,11 @@ export const useCashStore = defineStore('cash', () => {
 
         cashStatus.value = localStatus
         cashSessionId.value = localCashSessionId
+        const localSaleSequence = localCashSessionId
+          ? await offlineCash.getSaleSequence(storeId, localCashSessionId)
+          : null
+        lastSaleSequence.value = localSaleSequence ?? 0
+        saleSequenceReady.value = localSaleSequence !== null
       })
       .finally(() => {
         if (requestVersion !== version) {
@@ -188,6 +209,19 @@ export const useCashStore = defineStore('cash', () => {
     return overview
   }
 
+  async function reserveSaleSequence() {
+    const storeId = sessionStore.session?.storeId
+    const sessionId = cashSessionId.value
+
+    if (!storeId || !sessionId || !saleSequenceReady.value) {
+      return null
+    }
+
+    const sequence = await offlineCash.reserveSaleSequence(storeId, sessionId, lastSaleSequence.value)
+    lastSaleSequence.value = sequence
+    return sequence
+  }
+
   async function voidSale(saleId: string, reason: string) {
     applyOverview(await $fetch<CashOverviewPayload>(`/api/pos/sales/${saleId}/void`, {
       method: 'POST',
@@ -223,6 +257,8 @@ export const useCashStore = defineStore('cash', () => {
     productSales.value = []
     cashSession.value = null
     cashSessionId.value = null
+    lastSaleSequence.value = 0
+    saleSequenceReady.value = false
     isLoading.value = false
     loadedAt.value = 0
     pendingRequest = null
@@ -232,6 +268,7 @@ export const useCashStore = defineStore('cash', () => {
     cashStatus,
     cashSession,
     cashSessionId,
+    lastSaleSequence,
     movements,
     productSales,
     isLoading,
@@ -240,6 +277,7 @@ export const useCashStore = defineStore('cash', () => {
     refreshInBackground,
     addManualMovement,
     registerSale,
+    reserveSaleSequence,
     voidSale,
     voidManualMovement,
     closeTurn,

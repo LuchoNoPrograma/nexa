@@ -164,7 +164,7 @@ const productCount = computed(() => cart.value.reduce((sum, line) => sum + line.
 const isCashClosed = computed(() => cashRegister.cashStatus.value === 'cerrada')
 // En cotización es solo un presupuesto: no requiere caja abierta.
 const canCharge = computed(() => {
-  if (cart.value.length === 0 || cashRegister.isLoading.value) {
+  if (cart.value.length === 0 || cashRegister.isLoading.value || (saleMode.value === 'venta' && syncingSales.value)) {
     return false
   }
   return saleMode.value === 'cotizacion' || !isCashClosed.value
@@ -172,6 +172,10 @@ const canCharge = computed(() => {
 const chargeButtonLabel = computed(() => {
   if (saleMode.value === 'cotizacion') {
     return `Guardar cotización · Bs ${money(total.value)}`
+  }
+
+  if (syncingSales.value) {
+    return 'Registrando ventas pendientes...'
   }
 
   if (isCashClosed.value) {
@@ -432,7 +436,7 @@ function chargeSale() {
 }
 
 async function confirmCharge() {
-  if (checkoutInvalid.value || saleSaving.value) {
+  if (checkoutInvalid.value || saleSaving.value || (saleMode.value === 'venta' && syncingSales.value)) {
     return
   }
 
@@ -446,10 +450,6 @@ async function confirmCharge() {
       const clientOperationId = checkoutOperationId.value || offlineSales.createOperationId(session.value?.storeId)
       checkoutOperationId.value = clientOperationId
       const occurredAt = receipt.date.toISOString()
-      receipt = {
-        ...receipt,
-        number: clientOperationId,
-      }
 
       try {
         const saleResult = await cashRegister.registerSale({
@@ -461,7 +461,7 @@ async function confirmCharge() {
         receipt = {
           ...receipt,
           saleId: saleResult.saleId,
-          number: saleResult.saleNumber ?? receipt.number,
+          number: visibleSaleNumber(saleResult.saleNumber, receipt.number),
         }
         catalogStore.applyLocalStock(receipt.items)
         void catalogStore.saveSaleProductsLocally().catch(() => null)
@@ -476,6 +476,16 @@ async function confirmCharge() {
 
         if (!storeId) {
           saleSaveError.value = 'No se pudo guardar la venta porque no hay tienda activa.'
+          return
+        }
+
+        try {
+          receipt = {
+            ...receipt,
+            number: await nextLocalSaleNumber(),
+          }
+        } catch {
+          saleSaveError.value = 'No se pudo asegurar el número de venta de este turno. Conecta este equipo antes de reintentar para evitar folios duplicados.'
           return
         }
 
@@ -572,7 +582,7 @@ function normalizeAmount(value: number | null | undefined) {
 
 function buildSaleReceipt(): SaleReceipt {
   return {
-    number: `NV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
+    number: saleMode.value === 'venta' ? 'C1' : 'COT',
     date: new Date(),
     mode: saleMode.value,
     seller: session.value?.name || 'Responsable de caja',
@@ -624,14 +634,41 @@ function buildReceiptPaymentLines(): ReceiptPaymentLine[] {
   ].filter((line) => line.amount > 0)
 }
 
-function receiptDate(value: Date) {
+function receiptDay(value: Date) {
   return new Intl.DateTimeFormat('es-BO', {
-    day: 'numeric',
-    month: 'numeric',
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+    timeZone: 'America/La_Paz',
   }).format(value)
+}
+
+function receiptTime(value: Date) {
+  return new Intl.DateTimeFormat('es-BO', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'America/La_Paz',
+  }).format(value)
+}
+
+function receiptReference(receipt: SaleReceipt) {
+  return `${receipt.number} - ${receiptDay(receipt.date)} - ${receiptTime(receipt.date)}`
+}
+
+function visibleSaleNumber(value: string | null | undefined, fallback: string) {
+  const match = value?.trim().match(/^C\d+/i)
+  return match?.[0]?.toUpperCase() ?? fallback
+}
+
+async function nextLocalSaleNumber() {
+  const reservedSequence = await cashRegister.reserveSaleSequence()
+
+  if (!reservedSequence) {
+    throw new Error('No hay un turno de caja disponible para reservar el número de venta.')
+  }
+
+  return `C${reservedSequence}`
 }
 
 function receiptPaymentSummary(receipt: SaleReceipt) {
@@ -697,32 +734,24 @@ function buildReceiptPdfDocument(receipt: SaleReceipt) {
   return {
     type: 'sale',
     storeName: storeReceiptName(),
-    address: 'Av. Principal #123, Zona Central',
+    address: 'Av. Principal #123 Zona Central',
     phone: 'Tel. 70000000',
     docLabel: receipt.mode === 'venta' ? 'Nota de venta' : 'Cotización',
-    number: receipt.number,
-    dateLabel: receiptDate(receipt.date),
+    number: receiptReference(receipt),
     seller: receipt.seller,
     items: receipt.items.map(line => ({
       name: line.name,
       quantity: line.quantity,
-      price: `Bs ${money(line.price)}`,
-      total: `Bs ${money(line.price * line.quantity)}`,
-      kind: line.kind,
+      price: money(line.price),
+      total: money(line.price * line.quantity),
     })),
-    subtotal: `Bs ${money(receipt.subtotal)}`,
     discount: receipt.discount > 0
       ? {
-          label: receipt.discountLabel,
-          amount: `- Bs ${money(receipt.discount)}`,
+          amount: `- ${money(receipt.discount)}`,
         }
       : null,
-    total: `Bs ${money(receipt.total)}`,
+    total: money(receipt.total),
     paymentSummary: receiptPaymentSummary(receipt),
-    payments: receipt.paymentLines.map(line => ({
-      label: line.label.replace(' / Transferencia', ''),
-      amount: `Bs ${money(line.amount)}`,
-    })),
     footerNote: 'Este documento no es una factura válida',
     footerStrong: '¡Gracias por su compra!',
   }
@@ -746,48 +775,41 @@ function buildReceiptHtml(receipt: SaleReceipt, screen = true) {
 
 function buildReceiptTicketMarkup(receipt: SaleReceipt) {
   const rows = receipt.items.map((line) => `
-    <section class="item">
-      <div class="item-main">
-        <strong>${escapeHtml(line.name)}</strong>
-        <b>Bs ${money(line.price * line.quantity)}</b>
-      </div>
-      <div class="item-meta">${line.quantity} x Bs ${money(line.price)}</div>
-      ${line.kind === 'combo' ? '<ul><li>1x Producto principal del combo</li><li>1x Complemento incluido</li></ul>' : ''}
-    </section>
+    <tr>
+      <td class="qty">${line.quantity}</td>
+      <td class="detail">${escapeHtml(line.name)}</td>
+      <td class="unit">${money(line.price)}</td>
+      <td class="amount">${money(line.price * line.quantity)}</td>
+    </tr>
   `).join('')
   const discountRow = receipt.discount > 0
-    ? `<div><span>Descuento</span><b>- Bs ${money(receipt.discount)}</b></div><small>${escapeHtml(receipt.discountLabel)}</small>`
+    ? `<tr class="discount-row"><td colspan="3">Descuento</td><td class="amount">- ${money(receipt.discount)}</td></tr>`
     : ''
-  const payments = receipt.paymentLines.map((line) => `
-    <div><span>${escapeHtml(line.label.replace(' / Transferencia', ''))}</span><b>Bs ${money(line.amount)}</b></div>
-  `).join('')
 
   return `<main class="ticket">
     <header>
       <h1>${escapeHtml(storeReceiptName())}</h1>
-      <p>Av. Principal #123, Zona Central</p>
-      <p>Tel. 70000000</p>
+      <p>Av. Principal #123 Zona Central | Tel. 70000000</p>
     </header>
     <section class="doc">
       <span>${receipt.mode === 'venta' ? 'Nota de venta' : 'Cotización'}</span>
-      <strong>${escapeHtml(receipt.number)}</strong>
-      <small>${receiptDate(receipt.date)}</small>
+      <strong>${escapeHtml(receiptReference(receipt))}</strong>
     </section>
     <section class="meta">
       <div><span>Atendió</span><b>${escapeHtml(receipt.seller)}</b></div>
     </section>
-    <div class="section-title">Detalle</div>
-    ${rows}
-    <div class="section-title">Resumen</div>
-    <section class="summary">
-      <div><span>Subtotal</span><b>Bs ${money(receipt.subtotal)}</b></div>
-      ${discountRow}
-    </section>
-    <section class="total"><span>Total</span><b>Bs ${money(receipt.total)}</b></section>
+    <table class="sale-lines">
+      <colgroup><col class="qty-col"><col><col class="unit-col"><col class="amount-col"></colgroup>
+      <thead><tr><th class="qty">Cant.</th><th>Detalle</th><th class="unit">P/U</th><th class="amount">Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        ${discountRow}
+        <tr class="total-row"><td colspan="3">Total Bs</td><td class="amount">${money(receipt.total)}</td></tr>
+      </tfoot>
+    </table>
     <div class="section-title">Cobro</div>
     <section class="payment">
       <div><span>Método</span><b>${escapeHtml(receiptPaymentSummary(receipt))}</b></div>
-      ${payments}
     </section>
     <footer>
       <em>Este documento no es una factura válida</em>
@@ -804,35 +826,43 @@ function buildReceiptTicketStyles(options: { screen: boolean }) {
     .ticket {
       width: 80mm;
       margin: 0 auto;
-      padding: 5mm;
-      border: 1px solid #111;
+      padding: 2px 4mm 2mm;
+      border: 0;
       background: #fff;
       color: #000;
       font-family: Arial, sans-serif;
-      font-size: 12px;
-      line-height: 1.35;
+      font-size: 11px;
+      line-height: 1.25;
     }
-    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 7px; }
-    h1 { margin: 0; font-size: 17px; font-weight: 900; }
-    header p { margin: 3px 0 0; font-size: 11px; color: #000; }
-    .doc { margin: 8px 0; padding: 6px; border: 1px solid #000; text-align: center; }
+    header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 4px; }
+    h1 { margin: 0; font-size: 16px; font-weight: 900; }
+    header p { margin: 1px 0 0; font-size: 10px; color: #000; white-space: nowrap; }
+    .doc { margin: 5px 0; padding: 0 0 5px; border-bottom: 1px dashed #000; text-align: center; }
     .doc span { display: block; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
-    .doc strong { display: block; margin-top: 3px; font: 900 14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .doc small { color: #000; font-size: 10px; }
+    .doc strong { display: block; margin-top: 2px; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
     .meta { display: grid; gap: 3px; }
-    .meta div, .summary div, .payment div, .item-main, .total { display: flex; justify-content: space-between; gap: 8px; }
-    .section-title { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: #000; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
+    .meta div, .payment div { display: flex; justify-content: space-between; gap: 8px; }
+    .meta b { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+    .section-title { display: flex; align-items: center; gap: 8px; margin: 7px 0 3px; color: #000; font-size: 10px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
     .section-title:before, .section-title:after { content: ""; height: 1px; flex: 1; background: #000; }
-    .item { padding: 6px 0; border-bottom: 1px dashed #000; break-inside: avoid; }
-    .item strong, .summary strong, .meta b { font-weight: 900; }
-    .item-main strong { min-width: 0; padding-right: 6px; overflow-wrap: anywhere; }
-    .item b, .summary b, .payment b, .total b { font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
-    .item-meta, .meta, .payment, small { color: #000; }
-    ul { margin: 2px 0 0 8px; padding-left: 8px; color: #000; }
-    .summary, .payment { display: grid; gap: 3px; }
-    .total { margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; align-items: baseline; font-size: 16px; font-weight: 900; text-transform: uppercase; }
-    .total b { font-size: 16px; }
-    footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 11px; }
+    .sale-lines { width: 100%; margin-top: 5px; border-collapse: collapse; table-layout: fixed; }
+    .sale-lines .qty-col { width: 9mm; }
+    .sale-lines .unit-col { width: 17mm; }
+    .sale-lines .amount-col { width: 19mm; }
+    .sale-lines th, .sale-lines td { padding: 4px 2px; vertical-align: top; }
+    .sale-lines th:first-child, .sale-lines td:first-child { padding-left: 0; }
+    .sale-lines th:last-child, .sale-lines td:last-child { padding-right: 0; }
+    .sale-lines th { border-bottom: 1px solid #000; font-size: 9px; font-weight: 900; text-align: left; text-transform: uppercase; }
+    .sale-lines tbody td { border-bottom: 1px dashed #000; break-inside: avoid; }
+    .sale-lines .detail { overflow-wrap: anywhere; }
+    .sale-lines .qty { text-align: center; }
+    .sale-lines .unit, .sale-lines .amount { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 900; white-space: nowrap; }
+    .discount-row td { padding-top: 5px; font-weight: 700; }
+    .total-row td { padding-top: 6px; border-top: 2px solid #000; font-size: 15px; font-weight: 900; text-transform: uppercase; }
+    .total-row .amount { font-size: 14px; }
+    .payment { display: grid; gap: 3px; }
+    .payment b { font: 900 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
+    footer { margin-top: 9px; padding-top: 6px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 10px; }
     footer strong { display: block; margin-top: 3px; color: #000; }
     ${options.screen ? '@media screen { body { background: #f3f4f6; padding: 16px; } .ticket { box-shadow: 0 12px 30px rgba(0,0,0,.16); } }' : ''}
   `
@@ -1868,8 +1898,8 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
         <Button
           type="button"
           :label="saleMode === 'venta' ? 'Cobrar y guardar' : 'Guardar cotización'"
-          :loading="saleSaving"
-          :disabled="checkoutInvalid || saleSaving"
+          :loading="saleSaving || (saleMode === 'venta' && syncingSales)"
+          :disabled="checkoutInvalid || saleSaving || (saleMode === 'venta' && syncingSales)"
           @click="confirmCharge"
         />
       </footer>
@@ -1898,9 +1928,8 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
         <div class="receipt-actions__summary">
           <small>{{ lastReceipt.mode === 'venta' ? 'Nota de venta' : 'Cotización' }}</small>
-          <strong>{{ lastReceipt.number }}</strong>
+          <strong>{{ receiptReference(lastReceipt) }}</strong>
           <b>Bs {{ money(lastReceipt.total) }}</b>
-          <time>{{ receiptDate(lastReceipt.date) }}</time>
         </div>
 
         <div class="receipt-actions__buttons">
@@ -1930,14 +1959,12 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
       <article class="thermal-ticket" aria-label="Comprobante de venta">
         <header>
           <h3>{{ storeReceiptName() }}</h3>
-          <p>Av. Principal #123, Zona Central</p>
-          <p>Tel. 70000000</p>
+          <p>Av. Principal #123 Zona Central | Tel. 70000000</p>
         </header>
 
         <section class="thermal-ticket__doc">
           <span>{{ lastReceipt.mode === 'venta' ? 'Nota de venta' : 'Cotización' }}</span>
-          <strong>{{ lastReceipt.number }}</strong>
-          <small>{{ receiptDate(lastReceipt.date) }}</small>
+          <strong>{{ receiptReference(lastReceipt) }}</strong>
         </section>
 
         <section class="thermal-ticket__meta">
@@ -1947,40 +1974,40 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
           </div>
         </section>
 
-        <div class="thermal-ticket__title">Detalle</div>
-
-        <section class="thermal-ticket__items">
-          <article v-for="line in lastReceipt.items" :key="line.id" class="thermal-ticket__item">
-            <div>
-              <strong>{{ line.name }}</strong>
-              <b>Bs {{ money(line.price * line.quantity) }}</b>
-            </div>
-            <small>{{ line.quantity }} x Bs {{ money(line.price) }}</small>
-            <ul v-if="line.kind === 'combo'">
-              <li>1x Producto principal del combo</li>
-              <li>1x Complemento incluido</li>
-            </ul>
-          </article>
-        </section>
-
-        <div class="thermal-ticket__title">Resumen</div>
-
-        <section class="thermal-ticket__summary">
-          <div>
-            <span>Subtotal</span>
-            <strong>Bs {{ money(lastReceipt.subtotal) }}</strong>
-          </div>
-          <div v-if="lastReceipt.discount > 0" class="is-discount">
-            <span>Descuento</span>
-            <strong>- Bs {{ money(lastReceipt.discount) }}</strong>
-          </div>
-          <small v-if="lastReceipt.discount > 0">{{ lastReceipt.discountLabel }}</small>
-        </section>
-
-        <section class="thermal-ticket__total">
-          <span>Total</span>
-          <strong>Bs {{ money(lastReceipt.total) }}</strong>
-        </section>
+        <table class="thermal-ticket__lines">
+          <colgroup>
+            <col class="qty-col">
+            <col>
+            <col class="unit-col">
+            <col class="amount-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="qty">Cant.</th>
+              <th>Detalle</th>
+              <th class="unit">P/U</th>
+              <th class="amount">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="line in lastReceipt.items" :key="line.id">
+              <td class="qty">{{ line.quantity }}</td>
+              <td class="detail">{{ line.name }}</td>
+              <td class="unit">{{ money(line.price) }}</td>
+              <td class="amount">{{ money(line.price * line.quantity) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr v-if="lastReceipt.discount > 0" class="discount-row">
+              <td colspan="3">Descuento</td>
+              <td class="amount">- {{ money(lastReceipt.discount) }}</td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="3">Total Bs</td>
+              <td class="amount">{{ money(lastReceipt.total) }}</td>
+            </tr>
+          </tfoot>
+        </table>
 
         <div class="thermal-ticket__title">Cobro</div>
 
@@ -1988,10 +2015,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
           <div>
             <span>Método</span>
             <strong>{{ receiptPaymentSummary(lastReceipt) }}</strong>
-          </div>
-          <div v-for="line in lastReceipt.paymentLines" :key="line.label">
-            <span>{{ line.label.replace(' / Transferencia', '') }}</span>
-            <strong>Bs {{ money(line.amount) }}</strong>
           </div>
         </section>
 
@@ -3476,8 +3499,7 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .receipt-actions strong,
-.receipt-actions b,
-.receipt-actions time {
+.receipt-actions b {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   letter-spacing: 0;
 }
@@ -3491,11 +3513,6 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   color: var(--primary-700);
   font-size: 2.1rem;
   line-height: 1;
-}
-
-.receipt-actions time {
-  color: #5a6b5f;
-  font-size: 0.78rem;
 }
 
 .receipt-actions__buttons {
@@ -3518,45 +3535,44 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .thermal-ticket {
   width: 80mm;
-  min-height: 560px;
-  margin: 18px auto;
-  padding: 14px 16px;
+  margin: 8px auto 18px;
+  padding: 2px 15px 8px;
   border: 1px solid #111111;
   background: #ffffff;
   color: #000000;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
 }
 
 .thermal-ticket header {
-  padding-bottom: 7px;
+  padding-bottom: 4px;
   border-bottom: 1px solid #000000;
   text-align: center;
 }
 
 .thermal-ticket h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 900;
 }
 
 .thermal-ticket p {
-  margin: 3px 0 0;
+  margin: 1px 0 0;
   color: #000000;
-  font-size: 11px;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .thermal-ticket__doc {
-  margin: 8px 0;
-  padding: 6px;
-  border: 1px solid #000000;
-  border-radius: 0;
+  margin: 5px 0;
+  padding: 0 0 5px;
+  border-bottom: 1px dashed #000000;
   background: #ffffff;
   text-align: center;
 }
 
-.thermal-ticket__doc span,
-.thermal-ticket__title {
+.thermal-ticket__doc span {
   color: #000000;
   font-size: 10px;
   font-weight: 900;
@@ -3566,15 +3582,11 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 
 .thermal-ticket__doc strong {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: #000000;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 14px;
-}
-
-.thermal-ticket__doc small {
-  color: #000000;
-  font-size: 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .thermal-ticket__meta {
@@ -3583,20 +3595,28 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
 }
 
 .thermal-ticket__meta div,
-.thermal-ticket__item > div,
-.thermal-ticket__summary div,
-.thermal-ticket__total,
 .thermal-ticket__payment div {
   display: flex;
   justify-content: space-between;
   gap: 8px;
 }
 
+.thermal-ticket__meta strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .thermal-ticket__title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 10px 0 4px;
+  margin: 7px 0 3px;
+  color: #000000;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .thermal-ticket__title::before,
@@ -3607,66 +3627,103 @@ function showCartFeedback(line: CartLine, label: string, event?: Event) {
   background: #000000;
 }
 
-.thermal-ticket__item {
-  padding: 6px 0;
+.thermal-ticket__lines {
+  width: 100%;
+  margin-top: 5px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.thermal-ticket__lines .qty-col {
+  width: 9mm;
+}
+
+.thermal-ticket__lines .unit-col {
+  width: 17mm;
+}
+
+.thermal-ticket__lines .amount-col {
+  width: 19mm;
+}
+
+.thermal-ticket__lines th,
+.thermal-ticket__lines td {
+  padding: 4px 2px;
+  vertical-align: top;
+}
+
+.thermal-ticket__lines th:first-child,
+.thermal-ticket__lines td:first-child {
+  padding-left: 0;
+}
+
+.thermal-ticket__lines th:last-child,
+.thermal-ticket__lines td:last-child {
+  padding-right: 0;
+}
+
+.thermal-ticket__lines th {
+  border-bottom: 1px solid #000000;
+  font-size: 9px;
+  font-weight: 900;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.thermal-ticket__lines tbody td {
   border-bottom: 1px dashed #000000;
 }
 
-.thermal-ticket__item strong,
-.thermal-ticket__meta strong {
-  font-weight: 900;
+.thermal-ticket__lines .detail {
+  overflow-wrap: anywhere;
 }
 
-.thermal-ticket__item b,
-.thermal-ticket__summary strong,
-.thermal-ticket__total strong,
+.thermal-ticket__lines .qty {
+  text-align: center;
+}
+
+.thermal-ticket__lines .unit,
+.thermal-ticket__lines .amount {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.thermal-ticket__lines .discount-row td {
+  padding-top: 5px;
+  font-weight: 700;
+}
+
+.thermal-ticket__lines .total-row td {
+  padding-top: 6px;
+  border-top: 2px solid #000000;
+  font-size: 15px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.thermal-ticket__lines .total-row .amount {
+  font-size: 14px;
+}
+
+.thermal-ticket__payment {
+  display: grid;
+  gap: 3px;
+}
+
 .thermal-ticket__payment strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-weight: 900;
   white-space: nowrap;
 }
 
-.thermal-ticket__item small,
-.thermal-ticket__meta span,
-.thermal-ticket__payment span,
-.thermal-ticket__summary span,
-.thermal-ticket__summary small {
-  color: #000000;
-}
-
-.thermal-ticket__item ul {
-  margin: 2px 0 0 8px;
-  padding-left: 8px;
-  color: #000000;
-}
-
-.thermal-ticket__summary,
-.thermal-ticket__payment {
-  display: grid;
-  gap: 3px;
-}
-
-.thermal-ticket__summary .is-discount,
-.thermal-ticket__summary .is-discount span {
-  color: #000000;
-}
-
-.thermal-ticket__total {
-  align-items: baseline;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 2px solid #000000;
-  font-size: 16px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
 .thermal-ticket footer {
-  margin-top: 12px;
-  padding-top: 8px;
+  margin-top: 9px;
+  padding-top: 6px;
   border-top: 1px solid #000000;
   color: #000000;
-  font-size: 11px;
+  font-size: 10px;
   text-align: center;
 }
 

@@ -3,6 +3,11 @@ import type { PoolClient } from 'pg'
 
 export const CASH_LATE_SALE_NOTE = 'Venta offline conciliada con su turno original'
 
+export function visibleCashSaleNumber(value: unknown) {
+  const match = String(value ?? '').trim().match(/^C\d+/i)
+  return match?.[0]?.toUpperCase()
+}
+
 export type CashSessionSummary = {
   id: string
   status: 'abierta' | 'cerrada'
@@ -41,6 +46,7 @@ export type CashOverview = {
   session: CashSessionSummary | null
   movements: CashMovementSummary[]
   productSales: CashProductSaleSummary[]
+  lastSaleSequence: number
 }
 
 type CashSessionRow = {
@@ -304,7 +310,7 @@ export async function getCashOverview(client: PoolClient, storeId: string): Prom
   const session = await getLatestCashSession(client, storeId)
 
   if (!session) {
-    return { session: null, movements: [], productSales: [] }
+    return { session: null, movements: [], productSales: [], lastSaleSequence: 0 }
   }
 
   const movementResult = await client.query<{
@@ -363,6 +369,16 @@ export async function getCashOverview(client: PoolClient, storeId: string): Prom
     [storeId, session.id],
   )
 
+  const saleSequenceResult = await client.query<{ lastSaleSequence: number }>(
+    `
+      select count(*)::int as "lastSaleSequence"
+      from venta
+      where tienda_id = $1
+        and caja_sesion_id = $2
+    `,
+    [storeId, session.id],
+  )
+
   return {
     session: {
       ...session,
@@ -382,5 +398,6 @@ export async function getCashOverview(client: PoolClient, storeId: string): Prom
       note: movement.note ?? undefined,
     })),
     productSales: productResult.rows,
+    lastSaleSequence: saleSequenceResult.rows[0]?.lastSaleSequence ?? 0,
   }
 }
