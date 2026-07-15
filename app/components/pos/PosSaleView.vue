@@ -139,10 +139,10 @@ const inventoryNotice = computed(() => {
   }
 
   if (line.stock <= 0) {
-    return `No hay existencias registradas de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
+    return `No hay stock disponible de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
   }
 
-  return `Solo hay ${line.stock} unidad${line.stock === 1 ? '' : 'es'} registrada${line.stock === 1 ? '' : 's'} de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
+  return `Solo hay ${line.stock} unidad${line.stock === 1 ? '' : 'es'} disponible${line.stock === 1 ? '' : 's'} de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
 })
 
 const subtotal = computed(() => cart.value.reduce((sum, line) => sum + line.price * line.quantity, 0))
