@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePosOfflineSales } from '~/composables/pos/offline/usePosOfflineSales'
 import type {
   PosCashMovement as CashMovement,
   PosCashMovementType as MovementType,
