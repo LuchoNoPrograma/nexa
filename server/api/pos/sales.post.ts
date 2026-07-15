@@ -18,6 +18,7 @@ type PaymentLineBody = {
 
 type SaleBody = {
   clientOperationId?: string
+  occurredAt?: string
   number?: string
   subtotal?: number
   discount?: number
@@ -27,6 +28,8 @@ type SaleBody = {
 }
 
 const MAX_SALE_ITEMS = 100
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
+const MAX_OFFLINE_AGE_MS = 365 * 24 * 60 * 60 * 1000
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
@@ -34,6 +37,19 @@ function roundMoney(value: number) {
 
 function sameMoney(left: number, right: number) {
   return Math.abs(roundMoney(left) - roundMoney(right)) < 0.01
+}
+
+function saleOccurredAt(value: unknown, clientOperationId: string) {
+  const explicitTime = typeof value === 'string' ? Date.parse(value) : Number.NaN
+  const operationTime = Number(clientOperationId.match(/^OFF-[^-]+-(\d{13})-/)?.[1] ?? Number.NaN)
+  const timestamp = Number.isFinite(explicitTime) ? explicitTime : operationTime
+  const now = Date.now()
+
+  if (!Number.isFinite(timestamp) || timestamp > now + MAX_CLOCK_SKEW_MS || timestamp < now - MAX_OFFLINE_AGE_MS) {
+    return new Date()
+  }
+
+  return new Date(timestamp)
 }
 
 function dbPaymentMethod(label: unknown) {
@@ -62,6 +78,7 @@ export default defineEventHandler(async (event) => {
   if (!clientOperationId || clientOperationId.length > 120) {
     throw createError({ statusCode: 400, statusMessage: 'La venta no tiene un identificador de operacion valido.' })
   }
+  const occurredAt = saleOccurredAt(body.occurredAt, clientOperationId)
 
   const client = await pool.connect()
 
@@ -95,13 +112,13 @@ export default defineEventHandler(async (event) => {
       `
         select
           (count(*) + 1)::int as sequence,
-          to_char(now(), 'HH24:MI') as "saleTime"
+          to_char($3::timestamptz at time zone 'America/La_Paz', 'HH24:MI') as "saleTime"
         from venta
         where tienda_id = $1
           and caja_sesion_id = $2
           and estado <> 'anulada'
       `,
-      [session.storeId, cashSessionId],
+      [session.storeId, cashSessionId, occurredAt],
     )
     const saleSequence = saleCodeResult.rows[0]?.sequence ?? 1
     const saleTime = saleCodeResult.rows[0]?.saleTime ?? new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })
@@ -202,9 +219,10 @@ export default defineEventHandler(async (event) => {
           subtotal,
           descuento,
           total,
+          fecha,
           notas
         )
-        values ($1, $2, $3, $4, $5, 'pos', 'pagada', $6, $7, $8, $9)
+        values ($1, $2, $3, $4, $5, 'pos', 'pagada', $6, $7, $8, $9, $10)
         returning id
       `,
       [
@@ -216,6 +234,7 @@ export default defineEventHandler(async (event) => {
         calculatedSubtotal,
         discount,
         total,
+        occurredAt,
         null,
       ],
     )
@@ -310,12 +329,13 @@ export default defineEventHandler(async (event) => {
             metodo,
             estado,
             monto,
+            fecha,
             notas
           )
-          values ($1, $2, $3, $4, 'ingreso', $5, 'confirmado', $6, $7)
+          values ($1, $2, $3, $4, 'ingreso', $5, 'confirmado', $6, $7, $8)
           returning id
         `,
-        [session.storeId, saleId, cashSessionId, session.id, method, payment.amount, `Cobro de venta ${cashSaleCode}`],
+        [session.storeId, saleId, cashSessionId, session.id, method, payment.amount, occurredAt, `Cobro de venta ${cashSaleCode}`],
       )
 
       await client.query(
@@ -332,11 +352,12 @@ export default defineEventHandler(async (event) => {
             metodo,
             monto,
             estado,
+            fecha,
             notas
           )
-          values ($1, $2, $3, $4, $5, 'ingreso', 'venta', $6, $7, $8, 'pendiente', 'Listo para revisar al cerrar caja')
+          values ($1, $2, $3, $4, $5, 'ingreso', 'venta', $6, $7, $8, 'pendiente', $9, 'Listo para revisar al cerrar caja')
         `,
-        [session.storeId, cashSessionId, paymentResult.rows[0].id, saleId, session.id, `Venta ${cashSaleCode}`, method, payment.amount],
+        [session.storeId, cashSessionId, paymentResult.rows[0].id, saleId, session.id, `Venta ${cashSaleCode}`, method, payment.amount, occurredAt],
       )
     }
 

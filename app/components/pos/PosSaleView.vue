@@ -408,13 +408,14 @@ async function confirmCharge() {
 
   if (receipt.mode === 'venta') {
     const clientOperationId = offlineSales.createOperationId(session.value?.storeId)
+    const occurredAt = receipt.date.toISOString()
     receipt = {
       ...receipt,
       number: clientOperationId,
     }
 
     try {
-      const saleResult = await cashRegister.registerSale({ ...receipt, clientOperationId })
+      const saleResult = await cashRegister.registerSale({ ...receipt, clientOperationId, occurredAt })
       receipt = {
         ...receipt,
         saleId: saleResult.saleId,
@@ -439,6 +440,7 @@ async function confirmCharge() {
       try {
         await offlineSales.queueCreate(storeId, {
           clientOperationId,
+          occurredAt,
           number: receipt.number,
           items: receipt.items.map((item) => ({
             id: item.id,

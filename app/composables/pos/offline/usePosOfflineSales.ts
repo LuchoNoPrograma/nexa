@@ -2,6 +2,7 @@ import { useOfflineQueue } from '~/composables/offline/useOfflineQueue'
 
 export type PosOfflineSalePayload = {
   clientOperationId: string
+  occurredAt?: string
   number: string
   items: Array<{
     id: string
@@ -98,7 +99,12 @@ export function usePosOfflineSales() {
     for (const sale of sales) {
       try {
         await queue.markSyncing(sale)
-        await sendSale(sale.payload)
+        await sendSale({
+          ...sale.payload,
+          // Las colas creadas antes de agregar occurredAt ya conservaban la
+          // hora real en el registro local de IndexedDB.
+          occurredAt: sale.payload.occurredAt ?? sale.createdAt,
+        })
         await queue.remove(sale.id)
         result.synced += 1
       } catch (error) {

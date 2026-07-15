@@ -42,6 +42,7 @@ type PosSaleLine = {
 
 export type RegisterSaleInput = {
   clientOperationId?: string
+  occurredAt?: string
   number: string
   items: PosSaleLine[]
   paymentLines: PosSalePaymentLine[]
