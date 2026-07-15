@@ -133,16 +133,27 @@ const inventoryNotice = computed(() => {
     return ''
   }
 
-  const line = cart.value.find(item => item.kind !== 'servicio' && item.quantity > item.stock)
-  if (!line) {
+  const lines = cart.value.filter(item => item.kind !== 'servicio' && item.quantity > item.stock)
+  if (!lines.length) {
     return ''
   }
 
-  if (line.stock <= 0) {
-    return `No hay stock disponible de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
+  const withoutStock = lines
+    .filter(line => line.stock <= 0)
+    .map(line => line.name)
+  const insufficientStock = lines
+    .filter(line => line.stock > 0)
+    .map(line => `${line.name}: ${line.stock} disponible${line.stock === 1 ? '' : 's'}, seleccionaste ${line.quantity}`)
+  const messages: string[] = []
+
+  if (withoutStock.length) {
+    messages.push(`No hay stock disponible de: ${withoutStock.join(', ')}.`)
+  }
+  if (insufficientStock.length) {
+    messages.push(`La cantidad seleccionada supera el stock de: ${insufficientStock.join('; ')}.`)
   }
 
-  return `Solo hay ${line.stock} unidad${line.stock === 1 ? '' : 'es'} disponible${line.stock === 1 ? '' : 's'} de ${line.name}. Puedes continuar la venta; revisa el inventario después.`
+  return `${messages.join(' ')} Puedes continuar la venta; revisa el inventario después.`
 })
 
 const subtotal = computed(() => cart.value.reduce((sum, line) => sum + line.price * line.quantity, 0))
