@@ -149,8 +149,8 @@ function onSidebarResizeKeydown(event: KeyboardEvent) {
   action()
 }
 
-// `acceso` es una expresión que evalúa `tieneAcceso`. Un cajero solo cumple
-// CAJA y VENDER, así que ve únicamente esos módulos (más Inicio, sin gating).
+// `acceso` es una expresión que evalúa `tieneAcceso`. Finanzas admite a la
+// cajera solo para mostrarle el hijo Gastos; resumen e ingresos siguen cerrados.
 interface SidebarItem {
   label: string
   icon: string
@@ -173,11 +173,11 @@ const sidebarItems: SidebarItem[] = [
   {
     label: 'Finanzas',
     icon: 'pi pi-chart-pie',
-    acceso: 'REPORTE',
+    acceso: 'REPORTE || CAJERO',
     children: [
       { label: 'Resumen financiero', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE', aliases: ['finanzas', 'resumen', 'resumen de finanzas'] },
       { label: 'Ingresos', icon: 'pi pi-dollar', to: '/pos/ingresos', acceso: 'REPORTE', aliases: ['ingreso', 'entrada de dinero', 'ganancias'] },
-      { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE', aliases: ['gasto', 'egreso', 'egresos', 'salida de dinero', 'registrar gasto'] },
+      { label: 'Gastos', icon: 'pi pi-shopping-bag', to: '/pos/gastos', acceso: 'REPORTE || CAJERO', aliases: ['gasto', 'egreso', 'egresos', 'salida de dinero', 'registrar gasto'] },
     ],
   },
   { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG', aliases: ['sueldo', 'sueldos', 'empleado', 'empleados', 'personal'] },
@@ -423,7 +423,12 @@ const canSell = computed(() => puede('VENDER'))
 
 const moreNavItems = computed(() => {
   const items: SidebarItem[] = [
-    { label: 'Finanzas', icon: 'pi pi-chart-pie', to: '/pos/finanzas', acceso: 'REPORTE' },
+    {
+      label: 'Finanzas',
+      icon: 'pi pi-chart-pie',
+      to: puede('REPORTE') ? '/pos/finanzas' : '/pos/gastos',
+      acceso: 'REPORTE || CAJERO',
+    },
     { label: 'Marketing', icon: 'pi pi-megaphone', to: '/pos/marketing', acceso: 'CONFIG' },
     { label: 'Planilla', icon: 'pi pi-users', to: '/pos/sueldos', acceso: 'CONFIG' },
     { label: 'Diagnóstico', icon: 'pi pi-chart-line', to: '/pos/diagnostico', acceso: 'CONFIG' },
@@ -570,10 +575,9 @@ function groupModel(item: SidebarItem): MenuItem[] {
   }]
 }
 
-// Estado de apertura controlado por PanelMenu. Lo abrimos automáticamente la
-// primera vez que una de sus rutas está activa; después manda el usuario (por
-// eso el guard `=== undefined`: no reabrimos un grupo que el usuario cerró).
-const expandedKeys = ref<Record<string, boolean>>({})
+// Finanzas inicia desplegado para que sus accesos estén visibles desde el primer
+// ingreso. Después el usuario todavía puede cerrarlo manualmente.
+const expandedKeys = ref<Record<string, boolean>>({ Finanzas: true })
 
 watch(() => route.path, () => {
   for (const item of sidebarItems) {

@@ -1,6 +1,7 @@
 import { getQuery } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { requireStoreAccess } from '../../../utils/posCatalog'
+import { tieneAcceso } from '~~/shared/utils/acceso'
 
 // Lista de gastos (egresos confirmados) del periodo + totales + tendencia. Alimenta
 // la página Gastos con datos reales. Periodo: 'today' | 'week' | 'month'.
@@ -34,8 +35,43 @@ type DiaMesRow = { day: number, sales: number, transactions: number }
 type MesRow = { month_idx: number, sales: number }
 
 export default defineEventHandler(async (event) => {
-  const session = await requireStoreAccess(event, 'reporte.ver')
+  const session = await requireStoreAccess(event, 'reporte.ver || caja.movimiento.crear')
   await ensureDatabase()
+
+  // La cajera solo necesita confirmar lo registrado en su turno. No exponemos
+  // tendencias ni el historial financiero completo sin el permiso de reportes.
+  if (!tieneAcceso('reporte.ver', session)) {
+    const lista = await pool.query(
+      `
+        select
+          cm.id,
+          cm.fecha,
+          cm.categoria,
+          cm.concepto,
+          coalesce(cm.metodo, 'efectivo') as metodo,
+          cm.monto::float as monto
+        from caja_movimiento cm
+        inner join caja_sesion cs
+          on cs.id = cm.caja_sesion_id
+          and cs.tienda_id = cm.tienda_id
+          and cs.estado = 'abierta'
+        where cm.tienda_id = $1
+          and cm.tipo = 'egreso'
+          and cm.estado = 'confirmado'
+          and cm.venta_id is null
+          and cm.compra_id is null
+        order by cm.fecha desc, cm.created_at desc
+      `,
+      [session.storeId],
+    )
+
+    return {
+      gastos: lista.rows,
+      semana: [],
+      semanas: [],
+      meses: [],
+    }
+  }
 
   const periodo = (getQuery(event).periodo as Periodo) || 'month'
   const filtro = rangoSql(['today', 'week', 'month'].includes(periodo) ? periodo : 'month')

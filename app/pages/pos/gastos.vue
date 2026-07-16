@@ -52,6 +52,7 @@ const categoryColorByValue: Record<string, string> = {
   publicidad: '#8b5cf6',
   mantenimiento: '#14b8a6',
   otros_gastos: '#94a3b8',
+  materia_prima: '#0ea5e9',
   compra_inventario: '#06b6d4',
   gasto_financiero: '#ef4444',
 }
@@ -72,20 +73,53 @@ function categoryMeta(value: string) {
   }
 }
 
-const activePeriod = ref<PeriodKey>('month')
+const session = usePosSession()
+const cashRegister = usePosCashRegister()
+const isLimitedCashier = computed(() => Boolean(
+  session.value?.roles.includes('cajero')
+  && !session.value?.permisos.includes('reporte.ver'),
+))
+const activePeriod = ref<PeriodKey>(isLimitedCashier.value ? 'today' : 'month')
 const kindFilter = ref<KindFilter>('todos')
 const searchTerm = ref('')
 const registerDialogVisible = ref(false)
-const session = usePosSession()
 const cashMovementVoidDialog = useCashMovementVoidDialog()
 const voidingMovementId = ref('')
 const canVoidMovements = computed(() => session.value?.roles.includes('propietario') ?? false)
+const cashStatus = cashRegister.cashStatus
+const cashLoading = cashRegister.isLoading
+const cashLoadReady = ref(false)
+const canRegisterExpense = computed(() => cashLoadReady.value && cashStatus.value === 'abierta' && !cashLoading.value)
+const currentCashAvailable = computed(() => {
+  const openingFloat = Number(cashRegister.cashSession.value?.openingFloat ?? 0)
+
+  return cashRegister.movements.value.reduce((balance, movement) => {
+    if (movement.method !== 'Efectivo') {
+      return balance
+    }
+
+    return movement.type === 'Ingreso'
+      ? balance + movement.amount
+      : balance - movement.amount
+  }, openingFloat)
+})
+
+onMounted(async () => {
+  try {
+    await cashRegister.loadCashData({ force: true })
+  } catch {
+    // El servidor vuelve a validar la caja al guardar.
+  } finally {
+    cashLoadReady.value = true
+  }
+})
 
 const hoyTexto = new Intl.DateTimeFormat('es-BO', {
   weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/La_Paz',
 }).format(new Date())
 const mesTexto = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric', timeZone: 'America/La_Paz' }).format(new Date())
 const currentCopy = computed(() => {
+  if (isLimitedCashier.value) return { subtitle: 'Salidas en efectivo del turno actual' }
   if (activePeriod.value === 'today') return { subtitle: `Gastos de hoy · ${hoyTexto}` }
   if (activePeriod.value === 'week') return { subtitle: 'Gastos de la semana actual' }
   return { subtitle: `Gastos del mes · ${mesTexto}` }
@@ -217,6 +251,9 @@ const visibleRows = computed(() => {
 const categoryOptions = CATEGORIAS_EGRESO
   .filter((c) => c.grupo !== 'inventario')
   .map((c) => ({ label: c.label, value: c.value }))
+const cashierCategoryOptions = CATEGORIAS_EGRESO
+  .filter((c) => c.value !== 'compra_inventario')
+  .map((c) => ({ label: c.label, value: c.value }))
 const methodOptions: Method[] = ['Efectivo', 'QR', 'Transferencia']
 
 const registerForm = reactive({
@@ -233,9 +270,13 @@ const registerError = ref('')
 const canSaveExpense = computed(() => registerForm.concept.trim().length > 0 && Number(registerForm.amount || 0) > 0)
 
 function openRegisterDialog() {
+  if (!canRegisterExpense.value) {
+    return
+  }
+
   registerForm.kind = 'Operativo'
   registerForm.concept = ''
-  registerForm.category = 'alquiler'
+  registerForm.category = isLimitedCashier.value ? 'materia_prima' : 'alquiler'
   registerForm.supplier = ''
   registerForm.method = 'Efectivo'
   registerForm.amount = 0
@@ -258,14 +299,19 @@ async function saveExpense() {
         categoria: registerForm.category,
         concepto: registerForm.concept.trim(),
         monto: Number(registerForm.amount || 0),
-        metodo: registerForm.method.toLowerCase(),
+        metodo: isLimitedCashier.value ? 'efectivo' : registerForm.method.toLowerCase(),
       },
     })
 
     registerDialogVisible.value = false
-    await refreshGastos()
-  } catch (error) {
-    registerError.value = error instanceof Error ? error.message : 'No se pudo guardar el gasto.'
+    await Promise.all([
+      refreshGastos(),
+      cashRegister.loadCashData({ force: true }),
+    ])
+  } catch (error: unknown) {
+    const dataError = (error as { data?: { statusMessage?: string } })?.data
+    registerError.value = dataError?.statusMessage
+      ?? (error instanceof Error ? error.message : 'No se pudo guardar el gasto.')
   } finally {
     savingExpense.value = false
   }
@@ -323,28 +369,53 @@ function methodIcon(method: Method) {
       <div class="expense-heading__title">
         <span class="heading-icon"><i class="pi pi-shopping-bag" aria-hidden="true" /></span>
         <div>
-          <h2>Gastos</h2>
+          <h2>{{ isLimitedCashier ? 'Gastos de caja' : 'Gastos' }}</h2>
           <p>{{ currentCopy.subtitle }}</p>
         </div>
       </div>
 
       <div class="expense-heading__tools">
-        <IconField class="expense-search">
+        <IconField v-if="!isLimitedCashier" class="expense-search">
           <InputIcon>
             <i class="pi pi-search" />
           </InputIcon>
           <InputText v-model="searchTerm" placeholder="Buscar gasto, proveedor o categoría..." />
         </IconField>
 
-        <Button type="button" icon="pi pi-plus" label="Registrar gasto" @click="openRegisterDialog" />
+        <Button
+          type="button"
+          icon="pi pi-plus"
+          label="Registrar gasto"
+          :loading="!cashLoadReady"
+          :disabled="!canRegisterExpense"
+          @click="openRegisterDialog"
+        />
       </div>
     </section>
 
-    <section class="period-switch" aria-label="Periodo de gastos">
+    <Message
+      v-if="cashLoadReady && cashStatus !== 'abierta'"
+      severity="warn"
+      icon="pi pi-lock"
+      class="cashier-cash-warning"
+    >
+      <span>La caja está cerrada. Ábrela antes de registrar una salida de efectivo.</span>
+      <NuxtLink to="/pos/caja">Ir a Caja</NuxtLink>
+    </Message>
+
+    <section v-if="isLimitedCashier && canRegisterExpense" class="cashier-balance" aria-label="Efectivo disponible en caja">
+      <span><i class="pi pi-wallet" aria-hidden="true" /> Caja abierta</span>
+      <div>
+        <small>Efectivo disponible</small>
+        <strong>{{ money(currentCashAvailable) }}</strong>
+      </div>
+    </section>
+
+    <section v-if="!isLimitedCashier" class="period-switch" aria-label="Periodo de gastos">
       <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />
     </section>
 
-    <section class="expense-metrics" aria-label="Resumen de gastos">
+    <section v-if="!isLimitedCashier" class="expense-metrics" aria-label="Resumen de gastos">
       <article v-for="card in metrics" :key="card.label" class="expense-metric">
         <span class="expense-metric__icon" :class="`is-${card.tone}`">
           <Icon :name="card.icon" aria-hidden="true" />
@@ -357,7 +428,7 @@ function methodIcon(method: Method) {
       </article>
     </section>
 
-    <section class="expense-breakdown" aria-label="Gastos por categoria">
+    <section v-if="!isLimitedCashier" class="expense-breakdown" aria-label="Gastos por categoria">
       <header>
         <div>
           <span>Distribución</span>
@@ -381,7 +452,7 @@ function methodIcon(method: Method) {
     </section>
 
     <!-- Tendencia de gastos (igual que Ingresos): por día en Semana, por semana en Mes -->
-    <section v-if="activePeriod !== 'today'" class="expense-trend" aria-label="Tendencia de gastos">
+    <section v-if="!isLimitedCashier && activePeriod !== 'today'" class="expense-trend" aria-label="Tendencia de gastos">
       <header class="panel-head">
         <div>
           <span>Tendencia</span>
@@ -429,9 +500,9 @@ function methodIcon(method: Method) {
         <header class="panel-head">
           <div>
             <span>Detalle</span>
-            <h2>Gastos realizados</h2>
+            <h2>{{ isLimitedCashier ? 'Gastos del turno' : 'Gastos realizados' }}</h2>
           </div>
-          <div class="kind-filter" role="group" aria-label="Filtrar por tipo de gasto">
+          <div v-if="!isLimitedCashier" class="kind-filter" role="group" aria-label="Filtrar por tipo de gasto">
             <button
               v-for="filter in kindFilters"
               :key="filter.value"
@@ -482,7 +553,7 @@ function methodIcon(method: Method) {
 
     </section>
 
-    <section class="ai-advice">
+    <section v-if="!isLimitedCashier" class="ai-advice">
       <span class="ai-advice__icon"><i class="pi pi-lightbulb" aria-hidden="true" /></span>
       <div>
         <h2>Consejo de Haru</h2>
@@ -494,14 +565,42 @@ function methodIcon(method: Method) {
     <!-- Diálogo: registrar gasto (persiste en BD vía /api/pos/gastos) -->
     <Dialog v-model:visible="registerDialogVisible" modal header="Registrar gasto" class="expense-dialog">
       <form class="dialog-form" @submit.prevent="saveExpense">
-        <label class="field full">
+        <label v-if="!isLimitedCashier" class="field full">
           <span>Tipo de gasto</span>
           <SelectButton v-model="registerForm.kind" :options="['Operativo', 'Inventario']" :allow-empty="false" />
         </label>
 
+        <template v-if="isLimitedCashier">
+          <Message severity="info" size="small" icon="pi pi-wallet" class="full">
+            Esta salida se descontará del efectivo de la caja actual.
+          </Message>
+
+          <label class="field full">
+            <span>Categoría</span>
+            <Select v-model="registerForm.category" :options="cashierCategoryOptions" optionLabel="label" optionValue="value" fluid />
+          </label>
+
+          <label class="field full">
+            <span>Concepto</span>
+            <InputText v-model="registerForm.concept" placeholder="Ej. Compra de harina" />
+          </label>
+
+          <label class="field full">
+            <span>Monto en efectivo</span>
+            <InputNumber v-model="registerForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
+          </label>
+
+          <Message v-if="registerError" severity="error" size="small" class="full">{{ registerError }}</Message>
+
+          <footer class="full">
+            <Button type="button" label="Cancelar" outlined severity="secondary" @click="registerDialogVisible = false" />
+            <Button type="submit" label="Guardar gasto" icon="pi pi-check" :loading="savingExpense" :disabled="!canSaveExpense || savingExpense" />
+          </footer>
+        </template>
+
         <!-- Inventario: no es un gasto plano, entra mercadería que suma stock.
              Se registra en el inventario, así que llevamos al usuario allí. -->
-        <template v-if="registerForm.kind === 'Inventario'">
+        <template v-else-if="registerForm.kind === 'Inventario'">
           <Message severity="info" size="small" icon="pi pi-box" class="full">
             La mercadería que compras suma stock a tus productos. La registramos en tu inventario para que el costo se descuente cuando la vendas.
           </Message>
@@ -607,6 +706,59 @@ function methodIcon(method: Method) {
 .expense-search :deep(.p-inputtext) {
   width: 100%;
   border-radius: 999px;
+}
+
+.cashier-cash-warning :deep(.p-message-content) {
+  width: 100%;
+}
+
+.cashier-cash-warning span {
+  flex: 1 1 auto;
+}
+
+.cashier-cash-warning a {
+  flex: 0 0 auto;
+  color: #92400e;
+  font-weight: 900;
+  text-decoration: underline;
+}
+
+.cashier-balance {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 16px;
+  border-block: 1px solid #dbe7df;
+  background: #f7fbf8;
+}
+
+.cashier-balance > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f6d3f;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.cashier-balance > div {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.cashier-balance small {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.cashier-balance strong {
+  color: #123c29;
+  font-size: 1.25rem;
+  font-weight: 900;
 }
 
 .period-switch {

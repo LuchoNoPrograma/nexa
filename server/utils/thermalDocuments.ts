@@ -42,6 +42,7 @@ type CashReportBlock =
 
 type CashReportDocument = {
   type: 'cash-report'
+  variant?: 'standard' | 'compact'
   title: string
   storeName: string
   registerName: string
@@ -95,7 +96,8 @@ function thermalCss() {
     table.rpt td small, table.rpt .sub { display: block; font-size: 10px; }
     table.rpt .amt { text-align: right; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; width: 22mm; }
     table.rpt th.amt { font-size: 10px; }
-    table.rpt .qty { text-align: right; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; width: 9mm; }
+    table.rpt .qty { text-align: center; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; width: 9mm; }
+    table.rpt .unit { text-align: right; font: 900 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; width: 17mm; }
     table.rpt .time { font: 900 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; width: 13mm; }
     table.rpt tr.line td { border-bottom: 1px dashed #000; }
     table.rpt tr.strong td { border-top: 1px solid #000; font-weight: 900; padding-top: 6px; }
@@ -106,6 +108,20 @@ function thermalCss() {
     .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
     footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; text-align: center; color: #000; font-size: 11px; }
     footer strong { display: block; margin-top: 3px; color: #000; }
+    .ticket.compact-report { padding: 2px 4mm 2mm; border: 0; font-size: 11px; line-height: 1.25; }
+    .compact-report header { padding-bottom: 4px; }
+    .compact-report h1 { font-size: 16px; }
+    .compact-report header p { margin-top: 1px; font-size: 10px; }
+    .compact-report .doc { margin: 5px 0; padding: 0 0 5px; border: 0; border-bottom: 1px dashed #000; }
+    .compact-report .doc strong { margin-top: 2px; font-size: 12px; white-space: nowrap; }
+    .compact-report .doc small { margin-top: 2px; }
+    .compact-report table.rpt { margin-top: 5px; }
+    .compact-report table.rpt td, .compact-report table.rpt th { padding: 4px 2px; }
+    .compact-report table.rpt th:first-child, .compact-report table.rpt td:first-child { padding-left: 0; }
+    .compact-report table.rpt th:last-child, .compact-report table.rpt td:last-child { padding-right: 0; }
+    .compact-report table.rpt th { font-size: 9px; }
+    .compact-report table.rpt .amt { width: 19mm; }
+    .compact-report footer { margin-top: 9px; padding-top: 6px; font-size: 10px; }
     .ticket.sale-ticket { padding: 2px 4mm 2mm; border: 0; font-size: 11px; line-height: 1.25; }
     .sale-ticket header { padding-bottom: 4px; }
     .sale-ticket h1 { font-size: 16px; }
@@ -243,7 +259,7 @@ function renderCashReportDocument(doc: CashReportDocument) {
       <small>${escapeHtml(doc.docSubtitle)}</small>
     </section>
     ${doc.blocks.map(renderCashBlock).join('')}
-  `)
+  `, doc.variant === 'compact' ? 'compact-report' : '')
 }
 
 export function renderThermalDocumentHtml(document: ThermalDocument) {

@@ -1,6 +1,8 @@
 import { createError, readBody } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { cleanText, nullableText, numberOrZero, requireStoreAccess } from '../../../utils/posCatalog'
+import { requireLockedOpenCashSession } from '../../../utils/posCash'
+import { tieneAcceso } from '~~/shared/utils/acceso'
 import { CATEGORIAS_EGRESO } from '~~/shared/utils/finanzas'
 
 const metodos = ['efectivo', 'qr', 'transferencia', 'tarjeta', 'otro'] as const
@@ -10,14 +12,11 @@ type GastoBody = {
   concepto?: string
   monto?: number
   metodo?: string
-  fecha?: string | null
   notas?: string | null
 }
 
-// Registrar un gasto. Persiste en caja_movimiento como egreso CONFIRMADO con su
-// categoría contable (alquiler, luz, sueldos…), para que la cascada de Finanzas
-// lo tome de inmediato. No exige caja abierta: un gasto fijo (alquiler) no depende
-// de que el POS esté abierto.
+// Registrar un gasto contra el turno de caja abierto. La cajera registra solo
+// salidas en efectivo; los roles con reportes pueden conservar otros métodos.
 export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'caja.movimiento.crear')
   await ensureDatabase()
@@ -37,19 +36,90 @@ export default defineEventHandler(async (event) => {
   const categoria = CATEGORIAS_EGRESO.some((c) => c.value === body.categoria)
     ? (body.categoria as string)
     : 'otros_gastos'
-  const metodo = metodos.includes(body.metodo as typeof metodos[number]) ? body.metodo : 'efectivo'
-  const fecha = nullableText(body.fecha)
+  const esCajeroLimitado = session.roles.includes('cajero') && !tieneAcceso('reporte.ver', session)
+  const metodo = esCajeroLimitado
+    ? 'efectivo'
+    : metodos.includes(body.metodo as typeof metodos[number]) ? body.metodo : 'efectivo'
+  const client = await pool.connect()
 
-  const result = await pool.query<{ id: string }>(
-    `
-      insert into caja_movimiento (
-        tienda_id, usuario_id, tipo, categoria, concepto, metodo, monto, estado, fecha, notas
+  try {
+    await client.query('begin')
+    const cashSessionId = await requireLockedOpenCashSession(
+      client,
+      session.storeId,
+      'Abre caja antes de registrar un gasto.',
+    )
+
+    let availableCash: number | null = null
+    if (metodo === 'efectivo') {
+      const balanceResult = await client.query<{ availableCash: number }>(
+        `
+          select (
+            cs.saldo_inicial
+            + coalesce(sum(cm.monto) filter (
+                where cm.tipo = 'ingreso'
+                  and cm.metodo = 'efectivo'
+                  and cm.estado <> 'anulado'
+              ), 0)
+            - coalesce(sum(cm.monto) filter (
+                where cm.tipo = 'egreso'
+                  and cm.metodo = 'efectivo'
+                  and cm.estado <> 'anulado'
+              ), 0)
+          )::float as "availableCash"
+          from caja_sesion cs
+          left join caja_movimiento cm
+            on cm.caja_sesion_id = cs.id
+            and cm.tienda_id = cs.tienda_id
+          where cs.id = $1
+            and cs.tienda_id = $2
+            and cs.estado = 'abierta'
+          group by cs.id
+        `,
+        [cashSessionId, session.storeId],
       )
-      values ($1, $2, 'egreso', $3, $4, $5, $6, 'confirmado', coalesce($7::timestamptz, now()), $8)
-      returning id
-    `,
-    [session.storeId, session.id, categoria, concepto, metodo, monto, fecha, nullableText(body.notas)],
-  )
+      availableCash = Number(balanceResult.rows[0]?.availableCash ?? 0)
 
-  return { id: result.rows[0]?.id }
+      if (monto > availableCash + 0.009) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: `No hay suficiente efectivo en caja. Disponible: Bs ${availableCash.toFixed(2)}.`,
+        })
+      }
+    }
+
+    const result = await client.query<{ id: string }>(
+      `
+        insert into caja_movimiento (
+          tienda_id, caja_sesion_id, usuario_id, tipo, categoria, concepto,
+          metodo, monto, estado, fecha, notas
+        )
+        values ($1, $2, $3, 'egreso', $4, $5, $6, $7, 'confirmado', now(), $8)
+        returning id
+      `,
+      [
+        session.storeId,
+        cashSessionId,
+        session.id,
+        categoria,
+        concepto,
+        metodo,
+        monto,
+        nullableText(body.notas),
+      ],
+    )
+
+    await client.query('commit')
+
+    return {
+      id: result.rows[0]?.id,
+      cashSessionId,
+      availableCash: availableCash === null ? null : availableCash - monto,
+    }
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 })

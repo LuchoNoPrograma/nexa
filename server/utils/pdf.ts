@@ -29,9 +29,9 @@ export async function renderThermalHtmlToPdf(html: string) {
 
     const ticketMetrics = await page.$eval('.ticket', element => ({
       heightPx: Math.ceil((element as HTMLElement).scrollHeight),
-      isSaleTicket: element.classList.contains('sale-ticket'),
+      isCompact: element.classList.contains('sale-ticket') || element.classList.contains('compact-report'),
     }))
-    const minimumHeightMm = ticketMetrics.isSaleTicket ? 40 : 120
+    const minimumHeightMm = ticketMetrics.isCompact ? 40 : 120
     const ticketHeightMm = Math.max(minimumHeightMm, Math.ceil(ticketMetrics.heightPx * 25.4 / 96) + 2)
     const pdf = await page.pdf({
       width: '80mm',

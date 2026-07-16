@@ -30,6 +30,7 @@ export const CATEGORIAS_EGRESO: { value: string, label: string, grupo: GrupoCont
   { value: 'publicidad', label: 'Publicidad', grupo: 'gasto_operativo' },
   { value: 'mantenimiento', label: 'Mantenimiento', grupo: 'gasto_operativo' },
   { value: 'otros_gastos', label: 'Otros gastos', grupo: 'gasto_operativo' },
+  { value: 'materia_prima', label: 'Materia prima e insumos', grupo: 'inventario' },
   { value: 'compra_inventario', label: 'Compra de inventario', grupo: 'inventario' },
   { value: 'gasto_financiero', label: 'Intereses y comisiones bancarias', grupo: 'gasto_financiero' },
 ]

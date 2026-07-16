@@ -130,11 +130,15 @@ export async function getOpenCashSession(client: PoolClient, storeId: string) {
   return result.rows[0]?.id ?? null
 }
 
-export async function requireOpenCashSession(client: PoolClient, storeId: string) {
+export async function requireOpenCashSession(
+  client: PoolClient,
+  storeId: string,
+  missingSessionMessage = 'Abre caja antes de vender.',
+) {
   const cashSessionId = await getOpenCashSession(client, storeId)
 
   if (!cashSessionId) {
-    throw createError({ statusCode: 409, statusMessage: 'Abre caja antes de vender.' })
+    throw createError({ statusCode: 409, statusMessage: missingSessionMessage })
   }
 
   return cashSessionId
@@ -144,8 +148,12 @@ export async function lockCashSession(client: PoolClient, cashSessionId: string)
   await client.query('select pg_advisory_xact_lock(hashtext($1))', [cashSessionId])
 }
 
-export async function requireLockedOpenCashSession(client: PoolClient, storeId: string) {
-  const cashSessionId = await requireOpenCashSession(client, storeId)
+export async function requireLockedOpenCashSession(
+  client: PoolClient,
+  storeId: string,
+  missingSessionMessage?: string,
+) {
+  const cashSessionId = await requireOpenCashSession(client, storeId, missingSessionMessage)
   await lockCashSession(client, cashSessionId)
 
   const result = await client.query<{ id: string }>(

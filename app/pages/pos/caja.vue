@@ -76,6 +76,7 @@ type CashReportBlock =
 
 type CashReportDocument = {
   type: 'cash-report'
+  variant?: 'standard' | 'compact'
   title: string
   storeName: string
   registerName: string
@@ -474,9 +475,9 @@ function reportShortDate() {
 }
 
 // CSS común para tickets de 80mm (mismo estilo que el comprobante de venta).
-function thermalCss(screen = true) {
+function thermalCss(screen = true, variant: 'standard' | 'compact' = 'standard') {
   return `
-    @page { size: 80mm auto; margin: 4mm; }
+    @page { size: 80mm auto; margin: ${variant === 'compact' ? '0' : '4mm'}; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 12px; }
     .ticket { width: 72mm; margin: 0 auto; padding: 2mm 0; line-height: 1.35; }
@@ -495,7 +496,8 @@ function thermalCss(screen = true) {
     table.rpt td small, table.rpt .sub { display: block; font-size: 10px; }
     table.rpt .amt { text-align: right; font: 900 12px ui-monospace, monospace; white-space: nowrap; width: 22mm; }
     table.rpt th.amt { font-size: 10px; }
-    table.rpt .qty { text-align: right; font: 900 12px ui-monospace, monospace; width: 9mm; }
+    table.rpt .qty { text-align: center; font: 900 12px ui-monospace, monospace; width: 9mm; }
+    table.rpt .unit { text-align: right; font: 900 12px ui-monospace, monospace; white-space: nowrap; width: 17mm; }
     table.rpt .time { font: 900 11px ui-monospace, monospace; width: 13mm; }
     table.rpt tr.line td { border-bottom: 1px dashed #000; }
     table.rpt tr.strong td { border-top: 1px solid #000; font-weight: 900; padding-top: 6px; }
@@ -506,11 +508,25 @@ function thermalCss(screen = true) {
     .sign .line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
     footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; text-align: center; font-size: 11px; }
     footer strong { display: block; margin-top: 3px; }
+    .ticket.compact-report { width: 80mm; padding: 2px 4mm 2mm; border: 0; font-size: 11px; line-height: 1.25; }
+    .compact-report header { padding-bottom: 4px; }
+    .compact-report h1 { font-size: 16px; }
+    .compact-report header p { margin-top: 1px; font-size: 10px; }
+    .compact-report .doc { margin: 5px 0; padding: 0 0 5px; border: 0; border-bottom: 1px dashed #000; }
+    .compact-report .doc strong { margin-top: 2px; font-size: 12px; white-space: nowrap; }
+    .compact-report .doc small { margin-top: 2px; }
+    .compact-report table.rpt { margin-top: 5px; }
+    .compact-report table.rpt td, .compact-report table.rpt th { padding: 4px 2px; }
+    .compact-report table.rpt th:first-child, .compact-report table.rpt td:first-child { padding-left: 0; }
+    .compact-report table.rpt th:last-child, .compact-report table.rpt td:last-child { padding-right: 0; }
+    .compact-report table.rpt th { font-size: 9px; }
+    .compact-report table.rpt .amt { width: 19mm; }
+    .compact-report footer { margin-top: 9px; padding-top: 6px; font-size: 10px; }
     ${screen ? '@media screen { body { background: #f3f4f6; padding: 16px; } .ticket { background: #fff; min-height: 100vh; padding: 5mm; box-shadow: 0 12px 30px rgba(0,0,0,.16); } }' : ''}
   `
 }
 
-function openThermalReport(name: string, title: string, bodyHtml: string) {
+function openThermalReport(name: string, title: string, bodyHtml: string, variant: 'standard' | 'compact' = 'standard') {
   if (!import.meta.client) {
     return
   }
@@ -521,10 +537,10 @@ function openThermalReport(name: string, title: string, bodyHtml: string) {
   <meta charset="utf-8">
   <meta name="print-document" content="${escapeHtml(name)}">
   <title>${escapeHtml(title)}</title>
-  <style>${thermalCss(false)}</style>
+  <style>${thermalCss(false, variant)}</style>
 </head>
 <body>
-  <main class="ticket">${bodyHtml}</main>
+  <main class="ticket${variant === 'compact' ? ' compact-report' : ''}">${bodyHtml}</main>
 </body>
 </html>`)
 }
@@ -583,9 +599,16 @@ function safeFileName(value: string) {
     .toLowerCase()
 }
 
-function baseCashReportDocument(title: string, docTitle: string, docSubtitle: string, blocks: CashReportBlock[]): CashReportDocument {
+function baseCashReportDocument(
+  title: string,
+  docTitle: string,
+  docSubtitle: string,
+  blocks: CashReportBlock[],
+  variant: CashReportDocument['variant'] = 'standard',
+): CashReportDocument {
   return {
     type: 'cash-report',
+    variant,
     title,
     storeName: storeReportName(),
     registerName: registerName.value,
@@ -844,20 +867,21 @@ function buildProductReportBody() {
   const rows = productRanking.value.length
     ? productRanking.value.map((item) => `
         <tr class="line">
-          <td>${escapeHtml(item.name)}</td>
           <td class="qty">${item.qty}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td class="unit">${escapeHtml(money(item.qty > 0 ? item.total / item.qty : 0))}</td>
           <td class="amt">${escapeHtml(money(item.total))}</td>
         </tr>
       `).join('')
-    : '<tr class="line"><td colspan="3">Sin ventas registradas.</td></tr>'
+    : '<tr class="line"><td colspan="4">Sin ventas registradas.</td></tr>'
 
   return `
-    ${reportHeaderHtml('Reporte por producto', 'Total mercadería vendida')}
+    ${reportHeaderHtml('Reporte por producto', 'Ventas agrupadas del turno')}
 
     <table class="rpt">
-      <thead><tr><th>Detalle</th><th class="qty">C.</th><th class="amt">Total</th></tr></thead>
+      <thead><tr><th class="qty">Cant.</th><th>Producto</th><th class="unit">Prom.</th><th class="amt">Total</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tr class="strong"><td>Total (${productUnits.value} u.)</td><td class="qty"></td><td class="amt">${escapeHtml(money(productTotal.value))}</td></tr>
+      <tr class="strong"><td colspan="3">Total (${productUnits.value} u.)</td><td class="amt">${escapeHtml(money(productTotal.value))}</td></tr>
     </table>
 
     <footer>
@@ -872,34 +896,35 @@ function buildProductReportDocument() {
     ? productRanking.value.map(item => ({
         className: 'line',
         cells: [
-          { text: item.name },
           { text: String(item.qty), className: 'qty' },
+          { text: item.name },
+          { text: money(item.qty > 0 ? item.total / item.qty : 0), className: 'unit' },
           { text: money(item.total), className: 'amt' },
         ],
       }))
-    : [{ className: 'line', cells: [{ text: 'Sin ventas registradas.', colspan: 3 }] }]
+    : [{ className: 'line', cells: [{ text: 'Sin ventas registradas.', colspan: 4 }] }]
 
   rows.push({
     className: 'strong',
     cells: [
-      { text: `Total (${productUnits.value} u.)` },
-      { text: '', className: 'qty' },
+      { text: `Total (${productUnits.value} u.)`, colspan: 3 },
       { text: money(productTotal.value), className: 'amt' },
     ],
   })
 
-  return baseCashReportDocument('Reporte por producto - NEXA', 'Reporte por producto', 'Total mercadería vendida', [
+  return baseCashReportDocument('Reporte por producto - NEXA', 'Reporte por producto', 'Ventas agrupadas del turno', [
     {
       type: 'table',
       columns: [
-        { text: 'Detalle' },
-        { text: 'C.', className: 'qty' },
+        { text: 'Cant.', className: 'qty' },
+        { text: 'Producto' },
+        { text: 'Prom.', className: 'unit' },
         { text: 'Total', className: 'amt' },
       ],
       rows,
     },
     { type: 'footer', text: `Turno: ${sessionDuration.value}`, strong: reportLongDate() },
-  ])
+  ], 'compact')
 }
 
 function printProductReport() {
@@ -907,7 +932,7 @@ function printProductReport() {
     return
   }
 
-  openThermalReport('nexa-reporte-productos', 'Reporte por producto - NEXA', buildProductReportBody())
+  openThermalReport('nexa-reporte-productos', 'Reporte por producto - NEXA', buildProductReportBody(), 'compact')
 }
 
 async function downloadProductReport() {
@@ -1088,44 +1113,95 @@ async function downloadProductReport() {
       </form>
     </Dialog>
 
-    <!-- Diálogo: reporte por producto -->
-    <Dialog v-model:visible="productDialogVisible" modal header="Reporte por producto" class="cash-dialog">
-      <div class="report-block">
-        <div class="report-totals">
-          <div>
-            <small>Unidades vendidas</small>
-            <strong>{{ productUnits }}</strong>
-          </div>
-          <div>
+    <!-- Diálogo: reporte por producto con la misma arquitectura del ticket de venta. -->
+    <Dialog v-model:visible="productDialogVisible" modal dismissable-mask :show-header="false" class="product-report-dialog">
+      <section class="product-report-panel">
+        <button type="button" class="product-report-close" aria-label="Cerrar reporte" title="Cerrar" @click="productDialogVisible = false">
+          <i class="pi pi-times" aria-hidden="true" />
+        </button>
+
+        <aside class="product-report-actions">
+          <header>
+            <span><i class="pi pi-chart-bar" aria-hidden="true" /> Reporte del turno</span>
+            <h3>Ventas por producto</h3>
+            <p>Productos agrupados por unidades e importe vendido.</p>
+          </header>
+
+          <div class="product-report-summary">
             <small>Total vendido</small>
-            <strong>{{ money(productTotal) }}</strong>
+            <b>{{ money(productTotal) }}</b>
+            <div>
+              <span><small>Productos</small><strong>{{ productRanking.length }}</strong></span>
+              <span><small>Unidades</small><strong>{{ productUnits }}</strong></span>
+            </div>
           </div>
-        </div>
 
-        <ul class="product-list">
-          <li v-for="(item, index) in productRanking" :key="`${item.productId ?? 'sin-id'}-${item.name}`">
-            <b>{{ index + 1 }}</b>
-            <span class="product-main">
-              <strong>{{ item.name }}</strong>
-              <small>{{ item.qty }} unidades</small>
-            </span>
-            <strong class="product-total">{{ money(item.total) }}</strong>
-          </li>
-        </ul>
-      </div>
+          <div class="product-report-buttons">
+            <Button
+              type="button"
+              label="Descargar PDF"
+              icon="pi pi-download"
+              :loading="reportPdfDownloading === 'producto'"
+              :disabled="!!reportPdfDownloading"
+              @click="downloadProductReport"
+            />
+            <Button type="button" label="Imprimir ticket" icon="pi pi-print" outlined @click="printProductReport" />
+          </div>
+        </aside>
 
-      <template #footer>
-        <Button
-          type="button"
-          label="Descargar PDF"
-          icon="pi pi-download"
-          outlined
-          :loading="reportPdfDownloading === 'producto'"
-          :disabled="!!reportPdfDownloading"
-          @click="downloadProductReport"
-        />
-        <Button type="button" label="Imprimir" icon="pi pi-print" @click="printProductReport" />
-      </template>
+        <article class="product-report-ticket" aria-label="Vista previa del reporte por producto">
+          <header>
+            <h3>{{ storeReportName() }}</h3>
+            <p>{{ registerName }}</p>
+            <p>Responsable: {{ openedBy }}</p>
+          </header>
+
+          <section class="product-report-ticket__doc">
+            <span>Reporte por producto</span>
+            <strong>{{ reportShortDate() }}</strong>
+            <small>Ventas agrupadas del turno</small>
+          </section>
+
+          <table class="product-report-ticket__lines">
+            <colgroup>
+              <col class="qty-col">
+              <col>
+              <col class="unit-col">
+              <col class="amount-col">
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="qty">Cant.</th>
+                <th>Producto</th>
+                <th class="unit">Prom.</th>
+                <th class="amount">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in productRanking" :key="`${item.productId ?? 'sin-id'}-${item.name}`">
+                <td class="qty">{{ item.qty }}</td>
+                <td class="detail">{{ item.name }}</td>
+                <td class="unit">{{ money(item.qty > 0 ? item.total / item.qty : 0) }}</td>
+                <td class="amount">{{ money(item.total) }}</td>
+              </tr>
+              <tr v-if="!productRanking.length">
+                <td colspan="4" class="empty">Sin ventas registradas.</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td colspan="3">Total ({{ productUnits }} u.)</td>
+                <td class="amount">{{ money(productTotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <footer>
+            <em>Turno: {{ sessionDuration }}</em>
+            <strong>{{ reportLongDate() }}</strong>
+          </footer>
+        </article>
+      </section>
     </Dialog>
 
     <!-- Diálogo: arqueo de caja -->
@@ -1537,13 +1613,27 @@ async function downloadProductReport() {
   width: min(560px, calc(100vw - 24px));
 }
 
+:global(.product-report-dialog.p-dialog) {
+  width: min(900px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  border: 0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.26);
+}
+
+:global(.product-report-dialog .p-dialog-content) {
+  padding: 0 !important;
+  background: #f4f6f5 !important;
+}
+
 .close-dialog {
   width: min(720px, calc(100vw - 24px));
 }
 
 .dialog-form,
 .close-content,
-.report-block,
 .arqueo-block {
   display: grid;
   gap: 14px;
@@ -1591,77 +1681,280 @@ async function downloadProductReport() {
   font-size: 0.86rem;
 }
 
-/* --- Reporte por producto --- */
-.report-totals {
+/* --- Reporte por producto: acciones + vista previa térmica --- */
+.product-report-panel {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-height: min(620px, calc(100dvh - 32px));
+  background: #f4f6f5;
 }
 
-.report-totals div {
+.product-report-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
   display: grid;
-  gap: 3px;
-  padding: 13px;
-  border-radius: 12px;
-  background: #f3faf2;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #dc2626;
+  background: #fff1f2;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.12);
+  cursor: pointer;
 }
 
-.report-totals small {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #718074;
+.product-report-close:hover {
+  color: #ffffff;
+  background: #dc2626;
 }
 
-.report-totals strong {
-  font-size: 1.3rem;
+.product-report-actions {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 18px;
+  border-right: 1px solid #d9e2dc;
+  color: #0c1f12;
+  background: #ffffff;
+}
+
+.product-report-actions header > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--primary-200);
+  border-radius: 999px;
+  color: var(--primary-700);
+  background: var(--primary-50);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.product-report-actions h3 {
+  margin: 14px 0 4px;
+  color: #0c1f12;
+  font-size: 1.12rem;
   font-weight: 900;
 }
 
-.product-list {
+.product-report-actions header p {
+  margin: 0;
+  color: #5a6b5f;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.product-report-summary {
   display: grid;
   gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.product-list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
+  padding: 16px;
+  border: 1px solid #d9e2dc;
   border-radius: 12px;
-  background: #f8fbf8;
+  background: #fbfdfb;
 }
 
-.product-list b {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border-radius: 999px;
-  background: #0a6f1f;
-  color: #fff;
-  font-size: 0.74rem;
-  font-weight: 900;
-}
-
-.product-main strong {
-  display: block;
-  font-size: 0.94rem;
+.product-report-summary small {
+  color: #5a6b5f;
+  font-size: 0.66rem;
   font-weight: 800;
+  text-transform: uppercase;
 }
 
-.product-main small {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #718074;
+.product-report-summary > b {
+  color: var(--primary-700);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.65rem;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
-.product-total {
+.product-report-summary > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #d9e2dc;
+}
+
+.product-report-summary span {
+  display: grid;
+  gap: 2px;
+}
+
+.product-report-summary strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 1rem;
+}
+
+.product-report-buttons {
+  display: grid;
+  gap: 10px;
+}
+
+.product-report-buttons :deep(.p-button) {
+  width: 100%;
+  justify-content: center;
+  border-radius: 8px;
   font-weight: 900;
+}
+
+.product-report-ticket {
+  width: 80mm;
+  margin: 8px auto 18px;
+  padding: 2px 15px 8px;
+  border: 1px solid #111111;
+  color: #000000;
+  background: #ffffff;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.product-report-ticket header {
+  padding-bottom: 4px;
+  border-bottom: 1px solid #000000;
+  text-align: center;
+}
+
+.product-report-ticket header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.product-report-ticket header p {
+  margin: 1px 0 0;
+  color: #000000;
+  font-size: 10px;
+}
+
+.product-report-ticket__doc {
+  margin: 5px 0;
+  padding: 0 0 5px;
+  border-bottom: 1px dashed #000000;
+  text-align: center;
+}
+
+.product-report-ticket__doc span,
+.product-report-ticket__doc strong,
+.product-report-ticket__doc small {
+  display: block;
+}
+
+.product-report-ticket__doc span {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.product-report-ticket__doc strong {
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.product-report-ticket__doc small {
+  margin-top: 2px;
+  color: #000000;
+  font-size: 10px;
+}
+
+.product-report-ticket__lines {
+  width: 100%;
+  margin-top: 5px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.product-report-ticket__lines .qty-col {
+  width: 9mm;
+}
+
+.product-report-ticket__lines .unit-col {
+  width: 17mm;
+}
+
+.product-report-ticket__lines .amount-col {
+  width: 19mm;
+}
+
+.product-report-ticket__lines th,
+.product-report-ticket__lines td {
+  padding: 4px 2px;
+  vertical-align: top;
+}
+
+.product-report-ticket__lines th:first-child,
+.product-report-ticket__lines td:first-child {
+  padding-left: 0;
+}
+
+.product-report-ticket__lines th:last-child,
+.product-report-ticket__lines td:last-child {
+  padding-right: 0;
+}
+
+.product-report-ticket__lines th {
+  border-bottom: 1px solid #000000;
+  font-size: 9px;
+  font-weight: 900;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.product-report-ticket__lines tbody td {
+  border-bottom: 1px dashed #000000;
+}
+
+.product-report-ticket__lines .detail {
+  overflow-wrap: anywhere;
+}
+
+.product-report-ticket__lines .qty {
+  text-align: center;
+}
+
+.product-report-ticket__lines .unit,
+.product-report-ticket__lines .amount {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.product-report-ticket__lines .empty {
+  padding: 16px 0;
+  text-align: center;
+}
+
+.product-report-ticket__lines .total-row td {
+  padding-top: 6px;
+  border-top: 2px solid #000000;
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.product-report-ticket footer {
+  margin-top: 9px;
+  padding-top: 6px;
+  border-top: 1px solid #000000;
+  color: #000000;
+  font-size: 10px;
+  text-align: center;
+}
+
+.product-report-ticket footer strong {
+  display: block;
+  margin-top: 3px;
 }
 
 /* --- Arqueo / cierre --- */
@@ -1777,6 +2070,20 @@ async function downloadProductReport() {
   .cash-open-btn {
     width: 100%;
   }
+
+  .product-report-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .product-report-actions {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #d9e2dc;
+  }
+
+  .product-report-ticket {
+    width: min(80mm, calc(100vw - 48px));
+  }
 }
 
 @media (max-width: 560px) {
@@ -1791,8 +2098,7 @@ async function downloadProductReport() {
   }
 
   .dialog-form,
-  .close-fields,
-  .report-totals {
+  .close-fields {
     grid-template-columns: 1fr;
   }
 
