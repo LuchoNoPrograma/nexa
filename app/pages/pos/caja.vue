@@ -207,6 +207,7 @@ const paymentBreakdown = computed(() => paymentMethods.map((method) => {
 
   return {
     method,
+    reportLabel: method === 'QR' ? 'Ventas por QR' : 'Ventas en efectivo',
     income,
     count: movements.value.filter((movement) => movement.type === 'Ingreso' && movement.method === method && movement.source === 'venta').length,
   }
@@ -772,6 +773,7 @@ function buildClosureReportBody() {
     <div class="section-title">Resumen</div>
     <table class="rpt">
       <tr><td>Total ventas</td><td class="amt">${escapeHtml(money(totalSales.value))}</td></tr>
+      ${paymentBreakdown.value.map(item => `<tr><td>${escapeHtml(item.reportLabel)}</td><td class="amt">${escapeHtml(money(item.income))}</td></tr>`).join('')}
       <tr><td>Otros ingresos</td><td class="amt">${escapeHtml(money(otrosIngresos))}</td></tr>
       <tr><td>Egresos</td><td class="amt">${escapeHtml(money(egresos))}</td></tr>
       <tr class="strong"><td>Total movimiento en caja</td><td class="amt">${escapeHtml(money(totalMovimiento))}</td></tr>
@@ -834,6 +836,12 @@ function buildClosureReportDocument() {
       type: 'table',
       rows: [
         { cells: [{ text: 'Total ventas' }, { text: money(totalSales.value), className: 'amt' }] },
+        ...paymentBreakdown.value.map(item => ({
+          cells: [
+            { text: item.reportLabel },
+            { text: money(item.income), className: 'amt' },
+          ],
+        })),
         { cells: [{ text: 'Otros ingresos' }, { text: money(otrosIngresos), className: 'amt' }] },
         { cells: [{ text: 'Egresos' }, { text: money(egresos), className: 'amt' }] },
         { className: 'strong', cells: [{ text: 'Total movimiento en caja' }, { text: money(totalMovimiento), className: 'amt' }] },
