@@ -20,6 +20,7 @@ type KindFilter = 'todos' | ExpenseKind
 interface ExpenseRow {
   id: string
   date: string
+  cashLabel: string
   concept: string
   category: string
   kind: ExpenseKind
@@ -119,14 +120,22 @@ const hoyTexto = new Intl.DateTimeFormat('es-BO', {
 }).format(new Date())
 const mesTexto = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric', timeZone: 'America/La_Paz' }).format(new Date())
 const currentCopy = computed(() => {
-  if (isLimitedCashier.value) return { subtitle: 'Salidas en efectivo del turno actual' }
-  if (activePeriod.value === 'today') return { subtitle: `Gastos de hoy · ${hoyTexto}` }
-  if (activePeriod.value === 'week') return { subtitle: 'Gastos de la semana actual' }
-  return { subtitle: `Gastos del mes · ${mesTexto}` }
+  if (activePeriod.value === 'today') return { subtitle: `Día calendario · ${hoyTexto} · incluye todos los turnos` }
+  if (activePeriod.value === 'week') return { subtitle: 'Semana actual · incluye todos los turnos' }
+  return { subtitle: `Mes actual · ${mesTexto} · incluye todos los turnos` }
 })
 
 // --- Gastos reales del periodo (API) ---
-type ApiGasto = { id: string, fecha: string, categoria: string, concepto: string, metodo: string, monto: number }
+type ApiGasto = {
+  id: string
+  fecha: string
+  categoria: string
+  concepto: string
+  metodo: string
+  monto: number
+  cashSessionId: string | null
+  cashOpenedAt: string | null
+}
 type TrendRow = { label: string, range: string, sales: number, transactions: number }
 type MonthRow = { label: string, sales: number }
 type GastosResponse = { gastos: ApiGasto[], semana: TrendRow[], semanas: TrendRow[], meses: MonthRow[] }
@@ -152,11 +161,25 @@ function formatExpenseDate(iso: string) {
   return d.toLocaleDateString('es-BO', { day: '2-digit', month: 'short', timeZone: 'America/La_Paz' })
 }
 
+function cashSessionLabel(openedAt: string | null) {
+  if (!openedAt) return 'Sin turno de caja'
+
+  const date = new Date(openedAt)
+  const day = date.toLocaleDateString('es-BO', {
+    day: '2-digit', month: '2-digit', timeZone: 'America/La_Paz',
+  })
+  const time = date.toLocaleTimeString('es-BO', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/La_Paz',
+  })
+  return `Caja ${day} · ${time}`
+}
+
 const rows = computed<ExpenseRow[]>(() => (gastosData.value?.gastos ?? []).map((g) => {
   const meta = categoryMeta(g.categoria)
   return {
     id: g.id,
     date: formatExpenseDate(g.fecha),
+    cashLabel: cashSessionLabel(g.cashOpenedAt),
     concept: g.concepto,
     category: meta.label,
     kind: meta.kind,
@@ -239,12 +262,14 @@ const visibleRows = computed(() => {
 
   return rows.value.filter((row) => {
     const matchesKind = kindFilter.value === 'todos' || row.kind === kindFilter.value
-    const matchesTerm = !term || [row.concept, row.category, row.method, row.supplier ?? '']
+    const matchesTerm = !term || [row.concept, row.category, row.method, row.cashLabel, row.supplier ?? '']
       .some(value => value.toLowerCase().includes(term))
 
     return matchesKind && matchesTerm
   })
 })
+
+const visibleSubtotal = computed(() => visibleRows.value.reduce((sum, row) => sum + row.amount, 0))
 
 // --- Registrar gasto (persiste en BD) ---
 // Categorías operativas/financieras (la de inventario se elige con el tipo de gasto).
@@ -369,13 +394,13 @@ function methodIcon(method: Method) {
       <div class="expense-heading__title">
         <span class="heading-icon"><i class="pi pi-shopping-bag" aria-hidden="true" /></span>
         <div>
-          <h2>{{ isLimitedCashier ? 'Gastos de caja' : 'Gastos' }}</h2>
+          <h2>Gastos</h2>
           <p>{{ currentCopy.subtitle }}</p>
         </div>
       </div>
 
       <div class="expense-heading__tools">
-        <IconField v-if="!isLimitedCashier" class="expense-search">
+        <IconField class="expense-search">
           <InputIcon>
             <i class="pi pi-search" />
           </InputIcon>
@@ -411,7 +436,7 @@ function methodIcon(method: Method) {
       </div>
     </section>
 
-    <section v-if="!isLimitedCashier" class="period-switch" aria-label="Periodo de gastos">
+    <section class="period-switch" aria-label="Periodo de gastos">
       <SelectButton v-model="activePeriod" :options="periodOptions" option-label="label" option-value="value" />
     </section>
 
@@ -500,7 +525,7 @@ function methodIcon(method: Method) {
         <header class="panel-head">
           <div>
             <span>Detalle</span>
-            <h2>{{ isLimitedCashier ? 'Gastos del turno' : 'Gastos realizados' }}</h2>
+            <h2>Gastos realizados</h2>
           </div>
           <div v-if="!isLimitedCashier" class="kind-filter" role="group" aria-label="Filtrar por tipo de gasto">
             <button
@@ -517,7 +542,10 @@ function methodIcon(method: Method) {
 
         <ul class="expense-list" :class="{ 'can-void': canVoidMovements }">
           <li v-for="(row, index) in visibleRows" :key="row.concept + row.date + index">
-            <span class="expense-date">{{ row.date }}</span>
+            <span class="expense-date">
+              <strong>{{ row.date }}</strong>
+              <small>{{ row.cashLabel }}</small>
+            </span>
             <span class="expense-main">
               <strong>{{ row.concept }}</strong>
               <small>
@@ -549,6 +577,13 @@ function methodIcon(method: Method) {
             No hay gastos que coincidan con el filtro.
           </li>
         </ul>
+        <footer class="expense-subtotal">
+          <span>
+            <small>Subtotal visible</small>
+            <b>{{ visibleRows.length }} gastos en el periodo</b>
+          </span>
+          <strong>- {{ money(visibleSubtotal) }}</strong>
+        </footer>
       </article>
 
     </section>
@@ -957,7 +992,7 @@ function methodIcon(method: Method) {
 
 .expense-list li {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  grid-template-columns: 94px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   padding: 11px 12px;
@@ -966,13 +1001,26 @@ function methodIcon(method: Method) {
 }
 
 .expense-list.can-void li {
-  grid-template-columns: 56px minmax(0, 1fr) auto auto 36px;
+  grid-template-columns: 94px minmax(0, 1fr) auto auto 36px;
 }
 
 .expense-date {
+  display: grid;
+  gap: 2px;
   color: #64748b;
   font-size: 0.74rem;
   font-weight: 800;
+}
+
+.expense-date strong {
+  color: #475569;
+  font-size: 0.74rem;
+}
+
+.expense-date small {
+  color: #7c8899;
+  font-size: 0.62rem;
+  line-height: 1.25;
 }
 
 .expense-main {
@@ -1039,6 +1087,36 @@ function methodIcon(method: Method) {
   font-size: 0.82rem;
   font-weight: 700;
   text-align: center;
+}
+
+.expense-subtotal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #eadfdd;
+  background: #fff8f7;
+}
+
+.expense-subtotal span {
+  display: grid;
+  gap: 2px;
+}
+
+.expense-subtotal small,
+.expense-subtotal b {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.expense-subtotal strong {
+  color: #b91c1c;
+  font-size: 1rem;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .ai-advice {
@@ -1196,7 +1274,11 @@ function methodIcon(method: Method) {
 
 @media (max-width: 460px) {
   .expense-list li {
-    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-columns: 70px minmax(0, 1fr) auto;
+  }
+
+  .expense-list.can-void li {
+    grid-template-columns: 70px minmax(0, 1fr) auto 36px;
   }
 
   .expense-method {

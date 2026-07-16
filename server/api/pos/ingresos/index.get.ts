@@ -41,6 +41,8 @@ export default defineEventHandler(async (event) => {
     // Detalle de los ingresos de hoy: productos vendidos + otros ingresos registrados.
     pool.query<{
       movementId: string | null
+      cashSessionId: string | null
+      cashOpenedAt: string | null
       time: string
       product: string
       category: string
@@ -50,10 +52,12 @@ export default defineEventHandler(async (event) => {
       method: string
     }>(
       `
-        select "movementId", time, product, category, qty, "unitPrice", total, method
+        select "movementId", "cashSessionId", "cashOpenedAt", time, product, category, qty, "unitPrice", total, method
         from (
           select
             null::uuid as "movementId",
+            v.caja_sesion_id as "cashSessionId",
+            cs.abierta_at as "cashOpenedAt",
             to_char(v.fecha at time zone 'America/La_Paz', 'HH24:MI') as time,
             vi.nombre_producto as product,
             coalesce(c.nombre, 'General') as category,
@@ -81,6 +85,9 @@ export default defineEventHandler(async (event) => {
           join venta_item vi on vi.venta_id = v.id
           left join producto p on p.id = vi.producto_id
           left join categoria c on c.id = p.categoria_id
+          left join caja_sesion cs
+            on cs.id = v.caja_sesion_id
+            and cs.tienda_id = v.tienda_id
           left join lateral (
             select
               case
@@ -98,6 +105,8 @@ export default defineEventHandler(async (event) => {
           union all
           select
             cm.id as "movementId",
+            cm.caja_sesion_id as "cashSessionId",
+            cs.abierta_at as "cashOpenedAt",
             to_char(cm.fecha at time zone 'America/La_Paz', 'HH24:MI') as time,
             cm.concepto as product,
             'Otro ingreso' as category,
@@ -111,6 +120,9 @@ export default defineEventHandler(async (event) => {
             end as method,
             cm.fecha as orden
           from caja_movimiento cm
+          left join caja_sesion cs
+            on cs.id = cm.caja_sesion_id
+            and cs.tienda_id = cm.tienda_id
           where cm.tienda_id = $1
             and cm.tipo = 'ingreso'
             and cm.estado <> 'anulado'

@@ -1,9 +1,8 @@
 import { getQuery } from 'h3'
 import { ensureDatabase, pool } from '../../../utils/db'
 import { requireStoreAccess } from '../../../utils/posCatalog'
-import { tieneAcceso } from '~~/shared/utils/acceso'
 
-// Lista de gastos (egresos confirmados) del periodo + totales + tendencia. Alimenta
+// Lista de gastos del periodo + totales + tendencia. Alimenta
 // la página Gastos con datos reales. Periodo: 'today' | 'week' | 'month'.
 // La tendencia (por día / por semana / últimos meses) viene siempre, para que la
 // página la muestre igual que en Ingresos sin pedir otra vez al servidor.
@@ -12,14 +11,14 @@ type Periodo = 'today' | 'week' | 'month'
 const DIAS_DOW = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-// Mismo conjunto que la lista de gastos (egresos confirmados que no son venta ni
+// Mismo conjunto que la lista de gastos (egresos no anulados que no son venta ni
 // compra registrada). $1 = tienda. Se usa como CTE en cada agregado de tendencia.
 const EGRESOS_CTE = `
   select cm.fecha, cm.monto
   from caja_movimiento cm
   where cm.tienda_id = $1
     and cm.tipo = 'egreso'
-    and cm.estado = 'confirmado'
+    and cm.estado <> 'anulado'
     and cm.venta_id is null
     and cm.compra_id is null
 `
@@ -38,41 +37,6 @@ export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'reporte.ver || caja.movimiento.crear')
   await ensureDatabase()
 
-  // La cajera solo necesita confirmar lo registrado en su turno. No exponemos
-  // tendencias ni el historial financiero completo sin el permiso de reportes.
-  if (!tieneAcceso('reporte.ver', session)) {
-    const lista = await pool.query(
-      `
-        select
-          cm.id,
-          cm.fecha,
-          cm.categoria,
-          cm.concepto,
-          coalesce(cm.metodo, 'efectivo') as metodo,
-          cm.monto::float as monto
-        from caja_movimiento cm
-        inner join caja_sesion cs
-          on cs.id = cm.caja_sesion_id
-          and cs.tienda_id = cm.tienda_id
-          and cs.estado = 'abierta'
-        where cm.tienda_id = $1
-          and cm.tipo = 'egreso'
-          and cm.estado = 'confirmado'
-          and cm.venta_id is null
-          and cm.compra_id is null
-        order by cm.fecha desc, cm.created_at desc
-      `,
-      [session.storeId],
-    )
-
-    return {
-      gastos: lista.rows,
-      semana: [],
-      semanas: [],
-      meses: [],
-    }
-  }
-
   const periodo = (getQuery(event).periodo as Periodo) || 'month'
   const filtro = rangoSql(['today', 'week', 'month'].includes(periodo) ? periodo : 'month')
   const id = [session.storeId]
@@ -81,20 +45,25 @@ export default defineEventHandler(async (event) => {
     pool.query(
       `
         select
-          id,
-          fecha,
-          categoria,
-          concepto,
-          coalesce(metodo, 'efectivo') as metodo,
-          monto::float as monto
-        from caja_movimiento
-        where tienda_id = $1
-          and tipo = 'egreso'
-          and estado = 'confirmado'
-          and venta_id is null
-          and compra_id is null
+          cm.id,
+          cm.fecha,
+          cm.categoria,
+          cm.concepto,
+          coalesce(cm.metodo, 'efectivo') as metodo,
+          cm.monto::float as monto,
+          cm.caja_sesion_id as "cashSessionId",
+          cs.abierta_at as "cashOpenedAt"
+        from caja_movimiento cm
+        left join caja_sesion cs
+          on cs.id = cm.caja_sesion_id
+          and cs.tienda_id = cm.tienda_id
+        where cm.tienda_id = $1
+          and cm.tipo = 'egreso'
+          and cm.estado <> 'anulado'
+          and cm.venta_id is null
+          and cm.compra_id is null
           and ${filtro}
-        order by fecha desc, created_at desc
+        order by cm.fecha desc, cm.created_at desc
       `,
       id,
     ),

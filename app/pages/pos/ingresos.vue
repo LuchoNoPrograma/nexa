@@ -23,6 +23,8 @@ interface MetricCard {
 
 interface SaleRow {
   movementId: string | null
+  cashSessionId: string | null
+  cashOpenedAt: string | null
   time: string
   product: string
   category: string
@@ -214,8 +216,25 @@ const visibleSales = computed(() => {
     row.product,
     row.category,
     row.method,
+    cashSessionLabel(row.cashOpenedAt),
   ].some((value) => value.toLowerCase().includes(term)))
 })
+
+const visibleSalesSubtotal = computed(() => visibleSales.value.reduce((sum, row) => sum + row.total, 0))
+const visibleSalesUnits = computed(() => visibleSales.value.reduce((sum, row) => sum + row.qty, 0))
+
+function cashSessionLabel(openedAt: string | null) {
+  if (!openedAt) return 'Sin turno de caja'
+
+  const date = new Date(openedAt)
+  const day = date.toLocaleDateString('es-BO', {
+    day: '2-digit', month: '2-digit', timeZone: 'America/La_Paz',
+  })
+  const time = date.toLocaleTimeString('es-BO', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/La_Paz',
+  })
+  return `Caja ${day} · ${time}`
+}
 
 async function voidIngreso(row: SaleRow) {
   if (!row.movementId || !canVoidMovements.value || voidingMovementId.value) {
@@ -357,9 +376,22 @@ async function saveIngreso() {
         </header>
 
         <DataTable v-if="activePeriod === 'today'" :value="visibleSales" size="small" class="income-table income-desktop-table">
-          <Column field="time" header="Hora" />
-          <Column field="product" header="Producto / Servicio" />
-          <Column field="category" header="Categoría" />
+          <Column header="Hora / Caja">
+            <template #body="{ data }">
+              <span class="income-table__primary">
+                <strong>{{ data.time }}</strong>
+                <small>{{ cashSessionLabel(data.cashOpenedAt) }}</small>
+              </span>
+            </template>
+          </Column>
+          <Column header="Producto / Servicio">
+            <template #body="{ data }">
+              <span class="income-table__primary">
+                <strong>{{ data.product }}</strong>
+                <small>{{ data.category }}</small>
+              </span>
+            </template>
+          </Column>
           <Column field="qty" header="Cantidad" />
           <Column header="Precio neto">
             <template #body="{ data }">{{ money(data.unitPrice) }}</template>
@@ -397,7 +429,10 @@ async function saveIngreso() {
 
         <ul v-if="activePeriod === 'today'" class="income-mobile-list" aria-label="Movimientos de hoy">
           <li v-for="row in visibleSales" :key="`${row.time}-${row.product}-${row.movementId ?? row.total}`">
-            <span class="income-mobile-list__time">{{ row.time }}</span>
+            <span class="income-mobile-list__time">
+              <strong>{{ row.time }}</strong>
+              <small>{{ cashSessionLabel(row.cashOpenedAt) }}</small>
+            </span>
             <span class="income-mobile-list__main">
               <strong>{{ row.product }}</strong>
               <small>{{ row.category }} · {{ row.method }}<template v-if="row.qty > 1"> · {{ row.qty }} unidades</template></small>
@@ -421,7 +456,15 @@ async function saveIngreso() {
           <li v-if="!visibleSales.length" class="income-mobile-list__empty">No hay ingresos registrados hoy.</li>
         </ul>
 
-        <div v-else class="trend-layout">
+        <footer v-if="activePeriod === 'today'" class="income-subtotal">
+          <span>
+            <small>Subtotal visible</small>
+            <b>{{ visibleSales.length }} movimientos · {{ visibleSalesUnits }} unidades</b>
+          </span>
+          <strong>{{ money(visibleSalesSubtotal) }}</strong>
+        </footer>
+
+        <div v-if="activePeriod !== 'today'" class="trend-layout">
           <div class="trend-chart" aria-label="Gráfico de ingresos del periodo">
             <article v-for="row in trendRows" :key="row.label" class="trend-bar">
               <span>{{ money(row.sales) }}</span>
@@ -749,6 +792,29 @@ async function saveIngreso() {
   font-weight: 900;
 }
 
+.income-table__primary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.income-table__primary strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.income-table__primary small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .payment-method {
   display: inline-flex;
   align-items: center;
@@ -784,9 +850,22 @@ async function saveIngreso() {
 }
 
 .income-mobile-list__time {
+  display: grid;
+  gap: 2px;
   color: #64748b;
   font-size: 0.72rem;
   font-weight: 800;
+}
+
+.income-mobile-list__time strong {
+  color: #334155;
+  font-size: 0.72rem;
+}
+
+.income-mobile-list__time small {
+  color: #7c8899;
+  font-size: 0.6rem;
+  line-height: 1.25;
 }
 
 .income-mobile-list__main {
@@ -821,6 +900,36 @@ async function saveIngreso() {
   display: block !important;
   color: #64748b;
   text-align: center;
+}
+
+.income-subtotal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #dfe7e2;
+  background: #f7fbf8;
+}
+
+.income-subtotal span {
+  display: grid;
+  gap: 2px;
+}
+
+.income-subtotal small,
+.income-subtotal b {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.income-subtotal strong {
+  color: #08742a;
+  font-size: 1rem;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .trend-layout {
@@ -1112,7 +1221,7 @@ async function saveIngreso() {
   }
 
   .income-mobile-list li {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-columns: 70px minmax(0, 1fr) auto;
     grid-template-areas:
       "time main amount"
       ". main action";
@@ -1125,6 +1234,10 @@ async function saveIngreso() {
   .income-mobile-list__void {
     grid-area: action;
     justify-self: end;
+  }
+
+  .income-subtotal {
+    padding-inline: 10px;
   }
 
   .trend-chart {
