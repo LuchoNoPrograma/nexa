@@ -15,6 +15,7 @@ type PeriodKey = 'today' | 'week' | 'month'
 type Tone = 'green' | 'blue' | 'gold' | 'orange' | 'purple' | 'red'
 type ExpenseKind = 'Inventario' | 'Operativo'
 type Method = 'Efectivo' | 'QR' | 'Transferencia'
+type FundSource = 'business' | 'cash'
 type KindFilter = 'todos' | ExpenseKind
 
 interface ExpenseRow {
@@ -90,7 +91,9 @@ const canVoidMovements = computed(() => session.value?.roles.includes('propietar
 const cashStatus = cashRegister.cashStatus
 const cashLoading = cashRegister.isLoading
 const cashLoadReady = ref(false)
-const canRegisterExpense = computed(() => cashLoadReady.value && cashStatus.value === 'abierta' && !cashLoading.value)
+const canRegisterExpense = computed(() => cashLoadReady.value
+  && !cashLoading.value
+  && (cashStatus.value === 'abierta' || !isLimitedCashier.value))
 const currentCashAvailable = computed(() => {
   const openingFloat = Number(cashRegister.cashSession.value?.openingFloat ?? 0)
 
@@ -162,7 +165,7 @@ function formatExpenseDate(iso: string) {
 }
 
 function cashSessionLabel(openedAt: string | null) {
-  if (!openedAt) return 'Sin turno de caja'
+  if (!openedAt) return 'Fondos del negocio'
 
   const date = new Date(openedAt)
   const day = date.toLocaleDateString('es-BO', {
@@ -280,6 +283,10 @@ const cashierCategoryOptions = CATEGORIAS_EGRESO
   .filter((c) => c.value !== 'compra_inventario')
   .map((c) => ({ label: c.label, value: c.value }))
 const methodOptions: Method[] = ['Efectivo', 'QR', 'Transferencia']
+const fundSourceOptions = computed<{ label: string, value: FundSource }[]>(() => [
+  { label: 'Fondos del negocio', value: 'business' },
+  { label: `Caja actual · ${money(currentCashAvailable.value)}`, value: 'cash' },
+])
 
 const registerForm = reactive({
   kind: 'Operativo' as ExpenseKind,
@@ -287,12 +294,20 @@ const registerForm = reactive({
   category: 'alquiler',
   supplier: '',
   method: 'Efectivo' as Method,
+  fundSource: 'business' as FundSource,
   amount: 0,
 })
 const savingExpense = ref(false)
 const registerError = ref('')
 
-const canSaveExpense = computed(() => registerForm.concept.trim().length > 0 && Number(registerForm.amount || 0) > 0)
+const usesCurrentCash = computed(() => isLimitedCashier.value
+  || (registerForm.method === 'Efectivo' && registerForm.fundSource === 'cash'))
+const currentCashInsufficient = computed(() => usesCurrentCash.value
+  && Number(registerForm.amount || 0) > currentCashAvailable.value + 0.009)
+const canSaveExpense = computed(() => registerForm.concept.trim().length > 0
+  && Number(registerForm.amount || 0) > 0
+  && (!usesCurrentCash.value || cashStatus.value === 'abierta')
+  && !currentCashInsufficient.value)
 
 function openRegisterDialog() {
   if (!canRegisterExpense.value) {
@@ -304,6 +319,7 @@ function openRegisterDialog() {
   registerForm.category = isLimitedCashier.value ? 'materia_prima' : 'alquiler'
   registerForm.supplier = ''
   registerForm.method = 'Efectivo'
+  registerForm.fundSource = 'business'
   registerForm.amount = 0
   registerError.value = ''
   registerDialogVisible.value = true
@@ -325,6 +341,7 @@ async function saveExpense() {
         concepto: registerForm.concept.trim(),
         monto: Number(registerForm.amount || 0),
         metodo: isLimitedCashier.value ? 'efectivo' : registerForm.method.toLowerCase(),
+        fundSource: usesCurrentCash.value ? 'current_cash' : 'business_funds',
       },
     })
 
@@ -424,7 +441,8 @@ function methodIcon(method: Method) {
       icon="pi pi-lock"
       class="cashier-cash-warning"
     >
-      <span>La caja está cerrada. Ábrela antes de registrar una salida de efectivo.</span>
+      <span v-if="isLimitedCashier">La caja está cerrada. Ábrela antes de registrar una salida de efectivo.</span>
+      <span v-else>La caja está cerrada. Aún puedes registrar gastos pagados con fondos del negocio.</span>
       <NuxtLink to="/pos/caja">Ir a Caja</NuxtLink>
     </Message>
 
@@ -625,6 +643,10 @@ function methodIcon(method: Method) {
             <InputNumber v-model="registerForm.amount" mode="decimal" :min="0" :min-fraction-digits="2" :max-fraction-digits="2" fluid />
           </label>
 
+          <Message v-if="currentCashInsufficient" severity="warn" size="small" icon="pi pi-wallet" class="full">
+            La caja actual solo tiene {{ money(currentCashAvailable) }}.
+          </Message>
+
           <Message v-if="registerError" severity="error" size="small" class="full">{{ registerError }}</Message>
 
           <footer class="full">
@@ -655,6 +677,57 @@ function methodIcon(method: Method) {
             <span>Método de pago</span>
             <Select v-model="registerForm.method" :options="methodOptions" fluid />
           </label>
+
+          <label v-if="registerForm.method === 'Efectivo'" class="field full">
+            <span>Origen del dinero</span>
+            <SelectButton
+              v-model="registerForm.fundSource"
+              :options="fundSourceOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </label>
+
+          <Message
+            v-if="usesCurrentCash && cashStatus !== 'abierta'"
+            severity="warn"
+            size="small"
+            icon="pi pi-lock"
+            class="full"
+          >
+            La caja está cerrada. Ábrela o selecciona “Fondos del negocio”.
+          </Message>
+
+          <Message
+            v-else-if="currentCashInsufficient"
+            severity="warn"
+            size="small"
+            icon="pi pi-wallet"
+            class="full"
+          >
+            La caja actual solo tiene {{ money(currentCashAvailable) }}. Selecciona “Fondos del negocio” si el dinero no salió de este turno.
+          </Message>
+
+          <Message
+            v-else-if="!usesCurrentCash"
+            severity="info"
+            size="small"
+            icon="pi pi-building"
+            class="full"
+          >
+            Se registrará como gasto del negocio sin modificar el efectivo de la caja actual.
+          </Message>
+
+          <Message
+            v-else
+            severity="info"
+            size="small"
+            icon="pi pi-wallet"
+            class="full"
+          >
+            Se descontará del efectivo del turno abierto.
+          </Message>
 
           <label class="field full">
             <span>Concepto</span>

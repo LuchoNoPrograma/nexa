@@ -6,6 +6,7 @@ import { tieneAcceso } from '~~/shared/utils/acceso'
 import { CATEGORIAS_EGRESO } from '~~/shared/utils/finanzas'
 
 const metodos = ['efectivo', 'qr', 'transferencia', 'tarjeta', 'otro'] as const
+const fundSources = ['business_funds', 'current_cash'] as const
 
 type GastoBody = {
   categoria?: string
@@ -13,10 +14,11 @@ type GastoBody = {
   monto?: number
   metodo?: string
   notas?: string | null
+  fundSource?: typeof fundSources[number]
 }
 
-// Registrar un gasto contra el turno de caja abierto. La cajera registra solo
-// salidas en efectivo; los roles con reportes pueden conservar otros métodos.
+// Los gastos del dueño pueden salir de los fondos generales sin alterar el
+// turno abierto. La cajera registra únicamente salidas reales de su caja.
 export default defineEventHandler(async (event) => {
   const session = await requireStoreAccess(event, 'caja.movimiento.crear')
   await ensureDatabase()
@@ -40,18 +42,32 @@ export default defineEventHandler(async (event) => {
   const metodo = esCajeroLimitado
     ? 'efectivo'
     : metodos.includes(body.metodo as typeof metodos[number]) ? body.metodo : 'efectivo'
+  const fundSource = fundSources.includes(body.fundSource as typeof fundSources[number])
+    ? body.fundSource
+    : 'current_cash'
+  const usesCurrentCash = esCajeroLimitado || fundSource === 'current_cash'
+
+  if (!usesCurrentCash && !tieneAcceso('reporte.ver', session)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'No tienes permiso para registrar gastos desde los fondos del negocio.',
+    })
+  }
+
   const client = await pool.connect()
 
   try {
     await client.query('begin')
-    const cashSessionId = await requireLockedOpenCashSession(
-      client,
-      session.storeId,
-      'Abre caja antes de registrar un gasto.',
-    )
+    const cashSessionId = usesCurrentCash
+      ? await requireLockedOpenCashSession(
+          client,
+          session.storeId,
+          'Abre caja o selecciona Fondos del negocio.',
+        )
+      : null
 
     let availableCash: number | null = null
-    if (metodo === 'efectivo') {
+    if (metodo === 'efectivo' && cashSessionId) {
       const balanceResult = await client.query<{ availableCash: number }>(
         `
           select (
