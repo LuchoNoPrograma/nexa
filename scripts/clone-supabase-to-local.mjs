@@ -105,7 +105,9 @@ async function fetchTable(supabaseUrl, headers, table) {
 async function createSnapshot(supabaseUrl, serviceKey) {
   const headers = {
     apikey: serviceKey,
-    Authorization: `Bearer ${serviceKey}`,
+  }
+  if (serviceKey.startsWith('eyJ')) {
+    headers.Authorization = `Bearer ${serviceKey}`
   }
   const tables = await discoverTables(supabaseUrl, headers)
   const data = {}
